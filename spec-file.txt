@@ -214,11 +214,13 @@ https://conda.anaconda.org/conda-forge/linux-64/mkl_fft-1.3.1-py39h0c7bc48_1.tar
 https://conda.anaconda.org/conda-forge/linux-64/mkl_random-1.2.2-py39hde0f152_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/numpy-1.23.5-py39h14f4228_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/numba-0.56.4-py39h417a72b_0.conda
+https://conda.anaconda.org/conda-forge/noarch/paramz-0.9.5-py_0.tar.bz2
 https://conda.anaconda.org/conda-forge/linux-64/ray-core-1.12.0-py39hecbb631_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/scikit-learn-1.1.3-py39h6a678d5_0.conda
 https://conda.anaconda.org/conda-forge/noarch/tensorboard-2.11.2-pyhd8ed1ab_0.conda
 https://conda.anaconda.org/conda-forge/noarch/tensorboardx-2.5.1-pyhd8ed1ab_0.tar.bz2
 https://conda.anaconda.org/pytorch/linux-64/torchvision-0.14.1-py39_cpu.tar.bz2
+https://conda.anaconda.org/conda-forge/linux-64/gpy-1.10.0-py39hce5d2b2_2.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/pynndescent-0.5.8-pyh1a96a4e_0.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/pytorch-lightning-1.8.1-pyhd8ed1ab_0.conda
 https://conda.anaconda.org/conda-forge/linux-64/ray-default-1.12.0-py39hf3d152e_0.tar.bz2
