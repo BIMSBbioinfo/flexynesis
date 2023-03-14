@@ -17,17 +17,6 @@ from scipy import stats
 from functools import reduce
 
 
-class MultiomicDataset(Dataset):
-    def __init__(self, dat, y, features, samples):
-        self.dat = dat #dict with multiple matrices
-        self.y = y #shared labels for all matrices 
-        self.features = features
-        self.samples = samples 
-    def __getitem__(self, index):
-        return {x: self.dat[x][index] for x in self.dat.keys()}, self.y[index]
-    def __len__ (self):
-        return len(self.y)
-
 # a MLP model for regression/classification
 # set num_class to 1 for regression. num_class > 1 => classification
 class MLP(nn.Module):
@@ -97,60 +86,5 @@ class LIMO(pl.LightningModule):
                                    torch.flatten(y_hat).detach().numpy())[2]
         return r_value
 
-def get_labels(dat, drugs, drugName, batch_size):
-    y = drugs[drugName]
-    y = y[~y.isna()]
 
-    # list of samples in the assays
-    samples = list(reduce(set.intersection, [set(item) for item in [dat[x].columns for x in dat.keys()]]))
-    # keep samples with labels
-    samples = list(set(y.index).intersection(samples))
-    if len(samples) % batch_size == 1:
-        # I do this to avoid batches of size 1
-        samples = samples[0:len(samples)-1]
-    #subset assays and labels for the remaining samples
-    dat = {x: dat[x][samples] for x in dat.keys()}
-    y = y[samples]
-    return dat, y
 
-# dat: list of matrices, features on the rows, samples on the columns
-# ann: pandas data frame with 'y' as variable for the corresponding samples on the matrix columns
-# task_type: type of outcome (classification/regression)
-# notice the tables are transposed to return samples on rows, features on columns
-def get_torch_dataset(dat, labels):
-    # keep a copy of row/column names
-    features = {x: dat[x].index for x in dat.keys()}
-    samples = {x: dat[x].columns for x in dat.keys()}
-    dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
-    y =  torch.from_numpy(np.array(labels)).float()
-    return MultiomicDataset(dat, y, features, samples)
-
-def make_dataset(dat, *args):
-    dat, y = get_labels(dat, *args)
-    dataset = get_torch_dataset(dat, y)
-    return dataset
-
-# warning: no validation loops
-# only regression models for now
-def train_model(dataset, n_epoch, embedding_size, batch_size, model = None, val_size = 0):
-    if model is None:
-        # model
-        f1, f2 = [dataset.dat[omics].shape[1] for omics in dataset.dat.keys()]
-        model = LIMO(f1, f2 , h = 16, embedding_size=embedding_size, num_class = 1)
-    # training
-    if val_size == 0:
-        train_loader = DataLoader(dataset, batch_size=batch_size, num_workers = 0)
-        trainer = pl.Trainer(max_epochs = n_epoch, limit_val_batches = 0, num_sanity_val_steps = 0, 
-                             strategy=DDPStrategy(find_unused_parameters=False), num_nodes = 4) 
-        trainer.fit(model, train_loader) 
-    elif val_size > 0:
-        # split train into train/val
-        dat_train, dat_val = random_split(dataset, [1-val_size, val_size], generator=torch.Generator().manual_seed(42))
-        train_loader = DataLoader(dat_train, batch_size=batch_size, num_workers = 0)
-        val_loader = DataLoader(dat_val, batch_size=batch_size, num_workers = 0)
-        trainer = pl.Trainer(max_epochs = n_epoch, 
-                             strategy=DDPStrategy(find_unused_parameters=False), 
-                             num_nodes = 4) 
-        trainer.fit(model, train_loader, val_loader) 
-    return model
-    
