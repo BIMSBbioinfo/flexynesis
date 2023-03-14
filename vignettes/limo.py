@@ -29,13 +29,15 @@ if __name__ == '__main__':
                       pd.read_csv(os.path.join(inputDir, 'test', 'clin.csv'), sep = '\t').transpose()])
 
 
-    train_dataset = flexynesis.models.make_dataset(dat_train, drugs, drugName, batch_size)
-    holdout_dataset = flexynesis.models.make_dataset(dat_holdout, drugs, drugName, batch_size)
-
+    train_dataset = flexynesis.data.make_dataset(dat_train, drugs, drugName, batch_size)
+    holdout_dataset = flexynesis.data.make_dataset(dat_holdout, drugs, drugName, batch_size)
+    
     trainSampleN = len(train_dataset)
-    model = flexynesis.models.train_model(train_dataset, n_epoch, embedding_size = embedding_size, 
-                        batch_size = batch_size, val_size = val_size)
-
+    f1, f2 = [train_dataset.dat[omics].shape[1] for omics in train_dataset.dat.keys()]
+    model = flexynesis.models.LIMO(f1, f2, h = 128, embedding_size=embedding_size, num_class = 1)
+    
+    model = flexynesis.main.train_model(model, train_dataset, n_epoch, embedding_size, batch_size, val_size = 0.2)
+    
     # evaluate the model on holdout dataset
     COR = model.evaluate(holdout_dataset)
     stats = pd.DataFrame.from_dict({'RMSE': 'NA', 'Rsquare': 'NA', 'COR': COR, 
