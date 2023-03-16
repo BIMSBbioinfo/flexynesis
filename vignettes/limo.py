@@ -34,7 +34,7 @@ if __name__ == '__main__':
     
     trainSampleN = len(train_dataset)
     f1, f2 = [train_dataset.dat[omics].shape[1] for omics in train_dataset.dat.keys()]
-    model = flexynesis.models.LIMO(f1, f2, h = 128, embedding_size=embedding_size, num_class = 1)
+    model = flexynesis.LIMO(f1, f2, h = 128, embedding_size=embedding_size, num_class = 1)
     
     model = flexynesis.main.train_model(model, train_dataset, n_epoch, embedding_size, batch_size, val_size = 0.2)
     
