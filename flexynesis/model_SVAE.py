@@ -15,10 +15,10 @@ from scipy import stats
 from .models_shared import *
 
 class supervised_vae_ef(pl.LightningModule):
-    def __init__(self, input_dim, hidden_dim, latent_dim, num_class, **kwargs):
+    def __init__(self, input_dim, hidden_dims, latent_dim, num_class, **kwargs):
         super(supervised_vae_ef, self).__init__()
-        self.Encoder = Encoder(input_dim, hidden_dim, latent_dim)
-        self.Decoder = Decoder(latent_dim, hidden_dim, input_dim)
+        self.Encoder = Encoder(input_dim, hidden_dims, latent_dim)
+        self.Decoder = Decoder(latent_dim, hidden_dims[::-1], input_dim)
         self.MLP = MLP(latent_dim, num_class, **kwargs)
         self.latent_dim = latent_dim
         self.num_class = num_class

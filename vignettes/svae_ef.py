@@ -11,9 +11,9 @@ if __name__ == '__main__':
     # output options
     inputDir = '/data/local/buyar/arcas/multiomics_integration/benchmarks/pharmacogx/output/gdsc2_vs_ccle_gex_cnv/100'
     outDir = '.'
-    n_epoch = 200
-    hidden_dim = 500
-    latent_dim = 20
+    n_epoch = 500
+    hidden_dims = [128, 64, 32]
+    latent_dim = 50
     batch_size = 128
     datatypes = ['layer1', 'layer2']
     drugName = 'Erlotinib'
@@ -33,7 +33,7 @@ if __name__ == '__main__':
     
     # define model 
     model = flexynesis.supervised_vae_ef(input_dim = len(train_dataset.features['all']), 
-                                 hidden_dim = hidden_dim, latent_dim = latent_dim, num_class = 1, h = 8)
+                                         hidden_dims = hidden_dims, latent_dim = latent_dim, num_class = 1, h = 8)
     # train model
     model = flexynesis.train_model(model, train_dataset, n_epoch, batch_size, val_size = 0.2) 
 
