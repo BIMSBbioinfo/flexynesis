@@ -7,7 +7,7 @@ from pytorch_lightning.callbacks import TQDMProgressBar
 from pytorch_lightning.strategies import DDPStrategy
 
 # given a pytorch lightning model and pytorch dataset
-def train_model(model, dataset, n_epoch, embedding_size, batch_size, val_size = 0):
+def train_model(model, dataset, n_epoch, batch_size, val_size = 0):
     # training
     if val_size == 0:
         train_loader = DataLoader(dataset, batch_size=batch_size, num_workers = 0)
