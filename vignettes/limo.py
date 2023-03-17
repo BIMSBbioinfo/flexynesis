@@ -16,9 +16,7 @@ if __name__ == '__main__':
     batch_size = 128
     datatypes = ['layer1', 'layer2']
     drugName = 'Erlotinib'
-    hyperparameter_samples = 2
     torch.set_num_threads(4)
-    val_size = 0
 
     # import assays and labels
     dat_train = {x: pd.read_csv(os.path.join(inputDir, 'train', ''.join([x, '.csv']))) for x in datatypes}
@@ -36,7 +34,7 @@ if __name__ == '__main__':
     f1, f2 = [train_dataset.dat[omics].shape[1] for omics in train_dataset.dat.keys()]
     model = flexynesis.LIMO(f1, f2, h = 128, embedding_size=embedding_size, num_class = 1)
     
-    model = flexynesis.main.train_model(model, train_dataset, n_epoch, embedding_size, batch_size, val_size = 0.2)
+    model = flexynesis.main.train_model(model, train_dataset, n_epoch, batch_size, val_size = 0.2)
     
     # evaluate the model on holdout dataset
     COR = model.evaluate(holdout_dataset)
