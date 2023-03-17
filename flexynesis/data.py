@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
+import pandas as pd
 from functools import reduce
 import torch
 
@@ -45,7 +46,7 @@ class MultiomicDataset(Dataset):
         return len(self.y)
 
     
-def get_labels(dat, drugs, drugName, batch_size):
+def get_labels(dat, drugs, drugName, batch_size, concatenate = False):
     y = drugs[drugName]
     y = y[~y.isna()]
 
@@ -58,6 +59,8 @@ def get_labels(dat, drugs, drugName, batch_size):
         samples = samples[0:len(samples)-1]
     #subset assays and labels for the remaining samples
     dat = {x: dat[x][samples] for x in dat.keys()}
+    if concatenate == True:
+        dat = {'all': pd.concat(dat)}
     y = y[samples]
     return dat, y
 
@@ -73,7 +76,7 @@ def get_torch_dataset(dat, labels):
     y =  torch.from_numpy(np.array(labels)).float()
     return MultiomicDataset(dat, y, features, samples)
 
-def make_dataset(dat, *args):
-    dat, y = get_labels(dat, *args)
+def make_dataset(dat, *args, **kwargs):
+    dat, y = get_labels(dat, *args, **kwargs)
     dataset = get_torch_dataset(dat, y)
     return dataset
