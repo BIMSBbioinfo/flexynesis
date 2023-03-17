@@ -1,5 +1,6 @@
 # Networks that can be reused across different architectures
 
+import torch
 from torch import nn
 
 
