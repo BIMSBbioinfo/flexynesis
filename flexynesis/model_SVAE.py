@@ -14,27 +14,59 @@ from scipy import stats
 
 from .models_shared import *
 
-class supervised_vae_ef(pl.LightningModule):
-    def __init__(self, input_dim, hidden_dims, latent_dim, num_class, **kwargs):
-        super(supervised_vae_ef, self).__init__()
-        self.Encoder = Encoder(input_dim, hidden_dims, latent_dim)
-        self.Decoder = Decoder(latent_dim, hidden_dims[::-1], input_dim)
+# Supervised Variational Auto-encoder that can train one or more layers of omics datasets 
+# num_layers: number of omics layers in the input
+# each layer is encoded separately, encodings are concatenated, and decoded separately 
+class supervised_vae(pl.LightningModule):
+    def __init__(self, num_layers, input_dims, hidden_dims, latent_dim, num_class, **kwargs):
+        super(supervised_vae, self).__init__()
+        
+        # define supervisor head
         self.MLP = MLP(latent_dim, num_class, **kwargs)
         self.latent_dim = latent_dim
         self.num_class = num_class
+        
+        # create a list of Encoder instances for separately encoding each omics layer
+        self.encoders = nn.ModuleList([Encoder(input_dims[i], hidden_dims, latent_dim) for i in range(num_layers)])
+        # Fully connected layers for concatenated means and log_vars
+        self.FC_mean = nn.Linear(num_layers * latent_dim, latent_dim)
+        self.FC_log_var = nn.Linear(num_layers * latent_dim, latent_dim)
+        
+        # list of decoders to decode each omics layer separately 
+        self.decoders = nn.ModuleList([Decoder(latent_dim, hidden_dims[::-1], input_dims[i]) for i in range(num_layers)])
+
+    def multi_encoder(self, x_list):
+        means, log_vars = [], []
+        # Process each input matrix with its corresponding Encoder
+        for i, x in enumerate(x_list):
+            mean, log_var = self.encoders[i](x)
+            means.append(mean)
+            log_vars.append(log_var)
+
+        # Concatenate means and log_vars
+        # Push concatenated means and log_vars through the fully connected layers
+        mean = self.FC_mean(torch.cat(means, dim=1))
+        log_var = self.FC_log_var(torch.cat(log_vars, dim=1))
+        return mean, log_var
+    
+    def forward(self, x_list):
+        mean, log_var = self.multi_encoder(x_list)
+        
+        # generate latent layer
+        z = self.reparameterization(mean, log_var)
+
+        # Decode each latent variable with its corresponding Decoder
+        x_hat_list = [self.decoders[i](z) for i in range(len(x_list))]
+
+        #run the supervisor 
+        y_pred = self.MLP(z)
+        
+        return x_hat_list, z, mean, log_var, y_pred
         
     def reparameterization(self, mean, var):
         epsilon = torch.randn_like(var)       
         z = mean + var*epsilon                         
         return z
-                
-    def forward(self, X):
-        mean, log_var = self.Encoder(X)
-        z = self.reparameterization(mean, torch.exp(0.5 * log_var)) # takes exponential function (log var -> var)
-        X_hat = self.Decoder(z)
-        #run the supervisor 
-        y_pred = self.MLP(z)
-        return X_hat, z, mean, log_var, y_pred
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
@@ -42,14 +74,17 @@ class supervised_vae_ef(pl.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
         dat, y = train_batch
-        X = dat['all'] # assume all omics layers are concatenated with the key 'all'
-        mean, log_var = self.Encoder(X)
-        
+        layers = dat.keys()
+        x_list = [dat[x] for x in layers]
+        mean, log_var = self.multi_encoder(x_list)
         z = self.reparameterization(mean, torch.exp(0.5 * log_var)) # takes exponential function (log var -> var)
-        X_hat = self.Decoder(z)
+        x_hat_list = [self.decoders[i](z) for i in range(len(x_list))]
         y_pred = self.MLP(z)
         
-        mmd_loss = self.MMD_loss(z.shape[1], z, X_hat, X)
+        # compute mmd loss for each layer and take average
+        mmd_loss_list = [self.MMD_loss(z.shape[1], z, x_hat_list[i], x_list[i]) for i in range(len(layers))]
+        mmd_loss = torch.mean(torch.stack(mmd_loss_list))
+
         sp_loss = F.mse_loss(y_pred, y)
         loss = mmd_loss + sp_loss
         
@@ -58,36 +93,43 @@ class supervised_vae_ef(pl.LightningModule):
     
     def validation_step(self, val_batch, batch_idx):
         dat, y = val_batch
-        X = dat['all'] # assume all omics layers are concatenated with the key 'all'
-        mean, log_var = self.Encoder(X)
+        layers = dat.keys()
+        x_list = [dat[x] for x in layers]
+        mean, log_var = self.multi_encoder(x_list)
         
         z = self.reparameterization(mean, torch.exp(0.5 * log_var)) # takes exponential function (log var -> var)
-        X_hat = self.Decoder(z)
+        x_hat_list = [self.decoders[i](z) for i in range(len(x_list))]
         y_pred = self.MLP(z)
         
-        mmd_loss = self.MMD_loss(z.shape[1], z, X_hat, X)
+        # compute mmd loss for each layer and take average
+        mmd_loss_list = [self.MMD_loss(z.shape[1], z, x_hat_list[i], x_list[i]) for i in range(len(layers))]
+        mmd_loss = torch.mean(torch.stack(mmd_loss_list))
+
         sp_loss = F.mse_loss(y_pred, y)
         loss = mmd_loss + sp_loss
         
         self.log('val_loss', loss)
+        return loss
     
     def transform(self, dataset):
         self.eval()
-        X = dataset.dat['all'] # assume all omics layers are concatenated with the key 'all'
-        M = torch.from_numpy(np.array(X)).float()
-        z = pd.DataFrame(self.forward(M)[1].detach().numpy())
+        layers = list(dataset.dat.keys())
+        x_list = [dataset.dat[x] for x in layers]
+        M = self.forward(x_list)[1].detach().numpy()
+        z = pd.DataFrame(M)
         z.columns = [''.join(['LF', str(x+1)]) for x in z.columns]
-        z.index = dataset.samples['all']
+        z.index = dataset.samples[layers[0]] #TODO here I assume all layers have the same order of samples
         return z
     
     def evaluate(self, dataset):
         self.eval()
-        X = dataset.dat['all'] # assume all omics layers are concatenated with the key 'all'
-        X_hat, z, mean, log_var, y_pred = self.forward(X)
+        layers = list(dataset.dat.keys())
+        x_list = [dataset.dat[x] for x in layers]
+        X_hat, z, mean, log_var, y_pred = self.forward(x_list)
         r_value = stats.linregress(dataset.y.detach().numpy(),
                                    torch.flatten(y_pred).detach().numpy())[2]
         return r_value
-
+    
     def compute_kernel(self, x, y):
         x_size = x.size(0)
         y_size = y.size(0)
@@ -111,4 +153,6 @@ class supervised_vae_ef(pl.LightningModule):
         mmd = self.compute_mmd(true_samples, z) # compute maximum mean discrepancy (MMD)
         nll = (xhat - x).pow(2).mean() #negative log likelihood
         return mmd+nll
+
+
     
