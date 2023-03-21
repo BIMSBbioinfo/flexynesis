@@ -119,7 +119,7 @@ class supervised_vae(pl.LightningModule):
         M = self.forward(x_list)[1].detach().numpy()
         z = pd.DataFrame(M)
         z.columns = [''.join(['LF', str(x+1)]) for x in z.columns]
-        z.index = dataset.samples[layers[0]] #TODO here I assume all layers have the same order of samples
+        z.index = dataset.samples
         return z
     
     def evaluate(self, dataset):

@@ -35,8 +35,12 @@ class MultiomicDataset(Dataset):
                 1. A dictionary with keys corresponding to the different types of data in the input dictionary `dat`, and values corresponding to the data for the given sample.
                 2. The label for the given sample.
         """
-        return {x: self.dat[x][index] for x in self.dat.keys()}, self.y[index]
-
+        subset_dat = {x: self.dat[x][index] for x in self.dat.keys()}
+        subset_y = self.y[index]
+        subset_features = {x: self.features[x][index] for x in self.features.keys()}
+        subset_samples = self.samples[index]
+        return subset_dat, subset_y, subset_features, subset_samples
+    
     def __len__ (self):
         """Get the total number of samples in the dataset.
 
@@ -44,7 +48,21 @@ class MultiomicDataset(Dataset):
             An integer representing the number of samples in the dataset.
         """
         return len(self.y)
+    
+    def subset(self, indices):
+        """Create a new dataset containing only the specified indices.
 
+        Args:
+            indices (list or np.array): A 1D array of indices to include in the subset.
+
+        Returns:
+            A new MultiomicDataset containing the specified subset of data.
+        """
+        indices = np.asarray(indices)
+        subset_dat = {key: self.dat[key][indices] for key in self.dat.keys()}
+        subset_y = np.asarray(self.y)[indices]
+        subset_samples = np.asarray(self.samples)[indices]
+        return MultiomicDataset(subset_dat, subset_y, self.features, subset_samples)
     
 def get_labels(dat, drugs, drugName, batch_size, concatenate = False):
     y = drugs[drugName]
@@ -62,21 +80,20 @@ def get_labels(dat, drugs, drugName, batch_size, concatenate = False):
     if concatenate == True:
         dat = {'all': pd.concat(dat)}
     y = y[samples]
-    return dat, y
+    return dat, y, samples
 
 # dat: list of matrices, features on the rows, samples on the columns
 # ann: pandas data frame with 'y' as variable for the corresponding samples on the matrix columns
 # task_type: type of outcome (classification/regression)
 # notice the tables are transposed to return samples on rows, features on columns
-def get_torch_dataset(dat, labels):
+def get_torch_dataset(dat, labels, samples):
     # keep a copy of row/column names
     features = {x: dat[x].index for x in dat.keys()}
-    samples = {x: dat[x].columns for x in dat.keys()}
     dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
     y =  torch.from_numpy(np.array(labels)).float()
     return MultiomicDataset(dat, y, features, samples)
 
 def make_dataset(dat, *args, **kwargs):
-    dat, y = get_labels(dat, *args, **kwargs)
-    dataset = get_torch_dataset(dat, y)
+    dat, y, samples = get_labels(dat, *args, **kwargs)
+    dataset = get_torch_dataset(dat, y, samples)
     return dataset
