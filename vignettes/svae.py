@@ -11,9 +11,9 @@ if __name__ == '__main__':
     # output options
     inputDir = '/data/local/buyar/arcas/multiomics_integration/benchmarks/pharmacogx/output/gdsc2_vs_ccle_gex_cnv/100'
     outDir = '.'
-    n_epoch = 20
-    hidden_dims = [128, 64, 32]
-    latent_dim = 50
+    n_epoch = 250
+    hidden_dims = [256]
+    latent_dim = 20
     batch_size = 128
     datatypes = ['layer1', 'layer2']
     drugName = 'Erlotinib'
@@ -49,7 +49,7 @@ if __name__ == '__main__':
     stats = pd.DataFrame.from_dict({'RMSE': 'NA', 'Rsquare': 'NA', 'COR': COR, 
                                         'drug': drugName, 'trainSampleN': len(train_dataset), 
                                         'testSampleN': len(holdout_dataset), 
-                                        'tool': 'svae_ef'}, orient = 'index').T
+                                        'tool': 'svae'}, orient = 'index').T
     
     # save stats 
     outFile = os.path.join(outDir,  '.'.join(['stats', drugName, 'tsv']))
