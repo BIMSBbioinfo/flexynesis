@@ -17,6 +17,7 @@ from .models_shared import *
 # Supervised Variational Auto-encoder that can train one or more layers of omics datasets 
 # num_layers: number of omics layers in the input
 # each layer is encoded separately, encodings are concatenated, and decoded separately 
+# depends on MLP, Encoder, Decoder classes in models_shared
 class supervised_vae(pl.LightningModule):
     def __init__(self, num_layers, input_dims, hidden_dims, latent_dim, num_class, **kwargs):
         super(supervised_vae, self).__init__()
