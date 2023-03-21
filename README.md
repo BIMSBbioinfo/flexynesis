@@ -33,10 +33,12 @@ python setup.py install
 
 # Testing
 
-To run the tests, use the following command:
+Test the vignettes 
 ```
-python setup.py test
+srun python vignettes/DirectPred.py
+srun python vignettes/svae.py
 ```
+
 
 This will run all the tests in the tests directory.
 
