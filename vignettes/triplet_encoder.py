@@ -32,8 +32,8 @@ if __name__ == '__main__':
     # output options
     inputDir = '/data/local/buyar/arcas/multiomics_integration/benchmarks/pharmacogx/output/gdsc2_vs_ccle_gex_cnv/100'
     outDir = '.'
-    n_epoch = 200
-    batch_size = 128
+    n_epoch = 300
+    batch_size = 64
     datatypes = ['layer1', 'layer2']
     drugName = 'Erlotinib'
     torch.set_num_threads(4)
@@ -65,8 +65,8 @@ if __name__ == '__main__':
     # define triplet network
     layers = list(train_dataset.dat.keys())
     input_dims = [len(train_dataset.features[layers[i]]) for i in range(len(layers))]
-    hidden_dims = [256, 64]
-    output_dim = 16
+    hidden_dims = [256, 256]
+    output_dim = 32
     # define model 
     multi_triplet_network = flexynesis.MultiTripletNetwork(num_layers = len(layers), input_sizes = input_dims, 
                                                            hidden_sizes = hidden_dims, 
@@ -75,8 +75,8 @@ if __name__ == '__main__':
     # train model
     model = flexynesis.train_model(multi_triplet_network, triplet_train_dataset, n_epoch, batch_size, val_size = 0.2) 
 
-    z_train = model.transform(train_dataset)
-    z_holdout = model.transform(holdout_dataset)
+    z_train, y_pred_train = model.transform(train_dataset)
+    z_holdout, y_pred_holdout = model.transform(holdout_dataset)
     
     z_train['y'] = train_dataset.y
     z_holdout['y'] = holdout_dataset.y
@@ -84,5 +84,9 @@ if __name__ == '__main__':
     z_train.to_csv('z_train.csv')
     z_holdout.to_csv('z_holdout.csv')
     
-    
+    # evaluate
+    print("train stats")
+    train_stats = flexynesis.utils.evaluate_classifier(train_dataset.y, y_pred_train)
+    print("holdout stats")    
+    holdout_stats = flexynesis.utils.evaluate_classifier(holdout_dataset.y, y_pred_holdout)
     
