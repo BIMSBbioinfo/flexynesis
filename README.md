@@ -9,6 +9,11 @@ conda create --name flexynesis --file spec-file.txt
 conda activate flexynesis
 ```
 
+To export existing spec-file.txt:
+```
+conda list --explicit > spec-file.txt
+```
+
 # Installation
 
 To install the project using setuptools, you can follow these steps:
