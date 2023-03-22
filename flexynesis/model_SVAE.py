@@ -16,6 +16,28 @@ from .models_shared import *
 # each layer is encoded separately, encodings are concatenated, and decoded separately 
 # depends on MLP, Encoder, Decoder classes in models_shared
 class supervised_vae(pl.LightningModule):
+    """
+    Supervised Variational Auto-encoder for multi-omics data fusion and prediction.
+
+    This class implements a deep learning model for fusing and predicting from multiple omics layers/matrices.
+    Each omics layer is encoded separately using an Encoder. The resulting latent representations are then
+    concatenated and passed through a fully connected network (fusion layer) to make predictions. The model
+    also includes a supervisor head for supervised learning.
+
+    Args:
+        num_layers (int): Number of omics layers/matrices.
+        input_dims (list of int): A list of input dimensions for each omics layer.
+        hidden_dims (list of int): A list of hidden dimensions for the Encoder and Decoder.
+        latent_dim (int): The dimension of the latent space for each encoder.
+        num_class (int): Number of output classes for the prediction task.
+        **kwargs: Additional keyword arguments to be passed to the MLP encoders.
+
+    Example:
+
+        # Instantiate a supervised_vae model with 2 omics layers and input dimensions of 100 and 200
+        model = supervised_vae(num_layers=2, input_dims=[100, 200], hidden_dims=[64, 32], latent_dim=16, num_class=1)
+
+    """
     def __init__(self, num_layers, input_dims, hidden_dims, latent_dim, num_class, **kwargs):
         super(supervised_vae, self).__init__()
         
@@ -34,6 +56,17 @@ class supervised_vae(pl.LightningModule):
         self.decoders = nn.ModuleList([Decoder(latent_dim, hidden_dims[::-1], input_dims[i]) for i in range(num_layers)])
 
     def multi_encoder(self, x_list):
+        """
+        Encode each input matrix separately using the corresponding Encoder.
+
+        Args:
+            x_list (list of torch.Tensor): List of input matrices for each omics layer.
+
+        Returns:
+            tuple: Tuple containing:
+                - mean (torch.Tensor): Concatenated mean values from each encoder.
+                - log_var (torch.Tensor): Concatenated log variance values from each encoder.
+        """
         means, log_vars = [], []
         # Process each input matrix with its corresponding Encoder
         for i, x in enumerate(x_list):
@@ -48,6 +81,20 @@ class supervised_vae(pl.LightningModule):
         return mean, log_var
     
     def forward(self, x_list):
+        """
+        Forward pass through the model.
+
+        Args:
+            x_list (list of torch.Tensor): List of input matrices for each omics layer.
+
+        Returns:
+            tuple: Tuple containing:
+                - x_hat_list (list of torch.Tensor): List of reconstructed matrices for each omics layer.
+                - z (torch.Tensor): Latent representation.
+                - mean (torch.Tensor): Concatenated mean values from each encoder.
+                - log_var (torch.Tensor): Concatenated log variance values from each encoder.
+                - y_pred (torch.Tensor): Predicted output.
+        """
         mean, log_var = self.multi_encoder(x_list)
         
         # generate latent layer
@@ -62,15 +109,43 @@ class supervised_vae(pl.LightningModule):
         return x_hat_list, z, mean, log_var, y_pred
         
     def reparameterization(self, mean, var):
+        """
+        Reparameterize the mean and variance values.
+
+        Args:
+            mean (torch.Tensor): Mean values from the encoders.
+            var (torch.Tensor): Variance values from the encoders.
+
+        Returns:
+            torch.Tensor: Latent representation.
+        """
         epsilon = torch.randn_like(var)       
         z = mean + var*epsilon                         
         return z
     
     def configure_optimizers(self):
+        """
+        Configure the optimizer for the model.
+
+        Returns:
+            torch.optim.Adam: Adam optimizer with learning rate 1e-3.
+        """
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
     def training_step(self, train_batch, batch_idx):
+        """
+        Perform a training step.
+
+        Args:
+            train_batch (tuple): Tuple containing:
+                - dat (dict): Dictionary containing input matrices for each omics layer.
+                - y (torch.Tensor): Ground truth labels.
+            batch_idx (int): Index of the current batch.
+
+        Returns:
+            torch.Tensor: Loss value for the current training step.
+        """
         dat, y = train_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
@@ -90,6 +165,19 @@ class supervised_vae(pl.LightningModule):
         return loss
     
     def validation_step(self, val_batch, batch_idx):
+        """
+        Perform a validation step.
+
+        Args:
+            val_batch (tuple): Tuple containing:
+                - dat (dict): Dictionary containing input matrices for each omics layer.
+                - y (torch.Tensor): Ground truth labels.
+            batch_idx (int): Index of the current batch.
+
+        Returns:
+            torch.Tensor: Loss value for the current validation step.
+        """
+
         dat, y = val_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
@@ -110,6 +198,15 @@ class supervised_vae(pl.LightningModule):
         return loss
     
     def transform(self, dataset):
+        """
+        Transform the input dataset to latent representation.
+
+        Args:
+            dataset (MultiOmicDataset): MultiOmicDataset containing input matrices for each omics layer.
+
+        Returns:
+            pd.DataFrame: Transformed dataset as a pandas DataFrame.
+        """
         self.eval()
         layers = list(dataset.dat.keys())
         x_list = [dataset.dat[x] for x in layers]
@@ -120,6 +217,15 @@ class supervised_vae(pl.LightningModule):
         return z
     
     def evaluate(self, dataset):
+        """
+        Evaluate the model on a dataset.
+
+        Args:
+            dataset (CustomDataset): Custom dataset containing input matrices for each omics layer.
+
+        Returns:
+            float: Pearson correlation coefficient between true and predicted values.
+        """
         self.eval()
         layers = list(dataset.dat.keys())
         x_list = [dataset.dat[x] for x in layers]
@@ -129,6 +235,16 @@ class supervised_vae(pl.LightningModule):
         return r_value
     
     def compute_kernel(self, x, y):
+        """
+        Compute the Gaussian kernel matrix between two sets of vectors.
+
+        Args:
+            x (torch.Tensor): A tensor of shape (x_size, dim) representing the first set of vectors.
+            y (torch.Tensor): A tensor of shape (y_size, dim) representing the second set of vectors.
+
+        Returns:
+            torch.Tensor: The Gaussian kernel matrix of shape (x_size, y_size) computed between x and y.
+        """
         x_size = x.size(0)
         y_size = y.size(0)
         dim = x.size(1)
@@ -140,6 +256,16 @@ class supervised_vae(pl.LightningModule):
         return torch.exp(-kernel_input) # (x_size, y_size)
 
     def compute_mmd(self, x, y):
+        """
+        Compute the maximum mean discrepancy (MMD) between two sets of vectors.
+
+        Args:
+            x (torch.Tensor): A tensor of shape (x_size, dim) representing the first set of vectors.
+            y (torch.Tensor): A tensor of shape (y_size, dim) representing the second set of vectors.
+
+        Returns:
+            torch.Tensor: A scalar tensor representing the MMD between x and y.
+        """
         x_kernel = self.compute_kernel(x, x)
         y_kernel = self.compute_kernel(y, y)
         xy_kernel = self.compute_kernel(x, y)
@@ -147,6 +273,18 @@ class supervised_vae(pl.LightningModule):
         return mmd
 
     def MMD_loss(self, latent_dim, z, xhat, x):
+        """
+        Compute the loss function based on maximum mean discrepancy (MMD) and negative log likelihood (NLL).
+
+        Args:
+            latent_dim (int): The dimensionality of the latent space.
+            z (torch.Tensor): A tensor of shape (batch_size, latent_dim) representing the latent codes.
+            xhat (torch.Tensor): A tensor of shape (batch_size, dim) representing the reconstructed data.
+            x (torch.Tensor): A tensor of shape (batch_size, dim) representing the original data.
+
+        Returns:
+            torch.Tensor: A scalar tensor representing the MMD loss.
+        """
         true_samples = torch.randn(200, latent_dim)
         mmd = self.compute_mmd(true_samples, z) # compute maximum mean discrepancy (MMD)
         nll = (xhat - x).pow(2).mean() #negative log likelihood
