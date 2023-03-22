@@ -5,7 +5,21 @@ from torch import nn
 
 
 class Encoder(nn.Module):
+    """
+    Encoder class for a Variational Autoencoder (VAE).
+    
+    The Encoder class is responsible for taking input data and generating the mean and
+    log variance for the latent space representation.
+    """
     def __init__(self, input_dim, hidden_dims, latent_dim):
+        """
+        Initializes the Encoder class with given input dimensions, hidden layer dimensions, and latent dimensions.
+        
+        Args:
+            input_dim (int): The dimensionality of the input data.
+            hidden_dims (list): A list of integers representing the dimensions of the hidden layers.
+            latent_dim (int): The dimensionality of the latent space.
+        """
         super(Encoder, self).__init__()
 
         self.LeakyReLU = nn.LeakyReLU(0.2)
@@ -29,6 +43,16 @@ class Encoder(nn.Module):
         self.FC_var   = nn.Linear(hidden_dims[-1], latent_dim)
         
     def forward(self, x):
+        """
+        Performs a forward pass through the Encoder network.
+        
+        Args:
+            x (torch.Tensor): The input data tensor.
+            
+        Returns:
+            mean (torch.Tensor): The mean of the latent space representation.
+            log_var (torch.Tensor): The log variance of the latent space representation.
+        """
         h_       = self.hidden_layers(x)
         mean     = self.FC_mean(h_)
         log_var  = self.FC_var(h_)
