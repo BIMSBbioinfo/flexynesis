@@ -16,8 +16,28 @@ from functools import reduce
 
 from .models_shared import *
     
-# num_layers: number of omics layers/matrices 
 class DirectPred(pl.LightningModule):
+    """
+    DirectPred is a PyTorch Lightning module for multi-omics data fusion and prediction.
+
+    This class implements a deep learning model for fusing and predicting from multiple omics layers/matrices.
+    Each omics layer is encoded separately using an MLP encoder. The resulting latent representations
+    are then concatenated and passed through a fully connected network (fusion layer) to make predictions.
+
+    Args:
+        num_layers (int): Number of omics layers/matrices.
+        input_dims (list of int): A list of input dimensions for each omics layer.
+        latent_dim (int, optional): The dimension of the latent space for each encoder. Defaults to 16.
+        num_class (int, optional): Number of output classes for the prediction task. Defaults to 1.
+        **kwargs: Additional keyword arguments to be passed to the MLP encoders.
+
+    Example:
+
+        # Instantiate a DirectPred model with 2 omics layers and input dimensions of 100 and 200
+        model = DirectPred(num_layers=2, input_dims=[100, 200], latent_dim=16, num_class=1)
+
+    """
+
     def __init__(self, num_layers, input_dims, latent_dim = 16, num_class = 1, **kwargs):
         super(DirectPred, self).__init__()
          # create a list of Encoder instances for separately encoding each omics layer
@@ -27,6 +47,15 @@ class DirectPred(pl.LightningModule):
         self.latent_dim = latent_dim
         
     def forward(self, x_list):
+         """
+        Forward pass of the DirectPred model.
+
+        Args:
+            x_list (list of torch.Tensor): A list of input matrices (omics layers), one for each layer.
+
+        Returns:
+            tuple: A tuple containing the predicted output (y_pred) and a list of latent embeddings for each omics layer.
+        """
         embeddings_list = []
         # Process each input matrix with its corresponding Encoder
         for i, x in enumerate(x_list):
@@ -36,10 +65,27 @@ class DirectPred(pl.LightningModule):
         return y_pred, embeddings_list
     
     def configure_optimizers(self):
+        """
+        Configure the optimizer for the DirectPred model.
+
+        Returns:
+            torch.optim.Optimizer: The configured optimizer.
+        """
+
         optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         return optimizer
 
     def training_step(self, train_batch, batch_idx):
+        """
+        Perform a single training step.
+
+        Args:
+            train_batch (tuple): A tuple containing the input data and labels for the current batch.
+            batch_idx (int): The index of the current batch.
+
+        Returns:
+            torch.Tensor: The loss for the current training step.
+        """
         dat, y = train_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
@@ -50,6 +96,13 @@ class DirectPred(pl.LightningModule):
         return loss
     
     def validation_step(self, val_batch, batch_idx):
+        """
+        Perform a single validation step.
+
+        Args:
+            val_batch (tuple): A tuple containing the input data and labels for the current batch.
+            batch_idx (int): The index of the current batch.
+        """
         dat, y = val_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
@@ -59,6 +112,15 @@ class DirectPred(pl.LightningModule):
         self.log_dict({"val_loss": loss, "val_corr": r_value})
     
     def evaluate(self, dataset):
+        """
+        Evaluate the DirectPred model on a given dataset.
+
+        Args:
+            dataset: The dataset to evaluate the model on.
+
+        Returns:
+            float: The Pearson correlation coefficient (r_value) between the true labels and the predicted labels.
+        """
         self.eval()
         layers = dataset.dat.keys()
         x_list = [dataset.dat[x] for x in layers]
