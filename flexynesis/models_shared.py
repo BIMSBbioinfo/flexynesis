@@ -190,7 +190,21 @@ class EmbeddingNetwork(nn.Module):
     
 # Simple feed-forward multi-class classifier
 class Classifier(nn.Module):
+    """
+    A simple feed-forward neural network for multi-class classification tasks.
+    
+    The Classifier class is a straightforward feed-forward network that can be used
+    to perform multi-class classification on input data.
+    """
     def __init__(self, input_size, hidden_dims, num_classes):
+        """
+        Initializes the Classifier class with the given input size, hidden layer dimensions, and number of classes.
+        
+        Args:
+            input_size (int): The size of the input data.
+            hidden_dims (list): A list of integers representing the dimensions of the hidden layers.
+            num_classes (int): The number of output classes.
+        """
         super(Classifier, self).__init__()
         self.layers = nn.ModuleList()
         
@@ -205,6 +219,15 @@ class Classifier(nn.Module):
         self.layers.append(nn.Linear(hidden_dims[-1], num_classes))
 
     def forward(self, x):
+        """
+        Performs a forward pass through the Classifier network.
+        
+        Args:
+            x (torch.Tensor): The input data tensor.
+            
+        Returns:
+            x (torch.Tensor): The output tensor after passing through the Classifier network.
+        """
         for layer in self.layers[:-1]:
             x = torch.relu(layer(x))
         x = self.layers[-1](x)
