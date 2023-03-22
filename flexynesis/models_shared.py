@@ -111,10 +111,22 @@ class Decoder(nn.Module):
         return x_hat
     
 
-# a MLP model for regression/classification
-# set num_class to 1 for regression. num_class > 1 => classification
 class MLP(nn.Module):
+    """
+    A Multi-Layer Perceptron (MLP) model for regression or classification tasks.
+    
+    The MLP class is a simple feed-forward neural network that can be used for regression
+    when `num_class` is set to 1 or for classification when `num_class` is greater than 1.
+    """
     def __init__(self, num_feature, num_class, h = 32):
+        """
+        Initializes the MLP class with the given number of input features, number of classes, and hidden layer size.
+        
+        Args:
+            num_feature (int): The number of input features.
+            num_class (int): The number of output classes. Set to 1 for regression tasks, and > 1 for classification tasks.
+            h (int, optional): The size of the hidden layer. Default is 32.
+        """
         super(MLP, self).__init__()
         self.layer_1 = nn.Linear(num_feature, h)
         self.layer_out = nn.Linear(h, num_class)
@@ -123,6 +135,15 @@ class MLP(nn.Module):
         self.batchnorm = nn.BatchNorm1d(h)
 
     def forward(self, x):
+        """
+        Performs a forward pass through the MLP network.
+        
+        Args:
+            x (torch.Tensor): The input data tensor.
+            
+        Returns:
+            x (torch.Tensor): The output tensor after passing through the MLP network.
+        """
         x = self.layer_1(x)
         x = self.dropout(x)
         x = self.batchnorm(x)
