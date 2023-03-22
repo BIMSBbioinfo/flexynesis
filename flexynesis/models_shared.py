@@ -60,7 +60,21 @@ class Encoder(nn.Module):
     
     
 class Decoder(nn.Module):
+    """
+    Decoder class for a Variational Autoencoder (VAE).
+    
+    The Decoder class is responsible for taking the latent space representation and
+    generating the reconstructed output data.
+    """
     def __init__(self, latent_dim, hidden_dims, output_dim):
+        """
+        Initializes the Decoder class with given latent dimensions, hidden layer dimensions, and output dimensions.
+        
+        Args:
+            latent_dim (int): The dimensionality of the latent space.
+            hidden_dims (list): A list of integers representing the dimensions of the hidden layers.
+            output_dim (int): The dimensionality of the output data.
+        """
         super(Decoder, self).__init__()
 
         self.LeakyReLU = nn.LeakyReLU(0.2)
@@ -83,6 +97,15 @@ class Decoder(nn.Module):
         self.FC_output = nn.Linear(hidden_dims[-1], output_dim)
 
     def forward(self, x):
+        """
+        Performs a forward pass through the Decoder network.
+        
+        Args:
+            x (torch.Tensor): The input tensor representing the latent space.
+            
+        Returns:
+            x_hat (torch.Tensor): The reconstructed output tensor.
+        """
         h = self.hidden_layers(x)
         x_hat = torch.sigmoid(self.FC_output(h))
         return x_hat
