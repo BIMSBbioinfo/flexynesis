@@ -50,7 +50,11 @@ This will run all the tests in the tests directory.
 # Contributing
 If you would like to contribute to the project, please open an issue or a pull request on the GitHub repository.
 
+# Documentation
 
+```
+pdoc --html --output-dir docs flexynesis 
+```
 
 
 

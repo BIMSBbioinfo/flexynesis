@@ -31,7 +31,21 @@ from torch import nn
 
 
 class Encoder(nn.Module):
+    &#34;&#34;&#34;
+    Encoder class for a Variational Autoencoder (VAE).
+    
+    The Encoder class is responsible for taking input data and generating the mean and
+    log variance for the latent space representation.
+    &#34;&#34;&#34;
     def __init__(self, input_dim, hidden_dims, latent_dim):
+        &#34;&#34;&#34;
+        Initializes the Encoder class with given input dimensions, hidden layer dimensions, and latent dimensions.
+        
+        Args:
+            input_dim (int): The dimensionality of the input data.
+            hidden_dims (list): A list of integers representing the dimensions of the hidden layers.
+            latent_dim (int): The dimensionality of the latent space.
+        &#34;&#34;&#34;
         super(Encoder, self).__init__()
 
         self.LeakyReLU = nn.LeakyReLU(0.2)
@@ -55,6 +69,16 @@ class Encoder(nn.Module):
         self.FC_var   = nn.Linear(hidden_dims[-1], latent_dim)
         
     def forward(self, x):
+        &#34;&#34;&#34;
+        Performs a forward pass through the Encoder network.
+        
+        Args:
+            x (torch.Tensor): The input data tensor.
+            
+        Returns:
+            mean (torch.Tensor): The mean of the latent space representation.
+            log_var (torch.Tensor): The log variance of the latent space representation.
+        &#34;&#34;&#34;
         h_       = self.hidden_layers(x)
         mean     = self.FC_mean(h_)
         log_var  = self.FC_var(h_)
@@ -62,7 +86,21 @@ class Encoder(nn.Module):
     
     
 class Decoder(nn.Module):
+    &#34;&#34;&#34;
+    Decoder class for a Variational Autoencoder (VAE).
+    
+    The Decoder class is responsible for taking the latent space representation and
+    generating the reconstructed output data.
+    &#34;&#34;&#34;
     def __init__(self, latent_dim, hidden_dims, output_dim):
+        &#34;&#34;&#34;
+        Initializes the Decoder class with given latent dimensions, hidden layer dimensions, and output dimensions.
+        
+        Args:
+            latent_dim (int): The dimensionality of the latent space.
+            hidden_dims (list): A list of integers representing the dimensions of the hidden layers.
+            output_dim (int): The dimensionality of the output data.
+        &#34;&#34;&#34;
         super(Decoder, self).__init__()
 
         self.LeakyReLU = nn.LeakyReLU(0.2)
@@ -85,15 +123,36 @@ class Decoder(nn.Module):
         self.FC_output = nn.Linear(hidden_dims[-1], output_dim)
 
     def forward(self, x):
+        &#34;&#34;&#34;
+        Performs a forward pass through the Decoder network.
+        
+        Args:
+            x (torch.Tensor): The input tensor representing the latent space.
+            
+        Returns:
+            x_hat (torch.Tensor): The reconstructed output tensor.
+        &#34;&#34;&#34;
         h = self.hidden_layers(x)
         x_hat = torch.sigmoid(self.FC_output(h))
         return x_hat
     
 
-# a MLP model for regression/classification
-# set num_class to 1 for regression. num_class &gt; 1 =&gt; classification
 class MLP(nn.Module):
+    &#34;&#34;&#34;
+    A Multi-Layer Perceptron (MLP) model for regression or classification tasks.
+    
+    The MLP class is a simple feed-forward neural network that can be used for regression
+    when `num_class` is set to 1 or for classification when `num_class` is greater than 1.
+    &#34;&#34;&#34;
     def __init__(self, num_feature, num_class, h = 32):
+        &#34;&#34;&#34;
+        Initializes the MLP class with the given number of input features, number of classes, and hidden layer size.
+        
+        Args:
+            num_feature (int): The number of input features.
+            num_class (int): The number of output classes. Set to 1 for regression tasks, and &gt; 1 for classification tasks.
+            h (int, optional): The size of the hidden layer. Default is 32.
+        &#34;&#34;&#34;
         super(MLP, self).__init__()
         self.layer_1 = nn.Linear(num_feature, h)
         self.layer_out = nn.Linear(h, num_class)
@@ -102,6 +161,15 @@ class MLP(nn.Module):
         self.batchnorm = nn.BatchNorm1d(h)
 
     def forward(self, x):
+        &#34;&#34;&#34;
+        Performs a forward pass through the MLP network.
+        
+        Args:
+            x (torch.Tensor): The input data tensor.
+            
+        Returns:
+            x (torch.Tensor): The output tensor after passing through the MLP network.
+        &#34;&#34;&#34;
         x = self.layer_1(x)
         x = self.dropout(x)
         x = self.batchnorm(x)
@@ -110,15 +178,37 @@ class MLP(nn.Module):
         x = self.layer_out(x)
         return x
 
-# Simple Feed-Forward Network
 class EmbeddingNetwork(nn.Module):
+    &#34;&#34;&#34;
+    A simple feed-forward neural network for generating embeddings.
+    
+    The EmbeddingNetwork class is a straightforward feed-forward network
+    that can be used to generate embeddings from input data.
+    &#34;&#34;&#34;
     def __init__(self, input_size, hidden_size, output_size):
+        &#34;&#34;&#34;
+        Initializes the EmbeddingNetwork class with the given input size, hidden layer size, and output size.
+        
+        Args:
+            input_size (int): The size of the input data.
+            hidden_size (int): The size of the hidden layer.
+            output_size (int): The size of the output layer, representing the dimensionality of the embeddings.
+        &#34;&#34;&#34;
         super(EmbeddingNetwork, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
+        &#34;&#34;&#34;
+        Performs a forward pass through the EmbeddingNetwork.
+        
+        Args:
+            x (torch.Tensor): The input data tensor.
+            
+        Returns:
+            x (torch.Tensor): The output tensor representing the generated embeddings.
+        &#34;&#34;&#34;
         x = self.fc1(x)
         x = self.relu(x)
         x = self.fc2(x)
@@ -126,7 +216,21 @@ class EmbeddingNetwork(nn.Module):
     
 # Simple feed-forward multi-class classifier
 class Classifier(nn.Module):
+    &#34;&#34;&#34;
+    A simple feed-forward neural network for multi-class classification tasks.
+    
+    The Classifier class is a straightforward feed-forward network that can be used
+    to perform multi-class classification on input data.
+    &#34;&#34;&#34;
     def __init__(self, input_size, hidden_dims, num_classes):
+        &#34;&#34;&#34;
+        Initializes the Classifier class with the given input size, hidden layer dimensions, and number of classes.
+        
+        Args:
+            input_size (int): The size of the input data.
+            hidden_dims (list): A list of integers representing the dimensions of the hidden layers.
+            num_classes (int): The number of output classes.
+        &#34;&#34;&#34;
         super(Classifier, self).__init__()
         self.layers = nn.ModuleList()
         
@@ -141,6 +245,15 @@ class Classifier(nn.Module):
         self.layers.append(nn.Linear(hidden_dims[-1], num_classes))
 
     def forward(self, x):
+        &#34;&#34;&#34;
+        Performs a forward pass through the Classifier network.
+        
+        Args:
+            x (torch.Tensor): The input data tensor.
+            
+        Returns:
+            x (torch.Tensor): The output tensor after passing through the Classifier network.
+        &#34;&#34;&#34;
         for layer in self.layers[:-1]:
             x = torch.relu(layer(x))
         x = self.layers[-1](x)
@@ -161,40 +274,39 @@ class Classifier(nn.Module):
 <span>(</span><span>input_size, hidden_dims, num_classes)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Base class for all neural network modules.</p>
-<p>Your models should also subclass this class.</p>
-<p>Modules can also contain other Modules, allowing to nest them in
-a tree structure. You can assign the submodules as regular attributes::</p>
-<pre><code>import torch.nn as nn
-import torch.nn.functional as F
-
-class Model(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 20, 5)
-        self.conv2 = nn.Conv2d(20, 20, 5)
-
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        return F.relu(self.conv2(x))
-</code></pre>
-<p>Submodules assigned in this way will be registered, and will have their
-parameters converted too when you call :meth:<code>to</code>, etc.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>As per the example above, an <code>__init__()</code> call to the parent class
-must be made before assignment on the child.</p>
-</div>
-<p>:ivar training: Boolean represents whether this module is in training or
-evaluation mode.
-:vartype training: bool</p>
-<p>Initializes internal Module state, shared by both nn.Module and ScriptModule.</p></div>
+<div class="desc"><p>A simple feed-forward neural network for multi-class classification tasks.</p>
+<p>The Classifier class is a straightforward feed-forward network that can be used
+to perform multi-class classification on input data.</p>
+<p>Initializes the Classifier class with the given input size, hidden layer dimensions, and number of classes.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>input_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>The size of the input data.</dd>
+<dt><strong><code>hidden_dims</code></strong> :&ensp;<code>list</code></dt>
+<dd>A list of integers representing the dimensions of the hidden layers.</dd>
+<dt><strong><code>num_classes</code></strong> :&ensp;<code>int</code></dt>
+<dd>The number of output classes.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class Classifier(nn.Module):
+    &#34;&#34;&#34;
+    A simple feed-forward neural network for multi-class classification tasks.
+    
+    The Classifier class is a straightforward feed-forward network that can be used
+    to perform multi-class classification on input data.
+    &#34;&#34;&#34;
     def __init__(self, input_size, hidden_dims, num_classes):
+        &#34;&#34;&#34;
+        Initializes the Classifier class with the given input size, hidden layer dimensions, and number of classes.
+        
+        Args:
+            input_size (int): The size of the input data.
+            hidden_dims (list): A list of integers representing the dimensions of the hidden layers.
+            num_classes (int): The number of output classes.
+        &#34;&#34;&#34;
         super(Classifier, self).__init__()
         self.layers = nn.ModuleList()
         
@@ -209,6 +321,15 @@ evaluation mode.
         self.layers.append(nn.Linear(hidden_dims[-1], num_classes))
 
     def forward(self, x):
+        &#34;&#34;&#34;
+        Performs a forward pass through the Classifier network.
+        
+        Args:
+            x (torch.Tensor): The input data tensor.
+            
+        Returns:
+            x (torch.Tensor): The output tensor after passing through the Classifier network.
+        &#34;&#34;&#34;
         for layer in self.layers[:-1]:
             x = torch.relu(layer(x))
         x = self.layers[-1](x)
@@ -224,20 +345,28 @@ evaluation mode.
 <span>def <span class="ident">forward</span></span>(<span>self, x) -> Callable[..., Any]</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Defines the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the :class:<code>Module</code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
-</div></div>
+<div class="desc"><p>Performs a forward pass through the Classifier network.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>x</code></strong> :&ensp;<code>torch.Tensor</code></dt>
+<dd>The input data tensor.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>x (torch.Tensor): The output tensor after passing through the Classifier network.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def forward(self, x):
+    &#34;&#34;&#34;
+    Performs a forward pass through the Classifier network.
+    
+    Args:
+        x (torch.Tensor): The input data tensor.
+        
+    Returns:
+        x (torch.Tensor): The output tensor after passing through the Classifier network.
+    &#34;&#34;&#34;
     for layer in self.layers[:-1]:
         x = torch.relu(layer(x))
     x = self.layers[-1](x)
@@ -251,40 +380,39 @@ registered hooks while the latter silently ignores them.</p>
 <span>(</span><span>latent_dim, hidden_dims, output_dim)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Base class for all neural network modules.</p>
-<p>Your models should also subclass this class.</p>
-<p>Modules can also contain other Modules, allowing to nest them in
-a tree structure. You can assign the submodules as regular attributes::</p>
-<pre><code>import torch.nn as nn
-import torch.nn.functional as F
-
-class Model(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 20, 5)
-        self.conv2 = nn.Conv2d(20, 20, 5)
-
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        return F.relu(self.conv2(x))
-</code></pre>
-<p>Submodules assigned in this way will be registered, and will have their
-parameters converted too when you call :meth:<code>to</code>, etc.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>As per the example above, an <code>__init__()</code> call to the parent class
-must be made before assignment on the child.</p>
-</div>
-<p>:ivar training: Boolean represents whether this module is in training or
-evaluation mode.
-:vartype training: bool</p>
-<p>Initializes internal Module state, shared by both nn.Module and ScriptModule.</p></div>
+<div class="desc"><p>Decoder class for a Variational Autoencoder (VAE).</p>
+<p>The Decoder class is responsible for taking the latent space representation and
+generating the reconstructed output data.</p>
+<p>Initializes the Decoder class with given latent dimensions, hidden layer dimensions, and output dimensions.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>latent_dim</code></strong> :&ensp;<code>int</code></dt>
+<dd>The dimensionality of the latent space.</dd>
+<dt><strong><code>hidden_dims</code></strong> :&ensp;<code>list</code></dt>
+<dd>A list of integers representing the dimensions of the hidden layers.</dd>
+<dt><strong><code>output_dim</code></strong> :&ensp;<code>int</code></dt>
+<dd>The dimensionality of the output data.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class Decoder(nn.Module):
+    &#34;&#34;&#34;
+    Decoder class for a Variational Autoencoder (VAE).
+    
+    The Decoder class is responsible for taking the latent space representation and
+    generating the reconstructed output data.
+    &#34;&#34;&#34;
     def __init__(self, latent_dim, hidden_dims, output_dim):
+        &#34;&#34;&#34;
+        Initializes the Decoder class with given latent dimensions, hidden layer dimensions, and output dimensions.
+        
+        Args:
+            latent_dim (int): The dimensionality of the latent space.
+            hidden_dims (list): A list of integers representing the dimensions of the hidden layers.
+            output_dim (int): The dimensionality of the output data.
+        &#34;&#34;&#34;
         super(Decoder, self).__init__()
 
         self.LeakyReLU = nn.LeakyReLU(0.2)
@@ -307,6 +435,15 @@ evaluation mode.
         self.FC_output = nn.Linear(hidden_dims[-1], output_dim)
 
     def forward(self, x):
+        &#34;&#34;&#34;
+        Performs a forward pass through the Decoder network.
+        
+        Args:
+            x (torch.Tensor): The input tensor representing the latent space.
+            
+        Returns:
+            x_hat (torch.Tensor): The reconstructed output tensor.
+        &#34;&#34;&#34;
         h = self.hidden_layers(x)
         x_hat = torch.sigmoid(self.FC_output(h))
         return x_hat</code></pre>
@@ -321,20 +458,28 @@ evaluation mode.
 <span>def <span class="ident">forward</span></span>(<span>self, x) -> Callable[..., Any]</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Defines the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the :class:<code>Module</code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
-</div></div>
+<div class="desc"><p>Performs a forward pass through the Decoder network.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>x</code></strong> :&ensp;<code>torch.Tensor</code></dt>
+<dd>The input tensor representing the latent space.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>x_hat (torch.Tensor): The reconstructed output tensor.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def forward(self, x):
+    &#34;&#34;&#34;
+    Performs a forward pass through the Decoder network.
+    
+    Args:
+        x (torch.Tensor): The input tensor representing the latent space.
+        
+    Returns:
+        x_hat (torch.Tensor): The reconstructed output tensor.
+    &#34;&#34;&#34;
     h = self.hidden_layers(x)
     x_hat = torch.sigmoid(self.FC_output(h))
     return x_hat</code></pre>
@@ -347,46 +492,54 @@ registered hooks while the latter silently ignores them.</p>
 <span>(</span><span>input_size, hidden_size, output_size)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Base class for all neural network modules.</p>
-<p>Your models should also subclass this class.</p>
-<p>Modules can also contain other Modules, allowing to nest them in
-a tree structure. You can assign the submodules as regular attributes::</p>
-<pre><code>import torch.nn as nn
-import torch.nn.functional as F
-
-class Model(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 20, 5)
-        self.conv2 = nn.Conv2d(20, 20, 5)
-
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        return F.relu(self.conv2(x))
-</code></pre>
-<p>Submodules assigned in this way will be registered, and will have their
-parameters converted too when you call :meth:<code>to</code>, etc.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>As per the example above, an <code>__init__()</code> call to the parent class
-must be made before assignment on the child.</p>
-</div>
-<p>:ivar training: Boolean represents whether this module is in training or
-evaluation mode.
-:vartype training: bool</p>
-<p>Initializes internal Module state, shared by both nn.Module and ScriptModule.</p></div>
+<div class="desc"><p>A simple feed-forward neural network for generating embeddings.</p>
+<p>The EmbeddingNetwork class is a straightforward feed-forward network
+that can be used to generate embeddings from input data.</p>
+<p>Initializes the EmbeddingNetwork class with the given input size, hidden layer size, and output size.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>input_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>The size of the input data.</dd>
+<dt><strong><code>hidden_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>The size of the hidden layer.</dd>
+<dt><strong><code>output_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>The size of the output layer, representing the dimensionality of the embeddings.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class EmbeddingNetwork(nn.Module):
+    &#34;&#34;&#34;
+    A simple feed-forward neural network for generating embeddings.
+    
+    The EmbeddingNetwork class is a straightforward feed-forward network
+    that can be used to generate embeddings from input data.
+    &#34;&#34;&#34;
     def __init__(self, input_size, hidden_size, output_size):
+        &#34;&#34;&#34;
+        Initializes the EmbeddingNetwork class with the given input size, hidden layer size, and output size.
+        
+        Args:
+            input_size (int): The size of the input data.
+            hidden_size (int): The size of the hidden layer.
+            output_size (int): The size of the output layer, representing the dimensionality of the embeddings.
+        &#34;&#34;&#34;
         super(EmbeddingNetwork, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
+        &#34;&#34;&#34;
+        Performs a forward pass through the EmbeddingNetwork.
+        
+        Args:
+            x (torch.Tensor): The input data tensor.
+            
+        Returns:
+            x (torch.Tensor): The output tensor representing the generated embeddings.
+        &#34;&#34;&#34;
         x = self.fc1(x)
         x = self.relu(x)
         x = self.fc2(x)
@@ -402,20 +555,28 @@ evaluation mode.
 <span>def <span class="ident">forward</span></span>(<span>self, x) -> Callable[..., Any]</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Defines the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the :class:<code>Module</code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
-</div></div>
+<div class="desc"><p>Performs a forward pass through the EmbeddingNetwork.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>x</code></strong> :&ensp;<code>torch.Tensor</code></dt>
+<dd>The input data tensor.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>x (torch.Tensor): The output tensor representing the generated embeddings.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def forward(self, x):
+    &#34;&#34;&#34;
+    Performs a forward pass through the EmbeddingNetwork.
+    
+    Args:
+        x (torch.Tensor): The input data tensor.
+        
+    Returns:
+        x (torch.Tensor): The output tensor representing the generated embeddings.
+    &#34;&#34;&#34;
     x = self.fc1(x)
     x = self.relu(x)
     x = self.fc2(x)
@@ -429,40 +590,39 @@ registered hooks while the latter silently ignores them.</p>
 <span>(</span><span>input_dim, hidden_dims, latent_dim)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Base class for all neural network modules.</p>
-<p>Your models should also subclass this class.</p>
-<p>Modules can also contain other Modules, allowing to nest them in
-a tree structure. You can assign the submodules as regular attributes::</p>
-<pre><code>import torch.nn as nn
-import torch.nn.functional as F
-
-class Model(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 20, 5)
-        self.conv2 = nn.Conv2d(20, 20, 5)
-
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        return F.relu(self.conv2(x))
-</code></pre>
-<p>Submodules assigned in this way will be registered, and will have their
-parameters converted too when you call :meth:<code>to</code>, etc.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>As per the example above, an <code>__init__()</code> call to the parent class
-must be made before assignment on the child.</p>
-</div>
-<p>:ivar training: Boolean represents whether this module is in training or
-evaluation mode.
-:vartype training: bool</p>
-<p>Initializes internal Module state, shared by both nn.Module and ScriptModule.</p></div>
+<div class="desc"><p>Encoder class for a Variational Autoencoder (VAE).</p>
+<p>The Encoder class is responsible for taking input data and generating the mean and
+log variance for the latent space representation.</p>
+<p>Initializes the Encoder class with given input dimensions, hidden layer dimensions, and latent dimensions.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>input_dim</code></strong> :&ensp;<code>int</code></dt>
+<dd>The dimensionality of the input data.</dd>
+<dt><strong><code>hidden_dims</code></strong> :&ensp;<code>list</code></dt>
+<dd>A list of integers representing the dimensions of the hidden layers.</dd>
+<dt><strong><code>latent_dim</code></strong> :&ensp;<code>int</code></dt>
+<dd>The dimensionality of the latent space.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class Encoder(nn.Module):
+    &#34;&#34;&#34;
+    Encoder class for a Variational Autoencoder (VAE).
+    
+    The Encoder class is responsible for taking input data and generating the mean and
+    log variance for the latent space representation.
+    &#34;&#34;&#34;
     def __init__(self, input_dim, hidden_dims, latent_dim):
+        &#34;&#34;&#34;
+        Initializes the Encoder class with given input dimensions, hidden layer dimensions, and latent dimensions.
+        
+        Args:
+            input_dim (int): The dimensionality of the input data.
+            hidden_dims (list): A list of integers representing the dimensions of the hidden layers.
+            latent_dim (int): The dimensionality of the latent space.
+        &#34;&#34;&#34;
         super(Encoder, self).__init__()
 
         self.LeakyReLU = nn.LeakyReLU(0.2)
@@ -486,6 +646,16 @@ evaluation mode.
         self.FC_var   = nn.Linear(hidden_dims[-1], latent_dim)
         
     def forward(self, x):
+        &#34;&#34;&#34;
+        Performs a forward pass through the Encoder network.
+        
+        Args:
+            x (torch.Tensor): The input data tensor.
+            
+        Returns:
+            mean (torch.Tensor): The mean of the latent space representation.
+            log_var (torch.Tensor): The log variance of the latent space representation.
+        &#34;&#34;&#34;
         h_       = self.hidden_layers(x)
         mean     = self.FC_mean(h_)
         log_var  = self.FC_var(h_)
@@ -501,20 +671,30 @@ evaluation mode.
 <span>def <span class="ident">forward</span></span>(<span>self, x) -> Callable[..., Any]</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Defines the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the :class:<code>Module</code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
-</div></div>
+<div class="desc"><p>Performs a forward pass through the Encoder network.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>x</code></strong> :&ensp;<code>torch.Tensor</code></dt>
+<dd>The input data tensor.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>mean (torch.Tensor): The mean of the latent space representation.
+log_var (torch.Tensor): The log variance of the latent space representation.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def forward(self, x):
+    &#34;&#34;&#34;
+    Performs a forward pass through the Encoder network.
+    
+    Args:
+        x (torch.Tensor): The input data tensor.
+        
+    Returns:
+        mean (torch.Tensor): The mean of the latent space representation.
+        log_var (torch.Tensor): The log variance of the latent space representation.
+    &#34;&#34;&#34;
     h_       = self.hidden_layers(x)
     mean     = self.FC_mean(h_)
     log_var  = self.FC_var(h_)
@@ -528,40 +708,39 @@ registered hooks while the latter silently ignores them.</p>
 <span>(</span><span>num_feature, num_class, h=32)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Base class for all neural network modules.</p>
-<p>Your models should also subclass this class.</p>
-<p>Modules can also contain other Modules, allowing to nest them in
-a tree structure. You can assign the submodules as regular attributes::</p>
-<pre><code>import torch.nn as nn
-import torch.nn.functional as F
-
-class Model(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 20, 5)
-        self.conv2 = nn.Conv2d(20, 20, 5)
-
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        return F.relu(self.conv2(x))
-</code></pre>
-<p>Submodules assigned in this way will be registered, and will have their
-parameters converted too when you call :meth:<code>to</code>, etc.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>As per the example above, an <code>__init__()</code> call to the parent class
-must be made before assignment on the child.</p>
-</div>
-<p>:ivar training: Boolean represents whether this module is in training or
-evaluation mode.
-:vartype training: bool</p>
-<p>Initializes internal Module state, shared by both nn.Module and ScriptModule.</p></div>
+<div class="desc"><p>A Multi-Layer Perceptron (MLP) model for regression or classification tasks.</p>
+<p>The MLP class is a simple feed-forward neural network that can be used for regression
+when <code>num_class</code> is set to 1 or for classification when <code>num_class</code> is greater than 1.</p>
+<p>Initializes the MLP class with the given number of input features, number of classes, and hidden layer size.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>num_feature</code></strong> :&ensp;<code>int</code></dt>
+<dd>The number of input features.</dd>
+<dt><strong><code>num_class</code></strong> :&ensp;<code>int</code></dt>
+<dd>The number of output classes. Set to 1 for regression tasks, and &gt; 1 for classification tasks.</dd>
+<dt><strong><code>h</code></strong> :&ensp;<code>int</code>, optional</dt>
+<dd>The size of the hidden layer. Default is 32.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class MLP(nn.Module):
+    &#34;&#34;&#34;
+    A Multi-Layer Perceptron (MLP) model for regression or classification tasks.
+    
+    The MLP class is a simple feed-forward neural network that can be used for regression
+    when `num_class` is set to 1 or for classification when `num_class` is greater than 1.
+    &#34;&#34;&#34;
     def __init__(self, num_feature, num_class, h = 32):
+        &#34;&#34;&#34;
+        Initializes the MLP class with the given number of input features, number of classes, and hidden layer size.
+        
+        Args:
+            num_feature (int): The number of input features.
+            num_class (int): The number of output classes. Set to 1 for regression tasks, and &gt; 1 for classification tasks.
+            h (int, optional): The size of the hidden layer. Default is 32.
+        &#34;&#34;&#34;
         super(MLP, self).__init__()
         self.layer_1 = nn.Linear(num_feature, h)
         self.layer_out = nn.Linear(h, num_class)
@@ -570,6 +749,15 @@ evaluation mode.
         self.batchnorm = nn.BatchNorm1d(h)
 
     def forward(self, x):
+        &#34;&#34;&#34;
+        Performs a forward pass through the MLP network.
+        
+        Args:
+            x (torch.Tensor): The input data tensor.
+            
+        Returns:
+            x (torch.Tensor): The output tensor after passing through the MLP network.
+        &#34;&#34;&#34;
         x = self.layer_1(x)
         x = self.dropout(x)
         x = self.batchnorm(x)
@@ -588,20 +776,28 @@ evaluation mode.
 <span>def <span class="ident">forward</span></span>(<span>self, x) -> Callable[..., Any]</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Defines the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the :class:<code>Module</code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
-</div></div>
+<div class="desc"><p>Performs a forward pass through the MLP network.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>x</code></strong> :&ensp;<code>torch.Tensor</code></dt>
+<dd>The input data tensor.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<p>x (torch.Tensor): The output tensor after passing through the MLP network.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def forward(self, x):
+    &#34;&#34;&#34;
+    Performs a forward pass through the MLP network.
+    
+    Args:
+        x (torch.Tensor): The input data tensor.
+        
+    Returns:
+        x (torch.Tensor): The output tensor after passing through the MLP network.
+    &#34;&#34;&#34;
     x = self.layer_1(x)
     x = self.dropout(x)
     x = self.batchnorm(x)

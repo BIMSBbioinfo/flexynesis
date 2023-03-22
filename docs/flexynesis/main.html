@@ -34,7 +34,31 @@ from pytorch_lightning.strategies import DDPStrategy
 
 # given a pytorch lightning model and pytorch dataset
 def train_model(model, dataset, n_epoch, batch_size, val_size = 0):
-    # training
+    &#34;&#34;&#34;
+    Train a PyTorch Lightning model using the provided dataset.
+
+    This function trains the given model using the provided dataset and training parameters.
+    It supports both training without validation and training with validation using a validation set split from the dataset.
+
+    Args:
+        model (pl.LightningModule): A PyTorch Lightning model to be trained.
+        dataset (torch.utils.data.Dataset): The dataset to be used for training (and validation, if specified).
+        n_epoch (int): The number of training epochs.
+        batch_size (int): The size of each mini-batch during training (and validation, if specified).
+        val_size (float, optional): The fractional size of the validation set relative to the dataset size. Should be between 0 and 1. Defaults to 0 (no validation).
+
+    Returns:
+        pl.LightningModule: The trained model.
+
+    Example:
+
+        # Instantiate a model and dataset
+        model = MyLightningModel()
+        dataset = MyDataset()
+
+        # Train the model for 10 epochs with a batch size of 32 and a validation set comprising 20% of the dataset
+        trained_model = train_model(model, dataset, n_epoch=10, batch_size=32, val_size=0.2)
+    &#34;&#34;&#34;
     if val_size == 0:
         train_loader = DataLoader(dataset, batch_size=batch_size, num_workers = 0)
         trainer = pl.Trainer(max_epochs = n_epoch, limit_val_batches = 0, num_sanity_val_steps = 0, 
@@ -64,13 +88,63 @@ def train_model(model, dataset, n_epoch, batch_size, val_size = 0):
 <span>def <span class="ident">train_model</span></span>(<span>model, dataset, n_epoch, batch_size, val_size=0)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Train a PyTorch Lightning model using the provided dataset.</p>
+<p>This function trains the given model using the provided dataset and training parameters.
+It supports both training without validation and training with validation using a validation set split from the dataset.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>model</code></strong> :&ensp;<code>pl.LightningModule</code></dt>
+<dd>A PyTorch Lightning model to be trained.</dd>
+<dt><strong><code>dataset</code></strong> :&ensp;<code>torch.utils.data.Dataset</code></dt>
+<dd>The dataset to be used for training (and validation, if specified).</dd>
+<dt><strong><code>n_epoch</code></strong> :&ensp;<code>int</code></dt>
+<dd>The number of training epochs.</dd>
+<dt><strong><code>batch_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>The size of each mini-batch during training (and validation, if specified).</dd>
+<dt><strong><code>val_size</code></strong> :&ensp;<code>float</code>, optional</dt>
+<dd>The fractional size of the validation set relative to the dataset size. Should be between 0 and 1. Defaults to 0 (no validation).</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>pl.LightningModule</code></dt>
+<dd>The trained model.</dd>
+</dl>
+<h2 id="example">Example</h2>
+<h1 id="instantiate-a-model-and-dataset">Instantiate a model and dataset</h1>
+<p>model = MyLightningModel()
+dataset = MyDataset()</p>
+<h1 id="train-the-model-for-10-epochs-with-a-batch-size-of-32-and-a-validation-set-comprising-20-of-the-dataset">Train the model for 10 epochs with a batch size of 32 and a validation set comprising 20% of the dataset</h1>
+<p>trained_model = train_model(model, dataset, n_epoch=10, batch_size=32, val_size=0.2)</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def train_model(model, dataset, n_epoch, batch_size, val_size = 0):
-    # training
+    &#34;&#34;&#34;
+    Train a PyTorch Lightning model using the provided dataset.
+
+    This function trains the given model using the provided dataset and training parameters.
+    It supports both training without validation and training with validation using a validation set split from the dataset.
+
+    Args:
+        model (pl.LightningModule): A PyTorch Lightning model to be trained.
+        dataset (torch.utils.data.Dataset): The dataset to be used for training (and validation, if specified).
+        n_epoch (int): The number of training epochs.
+        batch_size (int): The size of each mini-batch during training (and validation, if specified).
+        val_size (float, optional): The fractional size of the validation set relative to the dataset size. Should be between 0 and 1. Defaults to 0 (no validation).
+
+    Returns:
+        pl.LightningModule: The trained model.
+
+    Example:
+
+        # Instantiate a model and dataset
+        model = MyLightningModel()
+        dataset = MyDataset()
+
+        # Train the model for 10 epochs with a batch size of 32 and a validation set comprising 20% of the dataset
+        trained_model = train_model(model, dataset, n_epoch=10, batch_size=32, val_size=0.2)
+    &#34;&#34;&#34;
     if val_size == 0:
         train_loader = DataLoader(dataset, batch_size=batch_size, num_workers = 0)
         trainer = pl.Trainer(max_epochs = n_epoch, limit_val_batches = 0, num_sanity_val_steps = 0, 

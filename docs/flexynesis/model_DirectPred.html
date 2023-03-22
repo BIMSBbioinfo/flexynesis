@@ -42,8 +42,28 @@ from functools import reduce
 
 from .models_shared import *
     
-# num_layers: number of omics layers/matrices 
 class DirectPred(pl.LightningModule):
+    &#34;&#34;&#34;
+    DirectPred is a PyTorch Lightning module for multi-omics data fusion and prediction.
+
+    This class implements a deep learning model for fusing and predicting from multiple omics layers/matrices.
+    Each omics layer is encoded separately using an MLP encoder. The resulting latent representations
+    are then concatenated and passed through a fully connected network (fusion layer) to make predictions.
+
+    Args:
+        num_layers (int): Number of omics layers/matrices.
+        input_dims (list of int): A list of input dimensions for each omics layer.
+        latent_dim (int, optional): The dimension of the latent space for each encoder. Defaults to 16.
+        num_class (int, optional): Number of output classes for the prediction task. Defaults to 1.
+        **kwargs: Additional keyword arguments to be passed to the MLP encoders.
+
+    Example:
+
+        # Instantiate a DirectPred model with 2 omics layers and input dimensions of 100 and 200
+        model = DirectPred(num_layers=2, input_dims=[100, 200], latent_dim=16, num_class=1)
+
+    &#34;&#34;&#34;
+
     def __init__(self, num_layers, input_dims, latent_dim = 16, num_class = 1, **kwargs):
         super(DirectPred, self).__init__()
          # create a list of Encoder instances for separately encoding each omics layer
@@ -53,6 +73,15 @@ class DirectPred(pl.LightningModule):
         self.latent_dim = latent_dim
         
     def forward(self, x_list):
+        &#34;&#34;&#34;
+        Forward pass of the DirectPred model.
+
+        Args:
+            x_list (list of torch.Tensor): A list of input matrices (omics layers), one for each layer.
+
+        Returns:
+            tuple: A tuple containing the predicted output (y_pred) and a list of latent embeddings for each omics layer.
+        &#34;&#34;&#34;
         embeddings_list = []
         # Process each input matrix with its corresponding Encoder
         for i, x in enumerate(x_list):
@@ -62,10 +91,27 @@ class DirectPred(pl.LightningModule):
         return y_pred, embeddings_list
     
     def configure_optimizers(self):
+        &#34;&#34;&#34;
+        Configure the optimizer for the DirectPred model.
+
+        Returns:
+            torch.optim.Optimizer: The configured optimizer.
+        &#34;&#34;&#34;
+
         optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         return optimizer
 
     def training_step(self, train_batch, batch_idx):
+        &#34;&#34;&#34;
+        Perform a single training step.
+
+        Args:
+            train_batch (tuple): A tuple containing the input data and labels for the current batch.
+            batch_idx (int): The index of the current batch.
+
+        Returns:
+            torch.Tensor: The loss for the current training step.
+        &#34;&#34;&#34;
         dat, y = train_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
@@ -76,6 +122,13 @@ class DirectPred(pl.LightningModule):
         return loss
     
     def validation_step(self, val_batch, batch_idx):
+        &#34;&#34;&#34;
+        Perform a single validation step.
+
+        Args:
+            val_batch (tuple): A tuple containing the input data and labels for the current batch.
+            batch_idx (int): The index of the current batch.
+        &#34;&#34;&#34;
         dat, y = val_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
@@ -85,6 +138,15 @@ class DirectPred(pl.LightningModule):
         self.log_dict({&#34;val_loss&#34;: loss, &#34;val_corr&#34;: r_value})
     
     def evaluate(self, dataset):
+        &#34;&#34;&#34;
+        Evaluate the DirectPred model on a given dataset.
+
+        Args:
+            dataset: The dataset to evaluate the model on.
+
+        Returns:
+            float: The Pearson correlation coefficient (r_value) between the true labels and the predicted labels.
+        &#34;&#34;&#34;
         self.eval()
         layers = dataset.dat.keys()
         x_list = [dataset.dat[x] for x in layers]
@@ -108,12 +170,52 @@ class DirectPred(pl.LightningModule):
 <span>(</span><span>num_layers, input_dims, latent_dim=16, num_class=1, **kwargs)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Hooks to be used in LightningModule.</p></div>
+<div class="desc"><p>DirectPred is a PyTorch Lightning module for multi-omics data fusion and prediction.</p>
+<p>This class implements a deep learning model for fusing and predicting from multiple omics layers/matrices.
+Each omics layer is encoded separately using an MLP encoder. The resulting latent representations
+are then concatenated and passed through a fully connected network (fusion layer) to make predictions.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>num_layers</code></strong> :&ensp;<code>int</code></dt>
+<dd>Number of omics layers/matrices.</dd>
+<dt><strong><code>input_dims</code></strong> :&ensp;<code>list</code> of <code>int</code></dt>
+<dd>A list of input dimensions for each omics layer.</dd>
+<dt><strong><code>latent_dim</code></strong> :&ensp;<code>int</code>, optional</dt>
+<dd>The dimension of the latent space for each encoder. Defaults to 16.</dd>
+<dt><strong><code>num_class</code></strong> :&ensp;<code>int</code>, optional</dt>
+<dd>Number of output classes for the prediction task. Defaults to 1.</dd>
+<dt><strong><code>**kwargs</code></strong></dt>
+<dd>Additional keyword arguments to be passed to the MLP encoders.</dd>
+</dl>
+<h2 id="example">Example</h2>
+<h1 id="instantiate-a-directpred-model-with-2-omics-layers-and-input-dimensions-of-100-and-200">Instantiate a DirectPred model with 2 omics layers and input dimensions of 100 and 200</h1>
+<p>model = DirectPred(num_layers=2, input_dims=[100, 200], latent_dim=16, num_class=1)</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">class DirectPred(pl.LightningModule):
+    &#34;&#34;&#34;
+    DirectPred is a PyTorch Lightning module for multi-omics data fusion and prediction.
+
+    This class implements a deep learning model for fusing and predicting from multiple omics layers/matrices.
+    Each omics layer is encoded separately using an MLP encoder. The resulting latent representations
+    are then concatenated and passed through a fully connected network (fusion layer) to make predictions.
+
+    Args:
+        num_layers (int): Number of omics layers/matrices.
+        input_dims (list of int): A list of input dimensions for each omics layer.
+        latent_dim (int, optional): The dimension of the latent space for each encoder. Defaults to 16.
+        num_class (int, optional): Number of output classes for the prediction task. Defaults to 1.
+        **kwargs: Additional keyword arguments to be passed to the MLP encoders.
+
+    Example:
+
+        # Instantiate a DirectPred model with 2 omics layers and input dimensions of 100 and 200
+        model = DirectPred(num_layers=2, input_dims=[100, 200], latent_dim=16, num_class=1)
+
+    &#34;&#34;&#34;
+
     def __init__(self, num_layers, input_dims, latent_dim = 16, num_class = 1, **kwargs):
         super(DirectPred, self).__init__()
          # create a list of Encoder instances for separately encoding each omics layer
@@ -123,6 +225,15 @@ class DirectPred(pl.LightningModule):
         self.latent_dim = latent_dim
         
     def forward(self, x_list):
+        &#34;&#34;&#34;
+        Forward pass of the DirectPred model.
+
+        Args:
+            x_list (list of torch.Tensor): A list of input matrices (omics layers), one for each layer.
+
+        Returns:
+            tuple: A tuple containing the predicted output (y_pred) and a list of latent embeddings for each omics layer.
+        &#34;&#34;&#34;
         embeddings_list = []
         # Process each input matrix with its corresponding Encoder
         for i, x in enumerate(x_list):
@@ -132,10 +243,27 @@ class DirectPred(pl.LightningModule):
         return y_pred, embeddings_list
     
     def configure_optimizers(self):
+        &#34;&#34;&#34;
+        Configure the optimizer for the DirectPred model.
+
+        Returns:
+            torch.optim.Optimizer: The configured optimizer.
+        &#34;&#34;&#34;
+
         optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         return optimizer
 
     def training_step(self, train_batch, batch_idx):
+        &#34;&#34;&#34;
+        Perform a single training step.
+
+        Args:
+            train_batch (tuple): A tuple containing the input data and labels for the current batch.
+            batch_idx (int): The index of the current batch.
+
+        Returns:
+            torch.Tensor: The loss for the current training step.
+        &#34;&#34;&#34;
         dat, y = train_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
@@ -146,6 +274,13 @@ class DirectPred(pl.LightningModule):
         return loss
     
     def validation_step(self, val_batch, batch_idx):
+        &#34;&#34;&#34;
+        Perform a single validation step.
+
+        Args:
+            val_batch (tuple): A tuple containing the input data and labels for the current batch.
+            batch_idx (int): The index of the current batch.
+        &#34;&#34;&#34;
         dat, y = val_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
@@ -155,6 +290,15 @@ class DirectPred(pl.LightningModule):
         self.log_dict({&#34;val_loss&#34;: loss, &#34;val_corr&#34;: r_value})
     
     def evaluate(self, dataset):
+        &#34;&#34;&#34;
+        Evaluate the DirectPred model on a given dataset.
+
+        Args:
+            dataset: The dataset to evaluate the model on.
+
+        Returns:
+            float: The Pearson correlation coefficient (r_value) between the true labels and the predicted labels.
+        &#34;&#34;&#34;
         self.eval()
         layers = dataset.dat.keys()
         x_list = [dataset.dat[x] for x in layers]
@@ -180,169 +324,24 @@ class DirectPred(pl.LightningModule):
 <span>def <span class="ident">configure_optimizers</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Choose what optimizers and learning-rate schedulers to use in your optimization.
-Normally you'd need one. But in the case of GANs or similar you might have multiple.</p>
-<h2 id="return">Return</h2>
-<p>Any of these 6 options.</p>
-<ul>
-<li><strong>Single optimizer</strong>.</li>
-<li><strong>List or Tuple</strong> of optimizers.</li>
-<li><strong>Two lists</strong> - The first list has multiple optimizers, and the second has multiple LR schedulers
-(or multiple <code>lr_scheduler_config</code>).</li>
-<li><strong>Dictionary</strong>, with an <code>"optimizer"</code> key, and (optionally) a <code>"lr_scheduler"</code>
-key whose value is a single LR scheduler or <code>lr_scheduler_config</code>.</li>
-<li><strong>Tuple of dictionaries</strong> as described above, with an optional <code>"frequency"</code> key.</li>
-<li><strong>None</strong> - Fit will run without any optimizer.</li>
-</ul>
-<p>The <code>lr_scheduler_config</code> is a dictionary which contains the scheduler and its associated configuration.
-The default configuration is shown below.</p>
-<p>.. code-block:: python</p>
-<pre><code>lr_scheduler_config = {
-    # REQUIRED: The scheduler instance
-    "scheduler": lr_scheduler,
-    # The unit of the scheduler's step size, could also be 'step'.
-    # 'epoch' updates the scheduler on epoch end whereas 'step'
-    # updates it after a optimizer update.
-    "interval": "epoch",
-    # How many epochs/steps should pass between calls to
-    # &lt;code&gt;scheduler.step()&lt;/code&gt;. 1 corresponds to updating the learning
-    # rate after every epoch/step.
-    "frequency": 1,
-    # Metric to to monitor for schedulers like &lt;code&gt;ReduceLROnPlateau&lt;/code&gt;
-    "monitor": "val_loss",
-    # If set to &lt;code&gt;True&lt;/code&gt;, will enforce that the value specified 'monitor'
-    # is available when the scheduler is updated, thus stopping
-    # training if not found. If set to &lt;code&gt;False&lt;/code&gt;, it will only produce a warning
-    "strict": True,
-    # If using the &lt;code&gt;LearningRateMonitor&lt;/code&gt; callback to monitor the
-    # learning rate progress, this keyword can be used to specify
-    # a custom logged name
-    "name": None,
-}
-</code></pre>
-<p>When there are schedulers in which the <code>.step()</code> method is conditioned on a value, such as the
-:class:<code>torch.optim.lr_scheduler.ReduceLROnPlateau</code> scheduler, Lightning requires that the
-<code>lr_scheduler_config</code> contains the keyword <code>"monitor"</code> set to the metric name that the scheduler
-should be conditioned on.</p>
-<div class="admonition testcode">
-<p class="admonition-title">Testcode</p>
-<h1 id="the-reducelronplateau-scheduler-requires-a-monitor">The ReduceLROnPlateau scheduler requires a monitor</h1>
-<p>def configure_optimizers(self):
-optimizer = Adam(&hellip;)
-return {
-"optimizer": optimizer,
-"lr_scheduler": {
-"scheduler": ReduceLROnPlateau(optimizer, &hellip;),
-"monitor": "metric_to_track",
-"frequency": "indicates how often the metric is updated"
-# If "monitor" references validation metrics, then "frequency" should be set to a
-# multiple of "trainer.check_val_every_n_epoch".
-},
-}</p>
-<h1 id="in-the-case-of-two-optimizers-only-one-using-the-reducelronplateau-scheduler">In the case of two optimizers, only one using the ReduceLROnPlateau scheduler</h1>
-<p>def configure_optimizers(self):
-optimizer1 = Adam(&hellip;)
-optimizer2 = SGD(&hellip;)
-scheduler1 = ReduceLROnPlateau(optimizer1, &hellip;)
-scheduler2 = LambdaLR(optimizer2, &hellip;)
-return (
-{
-"optimizer": optimizer1,
-"lr_scheduler": {
-"scheduler": scheduler1,
-"monitor": "metric_to_track",
-},
-},
-{"optimizer": optimizer2, "lr_scheduler": scheduler2},
-)</p>
-</div>
-<p>Metrics can be made available to monitor by simply logging it using
-<code>self.log('metric_to_track', metric_val)</code> in your :class:<code>~pytorch_lightning.core.module.LightningModule</code>.</p>
-<h2 id="note">Note</h2>
-<p>The <code>frequency</code> value specified in a dict along with the <code>optimizer</code> key is an int corresponding
-to the number of sequential batches optimized with the specific optimizer.
-It should be given to none or to all of the optimizers.
-There is a difference between passing multiple optimizers in a list,
-and passing multiple optimizers in dictionaries with a frequency of 1:</p>
-<pre><code>- In the former case, all optimizers will operate on the given batch in each optimization step.
-- In the latter, only one optimizer will operate on the given batch at every step.
-</code></pre>
-<p>This is different from the <code>frequency</code> value specified in the <code>lr_scheduler_config</code> mentioned above.</p>
-<p>.. code-block:: python</p>
-<pre><code>def configure_optimizers(self):
-    optimizer_one = torch.optim.SGD(self.model.parameters(), lr=0.01)
-    optimizer_two = torch.optim.SGD(self.model.parameters(), lr=0.01)
-    return [
-        {"optimizer": optimizer_one, "frequency": 5},
-        {"optimizer": optimizer_two, "frequency": 10},
-    ]
-</code></pre>
-<p>In this example, the first optimizer will be used for the first 5 steps,
-the second optimizer for the next 10 steps and that cycle will continue.
-If an LR scheduler is specified for an optimizer using the <code>lr_scheduler</code> key in the above dict,
-the scheduler will only be updated when its optimizer is being used.</p>
-<p>Examples::</p>
-<pre><code># most cases. no learning rate scheduler
-def configure_optimizers(self):
-    return Adam(self.parameters(), lr=1e-3)
-
-# multiple optimizer case (e.g.: GAN)
-def configure_optimizers(self):
-    gen_opt = Adam(self.model_gen.parameters(), lr=0.01)
-    dis_opt = Adam(self.model_dis.parameters(), lr=0.02)
-    return gen_opt, dis_opt
-
-# example with learning rate schedulers
-def configure_optimizers(self):
-    gen_opt = Adam(self.model_gen.parameters(), lr=0.01)
-    dis_opt = Adam(self.model_dis.parameters(), lr=0.02)
-    dis_sch = CosineAnnealing(dis_opt, T_max=10)
-    return [gen_opt, dis_opt], [dis_sch]
-
-# example with step-based learning rate schedulers
-# each optimizer has its own scheduler
-def configure_optimizers(self):
-    gen_opt = Adam(self.model_gen.parameters(), lr=0.01)
-    dis_opt = Adam(self.model_dis.parameters(), lr=0.02)
-    gen_sch = {
-        'scheduler': ExponentialLR(gen_opt, 0.99),
-        'interval': 'step'  # called after each training step
-    }
-    dis_sch = CosineAnnealing(dis_opt, T_max=10) # called every epoch
-    return [gen_opt, dis_opt], [gen_sch, dis_sch]
-
-# example with optimizer frequencies
-# see training procedure in &lt;code&gt;Improved Training of Wasserstein GANs&lt;/code&gt;, Algorithm 1
-# &lt;https://arxiv.org/abs/1704.00028&gt;
-def configure_optimizers(self):
-    gen_opt = Adam(self.model_gen.parameters(), lr=0.01)
-    dis_opt = Adam(self.model_dis.parameters(), lr=0.02)
-    n_critic = 5
-    return (
-        {'optimizer': dis_opt, 'frequency': n_critic},
-        {'optimizer': gen_opt, 'frequency': 1}
-    )
-</code></pre>
-<h2 id="note_1">Note</h2>
-<p>Some things to know:</p>
-<ul>
-<li>Lightning calls <code>.backward()</code> and <code>.step()</code> on each optimizer as needed.</li>
-<li>If learning rate scheduler is specified in <code>configure_optimizers()</code> with key
-<code>"interval"</code> (default "epoch") in the scheduler configuration, Lightning will call
-the scheduler's <code>.step()</code> method automatically in case of automatic optimization.</li>
-<li>If you use 16-bit precision (<code>precision=16</code>), Lightning will automatically handle the optimizers.</li>
-<li>If you use multiple optimizers, :meth:<code>training_step</code> will have an additional <code>optimizer_idx</code> parameter.</li>
-<li>If you use :class:<code>torch.optim.LBFGS</code>, Lightning handles the closure function automatically for you.</li>
-<li>If you use multiple optimizers, gradients will be calculated only for the parameters of current optimizer
-at each training step.</li>
-<li>If you need to control how often those optimizers step or override the default <code>.step()</code> schedule,
-override the :meth:<code>optimizer_step</code> hook.</li>
-</ul></div>
+<div class="desc"><p>Configure the optimizer for the DirectPred model.</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>torch.optim.Optimizer</code></dt>
+<dd>The configured optimizer.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def configure_optimizers(self):
+    &#34;&#34;&#34;
+    Configure the optimizer for the DirectPred model.
+
+    Returns:
+        torch.optim.Optimizer: The configured optimizer.
+    &#34;&#34;&#34;
+
     optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
     return optimizer</code></pre>
 </details>
@@ -351,12 +350,31 @@ override the :meth:<code>optimizer_step</code> hook.</li>
 <span>def <span class="ident">evaluate</span></span>(<span>self, dataset)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Evaluate the DirectPred model on a given dataset.</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>dataset</code></strong></dt>
+<dd>The dataset to evaluate the model on.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>float</code></dt>
+<dd>The Pearson correlation coefficient (r_value) between the true labels and the predicted labels.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def evaluate(self, dataset):
+    &#34;&#34;&#34;
+    Evaluate the DirectPred model on a given dataset.
+
+    Args:
+        dataset: The dataset to evaluate the model on.
+
+    Returns:
+        float: The Pearson correlation coefficient (r_value) between the true labels and the predicted labels.
+    &#34;&#34;&#34;
     self.eval()
     layers = dataset.dat.keys()
     x_list = [dataset.dat[x] for x in layers]
@@ -370,21 +388,31 @@ override the :meth:<code>optimizer_step</code> hook.</li>
 <span>def <span class="ident">forward</span></span>(<span>self, x_list) -> Callable[..., Any]</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Same as :meth:<code>torch.nn.Module.forward</code>.</p>
+<div class="desc"><p>Forward pass of the DirectPred model.</p>
 <h2 id="args">Args</h2>
 <dl>
-<dt><strong><code>*args</code></strong></dt>
-<dd>Whatever you decide to pass into the forward method.</dd>
-<dt><strong><code>**kwargs</code></strong></dt>
-<dd>Keyword arguments are also possible.</dd>
+<dt><strong><code>x_list</code></strong> :&ensp;<code>list</code> of <code>torch.Tensor</code></dt>
+<dd>A list of input matrices (omics layers), one for each layer.</dd>
 </dl>
-<h2 id="return">Return</h2>
-<p>Your model's output</p></div>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>tuple</code></dt>
+<dd>A tuple containing the predicted output (y_pred) and a list of latent embeddings for each omics layer.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def forward(self, x_list):
+    &#34;&#34;&#34;
+    Forward pass of the DirectPred model.
+
+    Args:
+        x_list (list of torch.Tensor): A list of input matrices (omics layers), one for each layer.
+
+    Returns:
+        tuple: A tuple containing the predicted output (y_pred) and a list of latent embeddings for each omics layer.
+    &#34;&#34;&#34;
     embeddings_list = []
     # Process each input matrix with its corresponding Encoder
     for i, x in enumerate(x_list):
@@ -398,65 +426,34 @@ override the :meth:<code>optimizer_step</code> hook.</li>
 <span>def <span class="ident">training_step</span></span>(<span>self, train_batch, batch_idx)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Here you compute and return the training loss and some additional metrics for e.g.
-the progress bar or logger.</p>
+<div class="desc"><p>Perform a single training step.</p>
 <h2 id="args">Args</h2>
-<p>batch (:class:<code>~torch.Tensor</code> | (:class:<code>~torch.Tensor</code>, &hellip;) | [:class:<code>~torch.Tensor</code>, &hellip;]):
-The output of your :class:<code>~torch.utils.data.DataLoader</code>. A tensor, tuple or list.
-batch_idx (<code>int</code>): Integer displaying index of this batch
-optimizer_idx (<code>int</code>): When using multiple optimizers, this argument will also be present.
-hiddens (<code>Any</code>): Passed in if
-:paramref:<code>~pytorch_lightning.core.module.LightningModule.truncated_bptt_steps</code> &gt; 0.</p>
-<h2 id="return">Return</h2>
-<p>Any of.</p>
-<ul>
-<li>:class:<code>~torch.Tensor</code> - The loss tensor</li>
-<li><code>dict</code> - A dictionary. Can include any keys, but must include the key <code>'loss'</code></li>
-<li><code>None</code> - Training will skip to the next batch. This is only for automatic optimization.
-This is not supported for multi-GPU, TPU, IPU, or DeepSpeed.</li>
-</ul>
-<p>In this step you'd normally do the forward pass and calculate the loss for a batch.
-You can also do fancier things like multiple forward passes or something model specific.</p>
-<p>Example::</p>
-<pre><code>def training_step(self, batch, batch_idx):
-    x, y, z = batch
-    out = self.encoder(x)
-    loss = self.loss(out, x)
-    return loss
-</code></pre>
-<p>If you define multiple optimizers, this step will be called with an additional
-<code>optimizer_idx</code> parameter.</p>
-<p>.. code-block:: python</p>
-<pre><code># Multiple optimizers (e.g.: GANs)
-def training_step(self, batch, batch_idx, optimizer_idx):
-    if optimizer_idx == 0:
-        # do training_step with encoder
-        ...
-    if optimizer_idx == 1:
-        # do training_step with decoder
-        ...
-</code></pre>
-<p>If you add truncated back propagation through time you will also get an additional
-argument with the hidden states of the previous step.</p>
-<p>.. code-block:: python</p>
-<pre><code># Truncated back-propagation through time
-def training_step(self, batch, batch_idx, hiddens):
-    # hiddens are the hidden states from the previous truncated backprop step
-    out, hiddens = self.lstm(data, hiddens)
-    loss = ...
-    return {"loss": loss, "hiddens": hiddens}
-</code></pre>
-<h2 id="note">Note</h2>
-<p>The loss value shown in the progress bar is smoothed (averaged) over the last values,
-so it differs from the actual loss returned in train/validation step.</p>
-<h2 id="note_1">Note</h2>
-<p>When <code>accumulate_grad_batches</code> &gt; 1, the loss returned here will be automatically
-normalized by <code>accumulate_grad_batches</code> internally.</p></div>
+<dl>
+<dt><strong><code>train_batch</code></strong> :&ensp;<code>tuple</code></dt>
+<dd>A tuple containing the input data and labels for the current batch.</dd>
+<dt><strong><code>batch_idx</code></strong> :&ensp;<code>int</code></dt>
+<dd>The index of the current batch.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>torch.Tensor</code></dt>
+<dd>The loss for the current training step.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def training_step(self, train_batch, batch_idx):
+    &#34;&#34;&#34;
+    Perform a single training step.
+
+    Args:
+        train_batch (tuple): A tuple containing the input data and labels for the current batch.
+        batch_idx (int): The index of the current batch.
+
+    Returns:
+        torch.Tensor: The loss for the current training step.
+    &#34;&#34;&#34;
     dat, y = train_batch
     layers = dat.keys()
     x_list = [dat[x] for x in layers]
@@ -471,92 +468,26 @@ normalized by <code>accumulate_grad_batches</code> internally.</p></div>
 <span>def <span class="ident">validation_step</span></span>(<span>self, val_batch, batch_idx)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Operates on a single batch of data from the validation set.
-In this step you'd might generate examples or calculate anything of interest like accuracy.</p>
-<p>.. code-block:: python</p>
-<pre><code># the pseudocode for these calls
-val_outs = []
-for val_batch in val_data:
-    out = validation_step(val_batch)
-    val_outs.append(out)
-validation_epoch_end(val_outs)
-</code></pre>
+<div class="desc"><p>Perform a single validation step.</p>
 <h2 id="args">Args</h2>
 <dl>
-<dt><strong><code>batch</code></strong></dt>
-<dd>The output of your :class:<code>~torch.utils.data.DataLoader</code>.</dd>
-<dt><strong><code>batch_idx</code></strong></dt>
-<dd>The index of this batch.</dd>
-<dt><strong><code>dataloader_idx</code></strong></dt>
-<dd>The index of the dataloader that produced this batch.
-(only if multiple val dataloaders used)</dd>
-</dl>
-<h2 id="return">Return</h2>
-<ul>
-<li>Any object or value</li>
-<li><code>None</code> - Validation will skip to the next batch</li>
-</ul>
-<p>.. code-block:: python</p>
-<pre><code># pseudocode of order
-val_outs = []
-for val_batch in val_data:
-    out = validation_step(val_batch)
-    if defined("validation_step_end"):
-        out = validation_step_end(out)
-    val_outs.append(out)
-val_outs = validation_epoch_end(val_outs)
-</code></pre>
-<p>.. code-block:: python</p>
-<pre><code># if you have one val dataloader:
-def validation_step(self, batch, batch_idx):
-    ...
-
-
-# if you have multiple val dataloaders:
-def validation_step(self, batch, batch_idx, dataloader_idx=0):
-    ...
-</code></pre>
-<p>Examples::</p>
-<pre><code># CASE 1: A single validation dataset
-def validation_step(self, batch, batch_idx):
-    x, y = batch
-
-    # implement your own
-    out = self(x)
-    loss = self.loss(out, y)
-
-    # log 6 example images
-    # or generated text... or whatever
-    sample_imgs = x[:6]
-    grid = torchvision.utils.make_grid(sample_imgs)
-    self.logger.experiment.add_image('example_images', grid, 0)
-
-    # calculate acc
-    labels_hat = torch.argmax(out, dim=1)
-    val_acc = torch.sum(y == labels_hat).item() / (len(y) * 1.0)
-
-    # log the outputs!
-    self.log_dict({'val_loss': loss, 'val_acc': val_acc})
-</code></pre>
-<p>If you pass in multiple val dataloaders, :meth:<code>validation_step</code> will have an additional argument. We recommend
-setting the default value of 0 so that you can quickly switch between single and multiple dataloaders.</p>
-<p>.. code-block:: python</p>
-<pre><code># CASE 2: multiple validation dataloaders
-def validation_step(self, batch, batch_idx, dataloader_idx=0):
-    # dataloader_idx tells you which dataset this is.
-    ...
-</code></pre>
-<h2 id="note">Note</h2>
-<p>If you don't need to validate you don't need to implement this method.</p>
-<h2 id="note_1">Note</h2>
-<p>When the :meth:<code>validation_step</code> is called, the model has been put in eval mode
-and PyTorch gradients have been disabled. At the end of validation,
-the model goes back to training mode and gradients are enabled.</p></div>
+<dt><strong><code>val_batch</code></strong> :&ensp;<code>tuple</code></dt>
+<dd>A tuple containing the input data and labels for the current batch.</dd>
+<dt><strong><code>batch_idx</code></strong> :&ensp;<code>int</code></dt>
+<dd>The index of the current batch.</dd>
+</dl></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def validation_step(self, val_batch, batch_idx):
+    &#34;&#34;&#34;
+    Perform a single validation step.
+
+    Args:
+        val_batch (tuple): A tuple containing the input data and labels for the current batch.
+        batch_idx (int): The index of the current batch.
+    &#34;&#34;&#34;
     dat, y = val_batch
     layers = dat.keys()
     x_list = [dat[x] for x in layers]
