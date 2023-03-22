@@ -47,7 +47,7 @@ class DirectPred(pl.LightningModule):
         self.latent_dim = latent_dim
         
     def forward(self, x_list):
-         """
+        """
         Forward pass of the DirectPred model.
 
         Args:
