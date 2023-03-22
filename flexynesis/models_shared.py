@@ -83,3 +83,39 @@ class MLP(nn.Module):
         x = self.dropout(x)
         x = self.layer_out(x)
         return x
+
+# Simple Feed-Forward Network
+class EmbeddingNetwork(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(EmbeddingNetwork, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        return x
+    
+# Simple feed-forward multi-class classifier
+class Classifier(nn.Module):
+    def __init__(self, input_size, hidden_dims, num_classes):
+        super(Classifier, self).__init__()
+        self.layers = nn.ModuleList()
+        
+        # Input layer
+        self.layers.append(nn.Linear(input_size, hidden_dims[0]))
+        
+        # Hidden layers
+        for i in range(len(hidden_dims) - 1):
+            self.layers.append(nn.Linear(hidden_dims[i], hidden_dims[i + 1]))
+        
+        # Output layer
+        self.layers.append(nn.Linear(hidden_dims[-1], num_classes))
+
+    def forward(self, x):
+        for layer in self.layers[:-1]:
+            x = torch.relu(layer(x))
+        x = self.layers[-1](x)
+        return x
