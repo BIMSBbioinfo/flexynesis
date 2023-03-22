@@ -14,7 +14,21 @@ from .models_shared import *
 
 
 class MultiEmbeddingNetwork(nn.Module):
+    """
+    A neural network module that computes multiple embeddings and fuses them into a single representation.
+
+    Attributes:
+        embedding_networks (nn.ModuleList): A list of EmbeddingNetwork instances for each input feature.
+    """
     def __init__(self, input_sizes, hidden_sizes, output_size):
+        """
+        Initialize the MultiEmbeddingNetwork with the given input sizes, hidden sizes, and output size.
+
+        Args:
+            input_sizes (list of int): A list of input sizes for each EmbeddingNetwork instance.
+            hidden_sizes (list of int): A list of hidden sizes for each EmbeddingNetwork instance.
+            output_size (int): The size of the fused embedding output.
+        """
         super(MultiEmbeddingNetwork, self).__init__()
         self.embedding_networks = nn.ModuleList([
             EmbeddingNetwork(input_size, hidden_size, output_size)
@@ -22,6 +36,16 @@ class MultiEmbeddingNetwork(nn.Module):
         ])
 
     def forward(self, x):
+        """
+        Compute the forward pass of the MultiEmbeddingNetwork and return the fused embedding.
+
+        Args:
+            x (dict): A dictionary containing the input tensors for each EmbeddingNetwork.
+                      Keys should correspond to the feature names and values to the input tensors.
+        
+        Returns:
+            torch.Tensor: The fused embedding tensor resulting from the concatenation of individual embeddings.
+        """
         embeddings = [
             embedding_network(x[key])
             for key, embedding_network in zip(x.keys(), self.embedding_networks)
