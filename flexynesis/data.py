@@ -33,13 +33,14 @@ class TripletMultiOmicDataset(Dataset):
             # choose another sample with a different label 
             negative_label = np.random.choice(list(self.labels_set - set([label])))
             negative_index = np.random.choice(self.label_to_indices[negative_label])
-            pos = self.train_data[positive_index] # positive example
-            neg = self.train_data[negative_index] # negative example
+            pos = self.train_data[positive_index][0] # positive example
+            neg = self.train_data[negative_index][0] # negative example
         else:
-            anchor = self.test_data[self.test_triplets[index][0]]
-            pos = self.test_data[self.test_triplets[index][1]]
-            neg = self.test_data[self.test_triplets[index][2]]
-        return (anchor, pos, neg), []
+            anchor = self.test_data[self.test_triplets[index][0]][0]
+            pos = self.test_data[self.test_triplets[index][1]][0]
+            neg = self.test_data[self.test_triplets[index][2]][0]
+            label = self.test_data[index][1].item()
+        return anchor, pos, neg, label
 
     def __len__(self):
         return len(self.mydataset)
