@@ -54,12 +54,43 @@ class MultiEmbeddingNetwork(nn.Module):
         return fused_embedding
 
 class MultiTripletNetwork(pl.LightningModule):
+    """
+    A PyTorch Lightning module implementing a multi-triplet network with a classifier for multi-modal data.
+    
+    The network consists of a multi-embedding network that computes embeddings for different input modalities
+    and a classifier that takes the concatenated embeddings as input and predicts class labels.
+
+    Attributes:
+        multi_embedding_network (MultiEmbeddingNetwork): A multi-embedding network for multiple input modalities.
+        classifier (Classifier): A classifier network for predicting class labels from fused embeddings.
+    """
     def __init__(self, num_layers, input_sizes, hidden_sizes, output_size, num_classes):
+        """
+        Initialize the MultiTripletNetwork with the given parameters.
+
+        Args:
+            num_layers (int): The number of layers in the multi-embedding network.
+            input_sizes (list of int): A list of input sizes for each embedding network in the multi-embedding network.
+            hidden_sizes (list of int): A list of hidden sizes for each embedding network in the multi-embedding network.
+            output_size (int): The size of the fused embedding output from the multi-embedding network.
+            num_classes (int): The number of output classes for the classifier.
+        """
         super(MultiTripletNetwork, self).__init__()
         self.multi_embedding_network = MultiEmbeddingNetwork(input_sizes, hidden_sizes, output_size)
         self.classifier = Classifier(output_size * num_layers, [64], num_classes)
 
     def forward(self, anchor, positive, negative):
+        """
+        Compute the forward pass of the MultiTripletNetwork and return the embeddings and predictions.
+
+        Args:
+            anchor (dict): A dictionary containing the anchor input tensors for each EmbeddingNetwork.
+            positive (dict): A dictionary containing the positive input tensors for each EmbeddingNetwork.
+            negative (dict): A dictionary containing the negative input tensors for each EmbeddingNetwork.
+
+        Returns:
+            tuple: A tuple containing the anchor, positive, and negative embeddings and the predicted class labels.
+        """
         anchor_embedding = self.multi_embedding_network(anchor)
         positive_embedding = self.multi_embedding_network(positive)
         negative_embedding = self.multi_embedding_network(negative)
@@ -67,16 +98,44 @@ class MultiTripletNetwork(pl.LightningModule):
         return anchor_embedding, positive_embedding, negative_embedding, y_pred
     
     def configure_optimizers(self):
+        """
+        Configure the optimizer for the MultiTripletNetwork.
+
+        Returns:
+            torch.optim.Optimizer: The configured optimizer.
+        """
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
     
     def triplet_loss(self, anchor, positive, negative, margin=1.0):
+        """
+        Compute the triplet loss for the given anchor, positive, and negative embeddings.
+
+        Args:
+            anchor (torch.Tensor): The anchor embedding tensor.
+            positive (torch.Tensor): The positive embedding tensor.
+            negative (torch.Tensor): The negative embedding tensor.
+            margin (float, optional): The margin for the triplet loss. Default is 1.0.
+
+        Returns:
+            torch.Tensor: The computed triplet loss.
+        """
         distance_positive = (anchor - positive).pow(2).sum(1)
         distance_negative = (anchor - negative).pow(2).sum(1)
         losses = torch.relu(distance_positive - distance_negative + margin)
         return losses.mean()    
 
     def training_step(self, train_batch, batch_idx):
+        """
+        Performs one training step on a batch of data.
+        
+        Args:
+            train_batch (tuple): A tuple containing the embeddings for the anchor, positive, negative samples and the label of the anchor sample.
+            batch_idx (int): The index of the current batch.
+            
+        Returns:
+            loss (torch.Tensor): The computed loss for the current training step.
+        """
         anchor, positive, negative, y = train_batch[0], train_batch[1], train_batch[2], train_batch[3]
         anchor_embedding, positive_embedding, negative_embedding, y_pred = self.forward(anchor, positive, negative)
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
@@ -87,6 +146,16 @@ class MultiTripletNetwork(pl.LightningModule):
         return loss
     
     def validation_step(self, val_batch, batch_idx):
+        """
+        Performs one validation step on a batch of data.
+        
+        Args:
+            val_batch (tuple): A tuple containing the embeddings for the anchor, positive, negative samples and the label of the anchor sample.
+            batch_idx (int): The index of the current batch.
+            
+        Returns:
+            loss (torch.Tensor): The computed loss for the current validation step.
+        """
         anchor, positive, negative, y = val_batch[0], val_batch[1], val_batch[2], val_batch[3]
         anchor_embedding, positive_embedding, negative_embedding, y_pred = self.forward(anchor, positive, negative)
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
@@ -98,6 +167,16 @@ class MultiTripletNetwork(pl.LightningModule):
     
     # dataset: MultiOmicDataset
     def transform(self, dataset):
+        """
+        Transforms the input dataset by generating embeddings and predictions.
+        
+        Args:
+            dataset (MultiOmicDataset): An instance of the MultiOmicDataset class.
+            
+        Returns:
+            z (pd.DataFrame): A dataframe containing the computed embeddings.
+            y_pred (np.ndarray): A numpy array containing the predicted labels.
+        """
         self.eval()
         z = pd.DataFrame(self.multi_embedding_network(dataset.dat).detach().numpy())
         z.columns = [''.join(['LF', str(x+1)]) for x in z.columns]
