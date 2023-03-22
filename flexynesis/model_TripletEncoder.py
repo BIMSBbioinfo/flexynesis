@@ -78,5 +78,10 @@ class MultiTripletNetwork(pl.LightningModule):
         z = pd.DataFrame(self.multi_embedding_network(dataset.dat).detach().numpy())
         z.columns = [''.join(['LF', str(x+1)]) for x in z.columns]
         z.index = dataset.samples
-        return z
+        
+        # also return predictions 
+        y_pred = self.classifier(self.multi_embedding_network(dataset.dat))
+        # convert to labels 
+        y_pred = np.argmax(y_pred.detach().numpy(), axis=1)
+        return z, y_pred
 
