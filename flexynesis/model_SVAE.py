@@ -7,9 +7,6 @@ import pandas as pd
 import numpy as np
 
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import TQDMProgressBar
-from pytorch_lightning.strategies import DDPStrategy
-
 from scipy import stats
 
 from .models_shared import *

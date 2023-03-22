@@ -24,7 +24,7 @@ if __name__ == '__main__':
     # output options
     inputDir = '/data/local/buyar/arcas/multiomics_integration/benchmarks/pharmacogx/output/gdsc2_vs_ccle_gex_cnv/100'
     outDir = '.'
-    n_epoch = 20
+    n_epoch = 200
     hidden_dims = [256]
     latent_dim = 20
     batch_size = 128
