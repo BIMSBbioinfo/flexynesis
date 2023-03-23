@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img alt="logo" src="img/logo.png" width="35%" height="35%">
+  <img alt="logo" src="img/logo.png" width="65%" height="65%">
 </p>
 
 # flexynesis
