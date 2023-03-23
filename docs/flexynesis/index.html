@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.8.1" />
 <title>flexynesis API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Flexynesis
+Flexynesis is a versatile Python package for various machine learning tasks, with a focus on deep learning-based model architectures, …" />
 <link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
 <link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
@@ -20,11 +21,106 @@
 <h1 class="title">Package <code>flexynesis</code></h1>
 </header>
 <section id="section-intro">
+<h1 id="flexynesis">Flexynesis</h1>
+<p>Flexynesis is a versatile Python package for various machine learning tasks, with a focus on deep learning-based model architectures, feature selection, and utility functions. Flexynesis provides a collection of pre-built models, data management tools, and utility functions that enable users to create, train, and evaluate machine learning models with ease.</p>
+<h1 id="package-contents">Package Contents</h1>
+<p>models_shared: Common components for model architecture and training</p>
+<ul>
+<li>data: Pytorch Dataset classes and functions to import, process multiomics data. </li>
+<li>main: High-level functions for training, evaluating, and using models</li>
+<li>model_DirectPred: Direct prediction model architecture</li>
+<li>model_SVAE: Supervised Variational Autoencoder model architecture</li>
+<li>model_TripletEncoder: Triplet Encoder model architecture</li>
+<li>feature_selection: Feature selection and dimensionality reduction methods</li>
+<li>utils: General utility functions for data manipulation and visualization</li>
+</ul>
+<h1 id="main-features">Main Features</h1>
+<ul>
+<li>Various multi-modal data fusion methods using different kinds of deep learning architectures.</li>
+<li>Data management tools for loading, preprocessing, and augmenting data.</li>
+<li>Feature selection methods for effective dimensionality reduction.</li>
+<li>Utility functions to facilitate data manipulation and visualization.</li>
+<li>High-level functions for training, evaluating, and using models.</li>
+</ul>
+<h1 id="installation">Installation</h1>
+<h1 id="installation_1">Installation</h1>
+<p>To install the project using setuptools, you can follow these steps:</p>
+<ol>
+<li>Clone the project from the Git repository:</li>
+</ol>
+<pre><code>git clone git@github.com:BIMSBbioinfo/flexynesis.git
+</code></pre>
+<ol>
+<li>Navigate to the project directory:</li>
+</ol>
+<pre><code>cd flexynesis
+</code></pre>
+<ol>
+<li>Install the project using setuptools:</li>
+</ol>
+<pre><code>python setup.py install
+</code></pre>
+<h1 id="license">License</h1>
+<p>This package is currently private and is not meant to be used outside of Arcas.ai</p>
+<h1 id="authors">Authors</h1>
+<p>Bora Uyar, bora.uyar@mdc-berlin.de</p>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">from .models_shared import *
+<pre><code class="python">&#34;&#34;&#34;
+# Flexynesis
+Flexynesis is a versatile Python package for various machine learning tasks, with a focus on deep learning-based model architectures, feature selection, and utility functions. Flexynesis provides a collection of pre-built models, data management tools, and utility functions that enable users to create, train, and evaluate machine learning models with ease.
+
+# Package Contents
+models_shared: Common components for model architecture and training
+
+- data: Pytorch Dataset classes and functions to import, process multiomics data. 
+- main: High-level functions for training, evaluating, and using models
+- model_DirectPred: Direct prediction model architecture
+- model_SVAE: Supervised Variational Autoencoder model architecture
+- model_TripletEncoder: Triplet Encoder model architecture
+- feature_selection: Feature selection and dimensionality reduction methods
+- utils: General utility functions for data manipulation and visualization
+
+# Main Features
+- Various multi-modal data fusion methods using different kinds of deep learning architectures.
+- Data management tools for loading, preprocessing, and augmenting data.
+- Feature selection methods for effective dimensionality reduction.
+- Utility functions to facilitate data manipulation and visualization.
+- High-level functions for training, evaluating, and using models.
+
+# Installation
+
+# Installation
+
+To install the project using setuptools, you can follow these steps:
+
+1. Clone the project from the Git repository:
+
+```
+git clone git@github.com:BIMSBbioinfo/flexynesis.git
+```
+
+2. Navigate to the project directory:
+
+```
+cd flexynesis
+```
+
+3. Install the project using setuptools:
+
+```
+python setup.py install
+```
+
+# License
+This package is currently private and is not meant to be used outside of Arcas.ai
+
+# Authors
+Bora Uyar, bora.uyar@mdc-berlin.de
+&#34;&#34;&#34;
+from .models_shared import *
 from .data import *
 from .main import *
 from .model_DirectPred import *
@@ -81,7 +177,15 @@ from .utils import *</code></pre>
 <nav id="sidebar">
 <h1>Index</h1>
 <div class="toc">
-<ul></ul>
+<ul>
+<li><a href="#flexynesis">Flexynesis</a></li>
+<li><a href="#package-contents">Package Contents</a></li>
+<li><a href="#main-features">Main Features</a></li>
+<li><a href="#installation">Installation</a></li>
+<li><a href="#installation_1">Installation</a></li>
+<li><a href="#license">License</a></li>
+<li><a href="#authors">Authors</a></li>
+</ul>
 </div>
 <ul id="index">
 <li><h3><a href="#header-submodules">Sub-modules</a></h3>
