@@ -53,7 +53,7 @@ If you would like to contribute to the project, please open an issue or a pull r
 # Documentation
 
 ```
-pdoc --html --output-dir docs flexynesis 
+pdoc --html --output-dir docs --force flexynesis 
 ```
 
 
