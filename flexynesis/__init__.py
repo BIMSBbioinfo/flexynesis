@@ -20,29 +20,23 @@ models_shared: Common components for model architecture and training
 - Utility functions to facilitate data manipulation and visualization.
 - High-level functions for training, evaluating, and using models.
 
-# Installation
 
 # Installation
 
 To install the project using setuptools, you can follow these steps:
 
-1. Clone the project from the Git repository:
-
-```
-git clone git@github.com:BIMSBbioinfo/flexynesis.git
-```
-
-2. Navigate to the project directory:
-
-```
-cd flexynesis
-```
-
-3. Install the project using setuptools:
-
-```
-python setup.py install
-```
+    1. Clone the project from the Git repository:
+    ```
+    git clone git@github.com:BIMSBbioinfo/flexynesis.git
+    ```
+    2. Navigate to the project directory:
+    ```
+    cd flexynesis
+    ```
+    3. Install the project using setuptools:
+    ```
+    python setup.py install
+    ```
 
 # License
 This package is currently private and is not meant to be used outside of Arcas.ai
