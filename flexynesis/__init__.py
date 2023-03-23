@@ -33,7 +33,12 @@ To install the project using setuptools, you can follow these steps:
     ```
     cd flexynesis
     ```
-    3. Install the project using setuptools:
+    3. Create a clone of the development environment, use the `spec-file.txt`:
+    ```
+    conda create --name flexynesis --file spec-file.txt
+    conda activate flexynesis
+    ```
+    4. Install the project using setuptools:
     ```
     python setup.py install
     ```
