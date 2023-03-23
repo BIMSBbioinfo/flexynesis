@@ -116,23 +116,23 @@ class MLP(nn.Module):
     A Multi-Layer Perceptron (MLP) model for regression or classification tasks.
     
     The MLP class is a simple feed-forward neural network that can be used for regression
-    when `num_class` is set to 1 or for classification when `num_class` is greater than 1.
+    when `output_dim` is set to 1 or for classification when `output_dim` is greater than 1.
     """
-    def __init__(self, num_feature, num_class, h = 32):
+    def __init__(self, input_dim, hidden_dim, output_dim):
         """
-        Initializes the MLP class with the given number of input features, number of classes, and hidden layer size.
+        Initializes the MLP class with the given input dimension, output dimension, and hidden layer size.
         
         Args:
-            num_feature (int): The number of input features.
-            num_class (int): The number of output classes. Set to 1 for regression tasks, and > 1 for classification tasks.
-            h (int, optional): The size of the hidden layer. Default is 32.
+            input_dim (int): The input dimension.
+            hidden_dim (int, optional): The size of the hidden layer. Default is 32.
+            output_dim (int): The output dimension. Set to 1 for regression tasks, and > 1 for classification tasks.
         """
         super(MLP, self).__init__()
-        self.layer_1 = nn.Linear(num_feature, h)
-        self.layer_out = nn.Linear(h, num_class)
+        self.layer_1 = nn.Linear(input_dim, hidden_dim)
+        self.layer_out = nn.Linear(hidden_dim, output_dim)
         self.relu = nn.ReLU() 
         self.dropout = nn.Dropout(p=0.4)
-        self.batchnorm = nn.BatchNorm1d(h)
+        self.batchnorm = nn.BatchNorm1d(hidden_dim)
 
     def forward(self, x):
         """

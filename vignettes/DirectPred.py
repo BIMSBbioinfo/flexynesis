@@ -49,7 +49,7 @@ if __name__ == '__main__':
     layers = list(train_dataset.dat.keys())
     input_dims = [len(train_dataset.features[layers[i]]) for i in range(len(layers))] # number of features per layer    
     model = flexynesis.DirectPred(num_layers = len(layers), input_dims = input_dims, 
-                                   latent_dim = latent_dim, num_class = 1, h = 128)
+                                   latent_dim = latent_dim, num_class = 1, hidden_dim = 128)
     
     model = flexynesis.main.train_model(model, train_dataset, n_epoch, batch_size, val_size = 0.2)
     

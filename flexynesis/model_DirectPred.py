@@ -41,9 +41,9 @@ class DirectPred(pl.LightningModule):
     def __init__(self, num_layers, input_dims, latent_dim = 16, num_class = 1, **kwargs):
         super(DirectPred, self).__init__()
          # create a list of Encoder instances for separately encoding each omics layer
-        self.encoders = nn.ModuleList([MLP(input_dims[i], latent_dim, **kwargs) for i in range(num_layers)])
+        self.encoders = nn.ModuleList([MLP(input_dim = input_dims[i], output_dim = latent_dim, **kwargs) for i in range(num_layers)])
         # fusion layer
-        self.MLP = MLP(num_feature = latent_dim * num_layers, num_class = num_class, h = 64)
+        self.MLP = MLP(input_dim = latent_dim * num_layers, output_dim = num_class, **kwargs)
         self.latent_dim = latent_dim
         
     def forward(self, x_list):
