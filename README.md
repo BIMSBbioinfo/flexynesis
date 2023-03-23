@@ -1,3 +1,7 @@
+
+<img align="right" src=img/logo.png" alt="logo" width="100"/>
+
+
 # flexynesis
 A deep-learning based multi-modal data integration suite that aims to achieve synesis in a flexible manner
 
