@@ -1,6 +1,7 @@
 
-<img align="right" src=img/logo.png" alt="logo" width="100"/>
-
+<p align="center">
+  <img alt="logo" src="img/logo.png" width="35%" height="35%">
+</p>
 
 # flexynesis
 A deep-learning based multi-modal data integration suite that aims to achieve synesis in a flexible manner
