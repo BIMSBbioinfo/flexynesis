@@ -44,7 +44,7 @@ if __name__ == '__main__':
     holdout_dataset = flexynesis.data.make_dataset(dat_holdout, drugs, drugName, concatenate = False)
     
     # define tuning 
-    tuner = flexynesis.HyperparameterTuning(train_dataset, model_class = flexynesis.supervised_vae, config_name = 'SVAE', n_iter=20)
+    tuner = flexynesis.HyperparameterTuning(train_dataset, model_class = flexynesis.supervised_vae, config_name = 'SVAE', n_iter=5)
     
     # train model and get best model
     model, best_params = tuner.perform_tuning()
