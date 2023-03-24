@@ -2,6 +2,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torch.utils.data import Dataset, DataLoader, random_split
 
 import pandas as pd
 import numpy as np
@@ -38,23 +39,30 @@ class supervised_vae(pl.LightningModule):
         model = supervised_vae(num_layers=2, input_dims=[100, 200], hidden_dims=[64, 32], latent_dim=16, num_class=1)
 
     """
-    def __init__(self, num_layers, input_dims, hidden_dims, latent_dim, num_class, **kwargs):
+    def __init__(self, config, dataset, num_class = 1, val_size = 0.2):
         super(supervised_vae, self).__init__()
-        
-        # define supervisor head
-        self.MLP = MLP(latent_dim, num_class, **kwargs)
-        self.latent_dim = latent_dim
+        self.config = config
+        self.dataset = dataset
+        self.val_size = val_size
         self.num_class = num_class
+        self.dat_train, self.dat_val = self.prepare_data()
         
+        layers = list(dataset.dat.keys())
+        input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
         # create a list of Encoder instances for separately encoding each omics layer
-        self.encoders = nn.ModuleList([Encoder(input_dims[i], hidden_dims, latent_dim) for i in range(num_layers)])
+        self.encoders = nn.ModuleList([Encoder(input_dims[i], [config['hidden_dim']], config['latent_dim']) for i in range(len(layers))])
         # Fully connected layers for concatenated means and log_vars
-        self.FC_mean = nn.Linear(num_layers * latent_dim, latent_dim)
-        self.FC_log_var = nn.Linear(num_layers * latent_dim, latent_dim)
-        
+        self.FC_mean = nn.Linear(len(layers) * config['latent_dim'], config['latent_dim'])
+        self.FC_log_var = nn.Linear(len(layers) * config['latent_dim'], config['latent_dim'])
         # list of decoders to decode each omics layer separately 
-        self.decoders = nn.ModuleList([Decoder(latent_dim, hidden_dims[::-1], input_dims[i]) for i in range(num_layers)])
+        self.decoders = nn.ModuleList([Decoder(config['latent_dim'], [config['hidden_dim']], input_dims[i]) for i in range(len(layers))])
 
+        # define supervisor head
+        self.MLP = MLP(input_dim = config['latent_dim'], 
+                       hidden_dim = config['supervisor_hidden_dim'], 
+                       output_dim = num_class)
+        
+                                       
     def multi_encoder(self, x_list):
         """
         Encode each input matrix separately using the corresponding Encoder.
@@ -196,7 +204,20 @@ class supervised_vae(pl.LightningModule):
         
         self.log('val_loss', loss)
         return loss
+                                       
+    def prepare_data(self):
+        lt = int(len(self.dataset)*(1-self.val_size))
+        lv = len(self.dataset)-lt
+        dat_train, dat_val = random_split(self.dataset, [lt, lv], 
+                                          generator=torch.Generator().manual_seed(42))
+        return dat_train, dat_val
     
+    def train_dataloader(self):
+        return DataLoader(self.dat_train, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+
+    def val_dataloader(self):
+        return DataLoader(self.dat_val, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=False)
+        
     def transform(self, dataset):
         """
         Transform the input dataset to latent representation.
