@@ -129,7 +129,7 @@ class MLP(nn.Module):
         """
         super(MLP, self).__init__()
         self.layer_1 = nn.Linear(input_dim, hidden_dim)
-        self.layer_out = nn.Linear(hidden_dim, output_dim)
+        self.layer_out = nn.Linear(hidden_dim, output_dim) if output_dim > 1 else nn.Linear(hidden_dim, 1, bias=False)
         self.relu = nn.ReLU() 
         self.dropout = nn.Dropout(p=0.4)
         self.batchnorm = nn.BatchNorm1d(hidden_dim)
@@ -150,6 +150,8 @@ class MLP(nn.Module):
         x = self.relu(x)
         x = self.dropout(x)
         x = self.layer_out(x)
+        if self.layer_out.out_features == 1:
+            x = x.squeeze(-1)  # Remove the last dimension if the output size is 1
         return x
 
 class EmbeddingNetwork(nn.Module):
