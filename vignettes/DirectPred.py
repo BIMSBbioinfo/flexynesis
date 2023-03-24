@@ -24,9 +24,7 @@ if __name__ == '__main__':
     # output options
     inputDir = '/data/local/buyar/arcas/multiomics_integration/benchmarks/pharmacogx/output/gdsc2_vs_ccle_gex_cnv/100'
     outDir = '.'
-    n_epoch = 200
-    latent_dim = 16
-    batch_size = 128
+    n_epoch = 10
     datatypes = ['layer1', 'layer2']
     drugName = 'Erlotinib'
     torch.set_num_threads(4)
@@ -43,16 +41,16 @@ if __name__ == '__main__':
     dat_holdout = harmonize(dat_train, dat_holdout)
 
     # Set concatenate to True to use early fusion, otherwise it will run intermediate fusion
-    train_dataset = flexynesis.data.make_dataset(dat_train, drugs, drugName, batch_size, concatenate = False)
-    holdout_dataset = flexynesis.data.make_dataset(dat_holdout, drugs, drugName, batch_size, concatenate = False)
+    train_dataset = flexynesis.data.make_dataset(dat_train, drugs, drugName, concatenate = False)
+    holdout_dataset = flexynesis.data.make_dataset(dat_holdout, drugs, drugName, concatenate = False)
     
-    layers = list(train_dataset.dat.keys())
-    input_dims = [len(train_dataset.features[layers[i]]) for i in range(len(layers))] # number of features per layer    
-    model = flexynesis.DirectPred(num_layers = len(layers), input_dims = input_dims, 
-                                   latent_dim = latent_dim, num_class = 1, hidden_dim = 128)
+    # define a tuner object, which will instantiate a DirectPred class using the input dataset and the tuning configuration from the config.py
+    tuner = flexynesis.HyperparameterTuning(train_dataset, model_class = flexynesis.DirectPred, config_name = 'DirectPred', tune=True, n_epoch = n_epoch)    
     
-    model = flexynesis.main.train_model(model, train_dataset, n_epoch, batch_size, val_size = 0.2)
-    
+    # do a hyperparameter search training multiple models and get the best_configuration 
+    best_config = tuner.tune_model_pb2()
+
+    """
     # evaluate the model on holdout dataset
     COR = model.evaluate(holdout_dataset)
     stats = pd.DataFrame.from_dict({'RMSE': 'NA', 'Rsquare': 'NA', 'COR': COR, 
@@ -64,4 +62,4 @@ if __name__ == '__main__':
     outFile = os.path.join(outDir,  '.'.join(['stats', drugName, 'tsv']))
     print("Saving stats to file", outFile)
     stats.to_csv(outFile, index = False, sep = '\t')
-
+    """
