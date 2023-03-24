@@ -123,7 +123,7 @@ class MultiomicDataset(Dataset):
         subset_samples = np.asarray(self.samples)[indices]
         return MultiomicDataset(subset_dat, subset_y, self.features, subset_samples)
     
-def get_labels(dat, drugs, drugName, batch_size, concatenate = False):
+def get_labels(dat, drugs, drugName, concatenate = False):
     y = drugs[drugName]
     y = y[~y.isna()]
 
@@ -131,9 +131,6 @@ def get_labels(dat, drugs, drugName, batch_size, concatenate = False):
     samples = list(reduce(set.intersection, [set(item) for item in [dat[x].columns for x in dat.keys()]]))
     # keep samples with labels
     samples = list(set(y.index).intersection(samples))
-    if len(samples) % batch_size == 1:
-        # I do this to avoid batches of size 1
-        samples = samples[0:len(samples)-1]
     #subset assays and labels for the remaining samples
     dat = {x: dat[x][samples] for x in dat.keys()}
     if concatenate == True:
