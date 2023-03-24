@@ -13,7 +13,6 @@ from scipy import stats
 from functools import reduce
 
 from .models_shared import *
-from .config import model_config
     
 
 class DirectPred(pl.LightningModule):
