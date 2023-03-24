@@ -6,13 +6,11 @@ from pytorch_lightning.callbacks import TQDMProgressBar
 from pytorch_lightning.strategies import DDPStrategy
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from ray import tune 
-from ray.tune import CLIReporter
-from ray.tune.integration.pytorch_lightning import TuneReportCallback
-from ray.tune.schedulers.pb2 import PB2
+from skopt import Optimizer
+from skopt.utils import use_named_args
+from .config import search_spaces
 
-from .config import model_config, model_tune_config
-
+import numpy as np
 
 # given a pytorch lightning model and pytorch dataset
 def train_model(model, dataset, n_epoch, batch_size, val_size = 0):
@@ -59,80 +57,45 @@ def train_model(model, dataset, n_epoch, batch_size, val_size = 0):
 
 
 class HyperparameterTuning:
-    def __init__(self, dataset, model_class, config_name, n_epoch = 10, tune = True, num_cpus = 1, num_gpus=0, val_size=0.2):
-        for name, value in locals().items():
-            if name != "self":
-                setattr(self, name, value)
-        if self.tune:
-            self.config = self._get_config(config_name)
-        else:
-            self.config = model_config.get(config_name, {})
-        self.best_config = None
-        self.hyper_bounds = {key: [min(value), max(value)] for key, value in self.config.items()}
-        
-    def _get_config(self, config_name):
-        config = {}
-        model_conf = model_tune_config.get(config_name, {})
-        for key, value in model_conf.items():
-            config[key] = tune.choice(value)
-        return config
+    def __init__(self, dataset, model_class, config_name, n_epoch = 10, n_iter = 10):
+        self.dataset = dataset
+        self.model_class = model_class
+        self.config_name = config_name
+        self.space = search_spaces[config_name]
+        self.n_iter = n_iter
+        self.n_epoch = n_epoch
+
+    def objective(self, params):
+        model = self.model_class(params, self.dataset)
+        print(params)
+        trainer = pl.Trainer(max_epochs=int(params['epochs']), gpus=None if torch.cuda.is_available() else 0)
+        print(trainer)
+        # Train and validate the model
+        trainer.fit(model)
+        val_loss = trainer.validate(model)[0]['val_loss']
+        return val_loss    
     
-    def train_model_no_tune(self):
-        model = self.model_class(self.config, self.dataset)
-        print("Training with parameters:", self.config)
-        trainer = pl.Trainer(max_epochs=self.n_epoch)
+    def perform_tuning(self):
+        opt = Optimizer(dimensions=self.space, n_initial_points=10, acq_func="EI", acq_optimizer="lbfgs")
+
+        best_loss = np.inf
+        best_params = None
+
+        for i in range(self.n_iter):
+            suggested_params_list = opt.ask()
+            suggested_params_dict = {param.name: value for param, value in zip(self.space, suggested_params_list)}
+            loss = self.objective(suggested_params_dict)
+            opt.tell(suggested_params_list, loss)
+
+            if loss < best_loss:
+                best_loss = loss
+                best_params = suggested_params_list
+
+        # Update the model-specific configuration with the best hyperparameters
+        best_params_dict = {param.name: value for param, value in zip(self.space, best_params)}
+        print("Building final model with best params:",best_params_dict)
+        # Train the model with the best hyperparameters
+        model = self.model_class(best_params_dict, self.dataset)
+        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), gpus=None if torch.cuda.is_available() else 0)
         trainer.fit(model)
-        return model
-
-    def train_model_tune(self):
-        model = self.model_class(self.config, self.dataset)
-        trainer = Trainer(
-            max_epochs=self.n_epoch,
-            #gpus=math.ceil(num_gpus),
-            logger=TensorBoardLogger(
-                save_dir=tune.get_trial_dir(), name="", version="."),
-            callbacks=[
-                TuneReportCallback(
-                    {
-                        "loss": "ptl/val_loss",
-                        "corr": "ptl/val_corr"
-                    },
-                    on="validation_end")
-            ],
-        )
-        trainer.fit(model)
-        return model
-
-    def tune_model_pb2(self, num_samples=10, n_epoch=10, val_size=0.2):
-        scheduler = PB2(
-            time_attr='training_iteration',
-            perturbation_interval=int(n_epoch/10),
-            hyperparam_bounds=self.hyper_bounds
-        )
-
-        reporter = CLIReporter(
-            metric_columns=["loss", "training_iteration"],
-            print_intermediate_tables=True
-        )
-
-        resources_per_trial = {"cpu": self.num_cpus, "gpu": self.num_gpus}
-        
-        # Define a wrapper function for train_model_tune
-        train_fn_wrapper = lambda *args, **kwargs: self.train_model_tune()
-
-        # Pass the wrapper function to tune.with_parameters
-        train_fn_with_parameters = tune.with_parameters(train_fn_wrapper)
-        
-        analysis = tune.run(train_fn_with_parameters,
-                            metric='loss',
-                            mode='min',
-                            resources_per_trial=resources_per_trial,
-                            config=self.config,
-                            num_samples=num_samples,
-                            scheduler=scheduler,
-                            progress_reporter=reporter,
-                            name="tune_model_pb2")
-
-        self.best_config = analysis.best_config
-        print("Best hyperparameters found were: ", self.best_config)
-        return self.best_config
+        return model, best_params
