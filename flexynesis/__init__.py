@@ -57,3 +57,4 @@ from .model_SVAE import *
 from .model_TripletEncoder import *
 from .feature_selection import *
 from .utils import *
+from .config import *
