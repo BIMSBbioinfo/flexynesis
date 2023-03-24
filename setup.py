@@ -8,11 +8,11 @@ setup(
     author_email="bora.uyar@mdc-berlin.de",
     packages=find_packages(),
     install_requires=[
-        'ray',
-	'torch',
-	'torchvision',
-	'tqdm',
-	'pytorch-lightning'
+        'torch',
+        'torchvision',
+        'tqdm',
+        'pytorch-lightning',
+        'scikit-optimize',
     ],
     entry_points={
         'console_scripts': [
