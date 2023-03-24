@@ -1,13 +1,11 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.utils.data import DataLoader
-from torch.utils.data import random_split
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import TQDMProgressBar
 from pytorch_lightning.strategies import DDPStrategy
+from torch.utils.data import Dataset, DataLoader, random_split
 
-from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import numpy as np
 import os, argparse
@@ -15,7 +13,9 @@ from scipy import stats
 from functools import reduce
 
 from .models_shared import *
+from .config import model_config
     
+
 class DirectPred(pl.LightningModule):
     """
     DirectPred is a PyTorch Lightning module for multi-omics data fusion and prediction.
@@ -38,13 +38,23 @@ class DirectPred(pl.LightningModule):
 
     """
 
-    def __init__(self, num_layers, input_dims, latent_dim = 16, num_class = 1, **kwargs):
+    def __init__(self, config, dataset, num_class = 1, val_size = 0.2):
         super(DirectPred, self).__init__()
-         # create a list of Encoder instances for separately encoding each omics layer
-        self.encoders = nn.ModuleList([MLP(input_dim = input_dims[i], output_dim = latent_dim, **kwargs) for i in range(num_layers)])
-        # fusion layer
-        self.MLP = MLP(input_dim = latent_dim * num_layers, output_dim = num_class, **kwargs)
-        self.latent_dim = latent_dim
+        self.config = config
+        self.dataset = dataset
+        self.val_size = val_size
+        self.dat_train, self.dat_val = self.prepare_data()
+        layers = list(dataset.dat.keys())
+        input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
+        
+        self.encoders = nn.ModuleList([
+            MLP(input_dim=input_dims[i],
+                hidden_dim=self.config['hidden_dim'],
+                output_dim=self.config['latent_dim']) for i in range(len(layers))])
+        
+        self.MLP = MLP(input_dim=self.config['latent_dim'] * len(layers),
+                       hidden_dim=self.config['hidden_dim'],
+                       output_dim=num_class)
         
     def forward(self, x_list):
         """
@@ -72,7 +82,7 @@ class DirectPred(pl.LightningModule):
             torch.optim.Optimizer: The configured optimizer.
         """
 
-        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.config['lr'])
         return optimizer
 
     def training_step(self, train_batch, batch_idx):
@@ -110,6 +120,19 @@ class DirectPred(pl.LightningModule):
         loss = F.mse_loss(torch.flatten(y_hat), y)
         r_value = stats.linregress(y.detach().numpy(), torch.flatten(y_hat).detach().numpy())[2]
         self.log_dict({"val_loss": loss, "val_corr": r_value})
+    
+    def prepare_data(self):
+        lt = int(len(self.dataset)*(1-self.val_size))
+        lv = len(self.dataset)-lt
+        dat_train, dat_val = random_split(self.dataset, [lt, lv], 
+                                          generator=torch.Generator().manual_seed(42))
+        return dat_train, dat_val
+    
+    def train_dataloader(self):
+        return DataLoader(self.dat_train, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+
+    def val_dataloader(self):
+        return DataLoader(self.dat_val, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=False)
     
     def evaluate(self, dataset):
         """
