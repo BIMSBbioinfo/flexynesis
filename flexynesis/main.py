@@ -68,7 +68,7 @@ class HyperparameterTuning:
     def objective(self, params):
         model = self.model_class(params, self.dataset)
         print(params)
-        trainer = pl.Trainer(max_epochs=int(params['epochs']), gpus=None if torch.cuda.is_available() else 0)
+        trainer = pl.Trainer(max_epochs=int(params['epochs']))
         print(trainer)
         # Train and validate the model
         trainer.fit(model)
@@ -96,6 +96,6 @@ class HyperparameterTuning:
         print("Building final model with best params:",best_params_dict)
         # Train the model with the best hyperparameters
         model = self.model_class(best_params_dict, self.dataset)
-        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), gpus=None if torch.cuda.is_available() else 0)
+        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']))
         trainer.fit(model)
         return model, best_params
