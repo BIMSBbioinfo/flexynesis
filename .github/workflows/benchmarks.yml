@@ -1,0 +1,42 @@
+name: Run My Package
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  run_package:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        auto-update-conda: true
+        python-version: '3.x'
+
+    - name: Install dependencies and my package
+      shell: bash -l {0}
+      run: |
+        conda create --name my_env --file spec-file.txt
+        conda activate my_env
+
+    - name: Download dataset
+      run: |
+        curl -L -o dataset.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset.tgz 
+        tar -xzvf dataset.tgz
+
+    - name: Run script
+      shell: bash -l {0}
+      run: |
+        conda activate my_env
+        flexynesis dataset DirectPred sample.yaml
