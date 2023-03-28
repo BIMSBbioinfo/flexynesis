@@ -1,4 +1,4 @@
-name: Run My Package
+name: run_benchmarks
 
 on:
   push:
@@ -8,6 +8,10 @@ on:
 jobs:
   run_package:
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash -l {0}
 
     steps:
     - name: Checkout repository
@@ -32,5 +36,6 @@ jobs:
     - name: Run benchmark script
       shell: bash -l {0}
       run: |
+        $CONDA/bin/conda init bash 
         $CONDA/bin/conda activate my_env
         flexynesis dataset DirectPred sample.yaml
