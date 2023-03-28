@@ -16,27 +16,21 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.x'
-
-    - name: Set up Miniconda
-      uses: conda-incubator/setup-miniconda@v2
-      with:
-        auto-update-conda: true
-        python-version: '3.x'
+        python-version: '3.9'
 
     - name: Install dependencies and my package
       shell: bash -l {0}
       run: |
-        conda create --name my_env --file spec-file.txt
-        conda activate my_env
+        $CONDA/bin/conda create --name my_env --file spec-file.txt
+        $CONDA/bin/conda activate my_env
 
     - name: Download dataset
       run: |
         curl -L -o dataset.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset.tgz 
         tar -xzvf dataset.tgz
 
-    - name: Run script
+    - name: Run benchmark script
       shell: bash -l {0}
       run: |
-        conda activate my_env
+        $CONDA/bin/conda activate my_env
         flexynesis dataset DirectPred sample.yaml
