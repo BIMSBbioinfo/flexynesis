@@ -3,6 +3,8 @@
   <img alt="logo" src="img/logo.png" width="65%" height="65%">
 </p>
 
+![benchmarks](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/benchmarks.yml/badge.svg)
+
 # flexynesis
 A deep-learning based multi-modal data integration suite that aims to achieve synesis in a flexible manner
 
