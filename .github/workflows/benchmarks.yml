@@ -22,7 +22,7 @@ jobs:
       shell: bash -l {0}
       run: |
         $CONDA/bin/conda create --name my_env --file spec-file.txt
-        $CONDA/bin/conda activate my_env
+        python setup.py install
 
     - name: Download dataset
       run: |
