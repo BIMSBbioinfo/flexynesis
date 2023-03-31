@@ -4,6 +4,7 @@ import pandas as pd
 from functools import reduce
 import torch
 
+from .feature_selection import filter_by_laplacian
 
 # given a MultiOmicDataset object, convert to Triplets (anchor,positive,negative)
 class TripletMultiOmicDataset(Dataset):
@@ -122,34 +123,102 @@ class MultiomicDataset(Dataset):
         subset_y = np.asarray(self.y)[indices]
         subset_samples = np.asarray(self.samples)[indices]
         return MultiomicDataset(subset_dat, subset_y, self.features, subset_samples)
+
+class DataImporter:
+    def __init__(self, path, outcome_var, data_types, min_features=None, top_percentile=None):
+        self.path = path
+        self.outcome_var = outcome_var
+        self.data_types = data_types
+        self.min_features = min_features
+        self.top_percentile = top_percentile
+        
+    def read_data(self, folder_path, file_ext='.csv'):
+        data = {}
+        for file in os.listdir(folder_path):
+            if file.endswith(file_ext):
+                file_path = os.path.join(folder_path, file)
+                file_name = os.path.splitext(file)[0]
+                data[file_name] = pd.read_csv(file_path, index_col=0)
+        return data
+
+    def import_data(self):
+        training_path = os.path.join(self.path, 'train')
+        testing_path = os.path.join(self.path, 'test') if 'test' in os.listdir(self.path) else None
+
+        if testing_path:
+            self.validate_data_folders(training_path, testing_path)
+        else:
+            self.validate_data_folder(training_path)
+
+        training_data = self.read_data(training_path)
+
+        if testing_path:
+            testing_data = self.read_data(testing_path)
+
+        train_dat, train_y, train_samples = self.process_data(training_data)
+        training_dataset = self.get_torch_dataset(train_dat, train_y, train_samples)
+
+        testing_dataset = None
+        if testing_data:
+            test_dat, test_y, test_samples = self.process_data(testing_data, split = 'test', 
+                                                harmonize_with=train_dat)
+            testing_dataset = self.get_torch_dataset(test_dat, test_y, test_samples)
+            
+        return training_dataset, testing_dataset
     
-def get_labels(dat, drugs, drugName, concatenate = False):
-    y = drugs[drugName]
-    y = y[~y.isna()]
+    def validate_data_folders(self, training_path, testing_path):
+        training_files = set(os.listdir(training_path))
+        testing_files = set(os.listdir(testing_path))
 
-    # list of samples in the assays
-    samples = list(reduce(set.intersection, [set(item) for item in [dat[x].columns for x in dat.keys()]]))
-    # keep samples with labels
-    samples = list(set(y.index).intersection(samples))
-    #subset assays and labels for the remaining samples
-    dat = {x: dat[x][samples] for x in dat.keys()}
-    if concatenate == True:
-        dat = {'all': pd.concat(dat)}
-    y = y[samples]
-    return dat, y, samples
+        required_files = {'clin.csv'} | {f"{dt}.csv" for dt in self.data_types}
 
-# dat: list of matrices, features on the rows, samples on the columns
-# ann: pandas data frame with 'y' as variable for the corresponding samples on the matrix columns
-# task_type: type of outcome (classification/regression)
-# notice the tables are transposed to return samples on rows, features on columns
-def get_torch_dataset(dat, labels, samples):
-    # keep a copy of row/column names
-    features = {x: dat[x].index for x in dat.keys()}
-    dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
-    y =  torch.from_numpy(np.array(labels)).float()
-    return MultiomicDataset(dat, y, features, samples)
+        if not required_files.issubset(training_files):
+            missing_files = required_files - training_files
+            raise ValueError(f"Missing files in training folder: {', '.join(missing_files)}")
 
-def make_dataset(dat, *args, **kwargs):
-    dat, y, samples = get_labels(dat, *args, **kwargs)
-    dataset = get_torch_dataset(dat, y, samples)
-    return dataset
+        if not required_files.issubset(testing_files):
+            missing_files = required_files - testing_files
+            raise ValueError(f"Missing files in testing folder: {', '.join(missing_files)}")
+
+
+    def process_data(self, data, split = 'train', harmonize_with=None):
+        dat = {k: v for k, v in data.items() if k != 'clin'}
+        ann = data['clin']
+        dat, y, samples = self.get_labels(dat, ann)
+        
+        # no filtering is applied to test data, 
+        # feature selection is only applied to training data
+        if split == 'train': 
+            if self.min_features or self.top_percentile:
+                dat = self.filter(dat, self.min_features, self.top_percentile)
+        # test data is harmonized with training data based 
+        # on whatever features are left in training data
+        if harmonize_with:
+            dat = self.harmonize(harmonize_with, dat)
+         
+        return dat, y, samples
+
+    def get_labels(self, dat, ann):
+        y = ann[self.outcome_var]
+        y = y[~y.isna()]
+
+        samples = list(reduce(set.intersection, [set(item) for item in [dat[x].columns for x in dat.keys()]]))
+        samples = list(set(y.index).intersection(samples))
+        dat = {x: dat[x][samples] for x in dat.keys()}
+        y = y[samples]
+        return dat, y, samples
+
+    def get_torch_dataset(self, dat, labels, samples):
+        features = {x: dat[x].index for x in dat.keys()}
+        dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
+        y =  torch.from_numpy(np.array(labels)).float()
+        return MultiomicDataset(dat, y, features, samples)
+
+    def filter(self, dat, min_features, top_percentile):
+        counts = {x: max(int(dat[x].shape[0] * top_percentile), min_features) for x in dat.keys()}
+        dat = {x: filter_by_laplacian(dat[x].T, topN=counts[x]).T for x in dat.keys()}
+        return dat
+
+    def harmonize(self, dat1, dat2):
+        features = {x: dat1[x].index for x in self.data_types}
+        return {x: dat2[x].loc[features[x]] for x in dat2.keys()}
