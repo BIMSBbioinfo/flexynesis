@@ -47,14 +47,6 @@ jobs:
         conda activate my_env
         python setup.py install
 
-    - name: Cache dataset
-      uses: actions/cache@v2
-      with:
-        path: dataset
-        key: ${{ runner.os }}-dataset-${{ hashFiles('dataset.zip') }}
-        restore-keys: |
-          ${{ runner.os }}-dataset-
-
     - name: Download dataset
       run: |
         if [ ! -d "dataset" ]; then
