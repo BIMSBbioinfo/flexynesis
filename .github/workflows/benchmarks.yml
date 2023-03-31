@@ -49,10 +49,8 @@ jobs:
 
     - name: Download dataset
       run: |
-        if [ ! -d "dataset" ]; then
-            curl -L -o dataset.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset.tgz 
-            tar -xzvf dataset.tgz
-        fi
+        # curl -L -o dataset.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset.tgz 
+        tar -xzvf dataset.tgz
 
     - name: Run package
       shell: bash -l {0}
