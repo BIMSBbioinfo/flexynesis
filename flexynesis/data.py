@@ -125,13 +125,15 @@ class MultiomicDataset(Dataset):
         subset_samples = np.asarray(self.samples)[indices]
         return MultiomicDataset(subset_dat, subset_y, self.features, subset_samples)
 
+# convert_to_labels: if true, given a numeric list, convert to binary labels by median value 
 class DataImporter:
-    def __init__(self, path, outcome_var, data_types, min_features=None, top_percentile=None):
+    def __init__(self, path, outcome_var, data_types, min_features=None, top_percentile=None, convert_to_labels = False):
         self.path = path
         self.outcome_var = outcome_var
         self.data_types = data_types
         self.min_features = min_features
         self.top_percentile = top_percentile
+        self.convert_to_labels = convert_to_labels
         
     def read_data(self, folder_path, file_ext='.csv'):
         data = {}
@@ -196,7 +198,11 @@ class DataImporter:
         # on whatever features are left in training data
         if harmonize_with:
             dat = self.harmonize(harmonize_with, dat)
-         
+        
+        # convert numeric value to binary labels by median value
+        if self.convert_to_labels:
+            y = self.label_by_median(y)
+        
         return dat, y, samples
 
     def get_labels(self, dat, ann):
@@ -223,3 +229,10 @@ class DataImporter:
     def harmonize(self, dat1, dat2):
         features = {x: dat1[x].index for x in self.data_types}
         return {x: dat2[x].loc[features[x]] for x in dat2.keys()}
+
+    # label numeric values by position with the median
+    def label_by_median(self, arr):
+        arr = np.asarray(arr)
+        median = np.median(arr)
+        categories = np.where(arr > median, 0, 1) 
+        return categories
