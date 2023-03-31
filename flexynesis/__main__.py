@@ -16,6 +16,7 @@ def main():
     parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int)
     parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float)
     parser.add_argument("--data_types", help="Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str)
+    parser.add_argument("--convert_to_labels", help="Whether to convert numerical values to categorical values by median value", type=bool, choices=[True, False])
     
     torch.set_num_threads(4)
 
@@ -46,10 +47,11 @@ def main():
         concatenate = True
         
     data_importer = flexynesis.DataImporter(path = args.data_path, 
-                                outcome_var = args.outcome_var, 
-                                data_types = args.data_types.strip().split(','),
-                                min_features= args.features_min, 
-                                top_percentile= args.features_top_percentile)
+                                            outcome_var = args.outcome_var, 
+                                            data_types = args.data_types.strip().split(','),
+                                            min_features= args.features_min, 
+                                            top_percentile= args.features_top_percentile,
+                                            convert_to_labels = args.convert_to_labels)
     
     train_dataset, test_dataset = data_importer.import_data()
 
@@ -63,17 +65,6 @@ def main():
     # do a hyperparameter search training multiple models and get the best_configuration 
     model, best_params = tuner.perform_tuning()
     
-    # evaluate the model on test dataset
-    COR = model.evaluate(test_dataset)
-    stats = pd.DataFrame.from_dict({'RMSE': 'NA', 'Rsquare': 'NA', 'COR': COR, 
-                                        'outcome_var': args.outcome_var, 'trainSampleN': len(train_dataset), 
-                                        'testSampleN': len(test_dataset), 
-                                        'tool': args.model_class}, orient = 'index').T
     
-    # save stats 
-    outFile = os.path.join('.'.join(['stats', args.outcome_var, 'tsv']))
-    print("Saving stats to file", outFile)
-    stats.to_csv(outFile, index = False, sep = '\t')
-
 if __name__ == "__main__":
     main()
