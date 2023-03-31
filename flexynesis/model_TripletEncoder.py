@@ -2,6 +2,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torch.utils.data import Dataset, DataLoader, random_split
 
 import pandas as pd
 import numpy as np
@@ -11,6 +12,7 @@ from pytorch_lightning.callbacks import TQDMProgressBar
 from pytorch_lightning.strategies import DDPStrategy
 
 from .models_shared import *
+from .data import TripletMultiOmicDataset
 
 
 class MultiEmbeddingNetwork(nn.Module):
@@ -64,7 +66,7 @@ class MultiTripletNetwork(pl.LightningModule):
         multi_embedding_network (MultiEmbeddingNetwork): A multi-embedding network for multiple input modalities.
         classifier (Classifier): A classifier network for predicting class labels from fused embeddings.
     """
-    def __init__(self, num_layers, input_sizes, hidden_sizes, output_size, num_classes):
+    def __init__(self, config, dataset, val_size = 0.2):
         """
         Initialize the MultiTripletNetwork with the given parameters.
 
@@ -76,9 +78,22 @@ class MultiTripletNetwork(pl.LightningModule):
             num_classes (int): The number of output classes for the classifier.
         """
         super(MultiTripletNetwork, self).__init__()
-        self.multi_embedding_network = MultiEmbeddingNetwork(input_sizes, hidden_sizes, output_size)
-        self.classifier = Classifier(output_size * num_layers, [64], num_classes)
-
+        
+        self.config = config
+        self.val_size = val_size
+        
+        layers = list(dataset.dat.keys())
+        input_sizes = [len(dataset.features[layers[i]]) for i in range(len(layers))]
+        hidden_sizes = [config['hidden_dim'] for x in range(len(layers))]
+        num_classes = len(np.unique(dataset.y))
+        
+        self.multi_embedding_network = MultiEmbeddingNetwork(input_sizes, hidden_sizes, config['embedding_dim'])
+        self.classifier = Classifier(config['embedding_dim'] * len(layers), [config['classifier_hidden_dim']], num_classes)
+        
+        dataset.y = dataset.y.long() # convert double to long for categorical integers
+        self.dataset = TripletMultiOmicDataset(dataset) # convert to TripletMultiOmicDataset
+        self.dat_train, self.dat_val = self.prepare_data() # split for train/validation
+                                                                              
     def forward(self, anchor, positive, negative):
         """
         Compute the forward pass of the MultiTripletNetwork and return the embeddings and predictions.
@@ -165,6 +180,19 @@ class MultiTripletNetwork(pl.LightningModule):
         self.log('val_loss', loss)
         return loss
     
+    def prepare_data(self):
+        lt = int(len(self.dataset)*(1-self.val_size))
+        lv = len(self.dataset)-lt
+        dat_train, dat_val = random_split(self.dataset, [lt, lv], 
+                                          generator=torch.Generator().manual_seed(42))
+        return dat_train, dat_val
+
+    def train_dataloader(self):
+        return DataLoader(self.dat_train, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+
+    def val_dataloader(self):
+        return DataLoader(self.dat_val, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=False)    
+        
     # dataset: MultiOmicDataset
     def transform(self, dataset):
         """
