@@ -1,6 +1,0 @@
-hyperparameter_tuning: 
-  n_iter: 1
-feature_selection:
-  min: 100
-fusion: 'intermediate' # other options: 'early' 
-

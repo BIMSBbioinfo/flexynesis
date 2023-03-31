@@ -65,5 +65,5 @@ jobs:
       shell: bash -l {0}
       run: |
         conda activate my_env
-        flexynesis dataset DirectPred sample.yaml
+        flexynesis --data_path $mo/datasets/gdsc_vs_ccle --model_class DirectPred --outcome_var Erlotinib --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 0.2 --data_types gex,cnv
 
