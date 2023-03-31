@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'flexynesis/**'
+      - '.github/workflows/**'
 
 jobs:
   run_package:
