@@ -6,7 +6,7 @@ space_model1 = [
     Integer(32, 128, name='hidden_dim'),
     Categorical([0.01, 0.001, 0.0001], name='lr'),
     Integer(32, 128, name='batch_size'),
-    Integer(100, 500, name='epochs')
+    Integer(100, 200, name='epochs')
 ]
 
 space_model2 = [
@@ -18,7 +18,17 @@ space_model2 = [
     Integer(100, 200, name='epochs')
 ]
 
+space_model3 = [
+    Integer(16, 48, name='embedding_dim'),
+    Integer(32, 128, name='hidden_dim'),
+    Integer(4, 16, name='classifier_hidden_dim'),
+    Categorical([0.01, 0.001, 0.0001], name='lr'),
+    Integer(64, 128, name='batch_size'),
+    Integer(100, 200, name='epochs')
+]
+
 search_spaces = {
     'DirectPred': space_model1,
-    'SVAE': space_model2
+    'SVAE': space_model2,
+    'MultiTripletNetwork': space_model3
 }
