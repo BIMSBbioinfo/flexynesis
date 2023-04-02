@@ -1,8 +1,9 @@
 import pandas as pd
+import numpy as np
 import umap
 import seaborn as sns
 import matplotlib.pyplot as plt
-
+from sklearn.decomposition import PCA
 from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report
 
 
@@ -38,6 +39,46 @@ def plot_umap_scatter(df, n_neighbors=15, min_dist=0.1, n_components=2, metric='
     plt.title('UMAP Scatter Plot')
     plt.show()
 
+def plot_pca(matrix, categories):
+    """
+    Plots the first two principal components of the input matrix in a 2D scatter plot,
+    with points colored based on the provided categories.
+    
+    Args:
+    matrix (np.array): Input data matrix (n_samples, n_features)
+    categories (list): List of categorical values (strings or integers)
+    """
+    # Compute PCA
+    pca = PCA(n_components=2)
+    transformed_matrix = pca.fit_transform(matrix)
+
+    # Create a pandas DataFrame for easier plotting
+    transformed_df = pd.DataFrame(transformed_matrix, columns=["PC1", "PC2"])
+
+    # Add the categories to the DataFrame
+    transformed_df["Category"] = categories
+
+    # Create a unique colormap for the categories
+    unique_categories = list(set(categories))
+    colormap = plt.cm.get_cmap("viridis", len(unique_categories))
+
+    # Plot the first two principal components with points colored by category
+    for i, category in enumerate(unique_categories):
+        plt.scatter(
+            transformed_df[transformed_df["Category"] == category]["PC1"],
+            transformed_df[transformed_df["Category"] == category]["PC2"],
+            color=colormap(i),
+            label=category,
+            alpha=0.7
+        )
+
+    plt.xlabel("Principal Component 1")
+    plt.ylabel("Principal Component 2")
+    plt.title("PCA Scatter Plot with Colored Categories")
+    plt.legend(title="Categories")
+    plt.show()
+    
+    
 def evaluate_classifier(y_true, y_pred):
     # Balanced accuracy
     balanced_acc = balanced_accuracy_score(y_true, y_pred)
