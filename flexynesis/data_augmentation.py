@@ -2,6 +2,10 @@
 
 import numpy as np
 from sklearn.decomposition import PCA
+import random
+from .data import MultiomicDataset 
+from functools import reduce 
+import torch
 
 def distort_pca(matrix, pc_index, jitter_factor):
     """
