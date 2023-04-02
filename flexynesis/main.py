@@ -76,7 +76,7 @@ class HyperparameterTuning:
         return val_loss    
     
     def perform_tuning(self):
-        opt = Optimizer(dimensions=self.space, n_initial_points=10, acq_func="EI", acq_optimizer="lbfgs")
+        opt = Optimizer(dimensions=self.space, n_initial_points=10, acq_func="EI", acq_optimizer="sampling")
 
         best_loss = np.inf
         best_params = None
