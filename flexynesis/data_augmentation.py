@@ -75,14 +75,13 @@ def concatenate_datasets(dataset1, dataset2):
         raise ValueError("Both datasets must have the same data types")
 
     concatenated_dat = {}
-    for data_type, matrix1 in dataset1.dat.items():
-        matrix2 = dataset2.dat[data_type]
-        concatenated_matrix = np.concatenate((matrix1, matrix2), axis=0)
-        concatenated_dat[data_type] = concatenated_matrix
+    for data_type, tensor1 in dataset1.dat.items():
+        tensor2 = dataset2.dat[data_type]
+        concatenated_tensor = torch.cat((tensor1, tensor2), axis=0)
+        concatenated_dat[data_type] = concatenated_tensor
 
-    concatenated_y = torch.cat((dataset1.y, dataset2.y), axis = 0)
+    concatenated_y = torch.cat((dataset1.y, dataset2.y), axis=0)
     concatenated_samples = dataset1.samples + dataset2.samples
-
     return MultiomicDataset(concatenated_dat, concatenated_y, dataset1.features, concatenated_samples)
 
 
