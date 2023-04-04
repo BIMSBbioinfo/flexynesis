@@ -47,26 +47,31 @@ jobs:
         conda activate my_env
         python setup.py install
 
-    - name: Download dataset
+    - name: Download dataset1
       run: |
-        # curl -L -o dataset.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset.tgz 
+        # curl -L -o dataset.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz 
+        tar -xzvf dataset.tgz
+        
+    - name: Download dataset2
+      run: |
+        # curl -L -o dataset.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset2.tgz 
         tar -xzvf dataset.tgz
 
     - name: Run DirectPred
       shell: bash -l {0}
       run: |
         conda activate my_env
-        flexynesis --data_path dataset --model_class DirectPred --outcome_var Erlotinib --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 0.2 --data_types gex,cnv --convert_to_labels False
+        flexynesis --data_path dataset1 --model_class DirectPred --outcome_var Erlotinib --task regression --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 0.2 --data_types gex,cnv 
         
     - name: Run supervised_vae
       shell: bash -l {0}
       run: |
         conda activate my_env
-        flexynesis --data_path dataset --model_class supervised_vae --outcome_var Erlotinib --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 0.2 --data_types gex,cnv --convert_to_labels False
+        flexynesis --data_path dataset1 --model_class supervised_vae --outcome_var Erlotinib --task regression --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 0.2 --data_types gex,cnv
 
     - name: Run MultiTripletNetwork
       shell: bash -l {0}
       run: |
         conda activate my_env
-        flexynesis --data_path dataset --model_class MultiTripletNetwork --outcome_var Erlotinib --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 0.2 --data_types gex,cnv --convert_to_labels True
+        flexynesis --data_path dataset2 --model_class MultiTripletNetwork --outcome_var y --task classification --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 0.2 --data_types gex,meth
 
