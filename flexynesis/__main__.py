@@ -11,12 +11,13 @@ def main():
     parser.add_argument("--data_path", help="Path to the folder with train/test data files", type=str)
     parser.add_argument("--model_class", help="The kind of model class to instantiate", type=str, choices=["DirectPred", "supervised_vae", "MultiTripletNetwork"])
     parser.add_argument("--outcome_var", help="Which outcome variable in 'clin.csv' to use for predictions", type = str)
+    parser.add_argument("--task", help="What kind of modeling task to do", type = str, choices=["regression", "classification"])
     parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"])
     parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int)
     parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int)
     parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float)
     parser.add_argument("--data_types", help="Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str)
-    parser.add_argument("--convert_to_labels", help="Whether to convert numerical values to categorical values by median value", type=bool, choices=[True, False])
+    #parser.add_argument("--convert_to_labels", help="Whether to convert numerical values to categorical values by median value", type=bool, choices=[True, False])
     
     torch.set_num_threads(4)
 
@@ -50,8 +51,7 @@ def main():
                                             outcome_var = args.outcome_var, 
                                             data_types = args.data_types.strip().split(','),
                                             min_features= args.features_min, 
-                                            top_percentile= args.features_top_percentile,
-                                            convert_to_labels = args.convert_to_labels)
+                                            top_percentile= args.features_top_percentile)
     
     train_dataset, test_dataset = data_importer.import_data()
 
@@ -63,6 +63,7 @@ def main():
     # define a tuner object, which will instantiate a DirectPred class 
     # using the input dataset and the tuning configuration from the config.py
     tuner = flexynesis.HyperparameterTuning(train_dataset, model_class = model_class, 
+                                            task = args.task,
                                             config_name = config_name, 
                                             n_iter=int(args.hpo_iter))    
     
