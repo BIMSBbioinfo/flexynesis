@@ -5,7 +5,7 @@ from functools import reduce
 import torch
 import os
 
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler, PowerTransformer
 from .feature_selection import filter_by_laplacian
 
 # given a MultiOmicDataset object, convert to Triplets (anchor,positive,negative)
@@ -136,6 +136,8 @@ class DataImporter:
         self.top_percentile = top_percentile
         # Initialize the label encoder
         self.label_encoder = None # only used of labels are categorical
+        # initialize data scalers
+        self.scalers = None
         
     def read_data(self, folder_path, file_ext='.csv'):
         data = {}
@@ -187,20 +189,27 @@ class DataImporter:
 
 
     def process_data(self, data, split = 'train', harmonize_with=None):
-        dat = {k: v for k, v in data.items() if k != 'clin'}
+        #dat = {k: v for k, v in data.items() if k != 'clin'}
+        dat = {x: data[x] for x in self.data_types}
         ann = data['clin']
         dat, y, samples = self.get_labels(dat, ann)
         
-        # no filtering is applied to test data, 
+        # Normalize the training data (for testing data, use normalisation factors
+        # learned from training data (see fit = False)
+        if split == 'train':
+            dat = self.normalize_data(dat, scaler_type="standard", fit=True)
+        elif split == 'test':
+            dat = self.normalize_data(dat, scaler_type="standard", fit=False)
+
         # feature selection is only applied to training data
         if split == 'train': 
             if self.min_features or self.top_percentile:
                 dat = self.filter(dat, self.min_features, self.top_percentile)
+        
         # test data is harmonized with training data based 
         # on whatever features are left in training data
         if harmonize_with:
             dat = self.harmonize(harmonize_with, dat)
-        
         return dat, y, samples
 
     def get_labels(self, dat, ann):
@@ -235,6 +244,25 @@ class DataImporter:
         y = torch.from_numpy(np.array(labels)).float()
         return MultiomicDataset(dat, y, features, samples)
 
+    def normalize_data(self, data, scaler_type="standard", fit=True):
+        # notice matrix transpositions during fit and finally after transformation
+        # because data matrices have features on rows, 
+        # while scaling methods assume features to be on the columns. 
+        if fit:
+            if scaler_type == "standard":
+                self.scalers = {x: StandardScaler().fit(data[x].T) for x in data.keys()}
+            elif scaler_type == "min_max":
+                self.scalers = {x: MinMaxScaler().fit(data[x].T) for x in data.keys()}
+            else:
+                raise ValueError("Invalid scaler_type. Choose 'standard' or 'min_max'.")
+        
+        normalized_data = {x: pd.DataFrame(self.scalers[x].transform(data[x].T), 
+                                           index=data[x].columns, 
+                                           columns=data[x].index).T 
+                           for x in data.keys()}
+        return normalized_data
+    
+    
     def filter(self, dat, min_features, top_percentile):
         counts = {x: max(int(dat[x].shape[0] * top_percentile), min_features) for x in dat.keys()}
         dat = {x: filter_by_laplacian(dat[x].T, topN=counts[x]).T for x in dat.keys()}
@@ -242,4 +270,5 @@ class DataImporter:
 
     def harmonize(self, dat1, dat2):
         features = {x: dat1[x].index for x in self.data_types}
-        return {x: dat2[x].loc[features[x]] for x in dat2.keys()}
+        dat2 = {x: dat2[x].loc[features[x]] for x in dat2.keys()}
+        return dat2
