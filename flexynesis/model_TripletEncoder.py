@@ -66,7 +66,7 @@ class MultiTripletNetwork(pl.LightningModule):
         multi_embedding_network (MultiEmbeddingNetwork): A multi-embedding network for multiple input modalities.
         classifier (Classifier): A classifier network for predicting class labels from fused embeddings.
     """
-    def __init__(self, config, dataset, val_size = 0.2):
+    def __init__(self, config, dataset, task = 'classification', val_size = 0.2):
         """
         Initialize the MultiTripletNetwork with the given parameters.
 
@@ -80,6 +80,7 @@ class MultiTripletNetwork(pl.LightningModule):
         super(MultiTripletNetwork, self).__init__()
         
         self.config = config
+        self.task = task
         self.val_size = val_size
         
         layers = list(dataset.dat.keys())
