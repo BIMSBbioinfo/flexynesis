@@ -138,6 +138,8 @@ class DataImporter:
         self.label_encoder = None # only used of labels are categorical
         # initialize data scalers
         self.scalers = None
+        # initialize data transformers
+        self.transformers = None
         
     def read_data(self, folder_path, file_ext='.csv'):
         data = {}
@@ -194,11 +196,13 @@ class DataImporter:
         ann = data['clin']
         dat, y, samples = self.get_labels(dat, ann)
         
-        # Normalize the training data (for testing data, use normalisation factors
-        # learned from training data (see fit = False)
+        # Transform and Normalize the training data (for testing data, use transformation/normalisation factors
+        # learned from training data to apply on test data (see fit = False)
         if split == 'train':
+            # dat = self.transform_data(dat, transformation_type = 'log', fit=True)
             dat = self.normalize_data(dat, scaler_type="standard", fit=True)
         elif split == 'test':
+            # dat = self.transform_data(dat, transformation_type=  'log', fit=False)
             dat = self.normalize_data(dat, scaler_type="standard", fit=False)
 
         # feature selection is only applied to training data
@@ -262,7 +266,30 @@ class DataImporter:
                            for x in data.keys()}
         return normalized_data
     
-    
+    def transform_data(self, data, transformation_type=None, fit=True):
+        if fit:
+            self.transformers = {}
+
+        if transformation_type:
+            if transformation_type == 'log':
+                transformed_data = {x: np.log1p(data[x].T).T for x in data.keys()}
+            elif transformation_type == 'sqrt':
+                transformed_data = {x: np.sqrt(data[x].T).T for x in data.keys()}
+            elif transformation_type == 'box-cox':
+                transformed_data = {}
+                for x in data.keys():
+                    if fit:
+                        pt = PowerTransformer(method='box-cox')
+                        self.transformers[x] = pt.fit(data[x].T)
+                    transformed_data[x] = pd.DataFrame(self.transformers[x].transform(data[x].T),
+                                                        index=data[x].columns,
+                                                        columns=data[x].index).T
+            else:
+                raise ValueError("Invalid transformation_type. Choose 'log', 'sqrt', or 'box-cox'.")
+        else:
+            transformed_data = data
+        return transformed_data    
+
     def filter(self, dat, min_features, top_percentile):
         counts = {x: max(int(dat[x].shape[0] * top_percentile), min_features) for x in dat.keys()}
         dat = {x: filter_by_laplacian(dat[x].T, topN=counts[x]).T for x in dat.keys()}
