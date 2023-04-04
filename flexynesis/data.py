@@ -5,6 +5,7 @@ from functools import reduce
 import torch
 import os
 
+from sklearn.preprocessing import LabelEncoder
 from .feature_selection import filter_by_laplacian
 
 # given a MultiOmicDataset object, convert to Triplets (anchor,positive,negative)
@@ -132,7 +133,9 @@ class DataImporter:
         self.outcome_var = outcome_var
         self.data_types = data_types
         self.min_features = min_features
-        self.top_percentile = top_percentile        
+        self.top_percentile = top_percentile
+        # Initialize the label encoder
+        self.label_encoder = None # only used of labels are categorical
         
     def read_data(self, folder_path, file_ext='.csv'):
         data = {}
@@ -210,10 +213,26 @@ class DataImporter:
         y = y[samples]
         return dat, y, samples
 
+    def encode_labels(self, labels):
+        if self.label_encoder is None:
+            self.label_encoder = LabelEncoder()
+            encoded_labels = self.label_encoder.fit_transform(labels)
+        else:
+            encoded_labels = self.label_encoder.transform(labels)
+        return encoded_labels
+
     def get_torch_dataset(self, dat, labels, samples):
         features = {x: dat[x].index for x in dat.keys()}
         dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
-        y =  torch.from_numpy(np.array(labels)).float()
+
+        # Check if the labels are categorical or numerical
+        is_categorical = not np.issubdtype(np.array(labels).dtype, np.number)
+
+        # Encode labels if they are categorical
+        if is_categorical:
+            labels = self.encode_labels(labels)
+
+        y = torch.from_numpy(np.array(labels)).float()
         return MultiomicDataset(dat, y, features, samples)
 
     def filter(self, dat, min_features, top_percentile):
