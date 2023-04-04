@@ -49,13 +49,13 @@ jobs:
 
     - name: Download dataset1
       run: |
-        # curl -L -o dataset.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz 
-        tar -xzvf dataset.tgz
+        # curl -L -o dataset1.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz 
+        tar -xzvf dataset1.tgz
         
     - name: Download dataset2
       run: |
-        # curl -L -o dataset.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset2.tgz 
-        tar -xzvf dataset.tgz
+        # curl -L -o dataset2.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset2.tgz 
+        tar -xzvf dataset2.tgz
 
     - name: Run DirectPred
       shell: bash -l {0}
