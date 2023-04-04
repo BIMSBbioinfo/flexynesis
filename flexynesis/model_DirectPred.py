@@ -37,10 +37,11 @@ class DirectPred(pl.LightningModule):
 
     """
 
-    def __init__(self, config, dataset, num_class = 1, val_size = 0.2):
+    def __init__(self, config, dataset, task, val_size = 0.2):
         super(DirectPred, self).__init__()
         self.config = config
         self.dataset = dataset
+        self.task = task
         self.val_size = val_size
         self.dat_train, self.dat_val = self.prepare_data()
         layers = list(dataset.dat.keys())
@@ -50,7 +51,11 @@ class DirectPred(pl.LightningModule):
             MLP(input_dim=input_dims[i],
                 hidden_dim=self.config['hidden_dim'],
                 output_dim=self.config['latent_dim']) for i in range(len(layers))])
-        
+        if self.task == 'regression':
+            num_class = 1
+        elif self.task == 'classification':
+            num_class = len(np.unique(self.dataset.y))
+
         self.MLP = MLP(input_dim=self.config['latent_dim'] * len(layers),
                        hidden_dim=self.config['hidden_dim'],
                        output_dim=num_class)
@@ -99,9 +104,12 @@ class DirectPred(pl.LightningModule):
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         y_hat = self.forward(x_list)[0]
-        loss = F.mse_loss(torch.flatten(y_hat), y)
-        r_value = stats.linregress(y.detach().numpy(), torch.flatten(y_hat).detach().numpy())[2]
-        self.log_dict({"train_loss": loss, "train_corr": r_value})
+        
+        if self.task == 'regression':
+            loss = F.mse_loss(torch.flatten(y_hat), y)
+        elif self.task == 'classification':
+            loss = F.cross_entropy(y_hat, y.long())
+        self.log("train_loss", loss)
         return loss
     
     def validation_step(self, val_batch, batch_idx):
@@ -116,10 +124,12 @@ class DirectPred(pl.LightningModule):
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         y_hat = self.forward(x_list)[0]
-        loss = F.mse_loss(torch.flatten(y_hat), y)
-        r_value = stats.linregress(y.detach().numpy(), torch.flatten(y_hat).detach().numpy())[2]
-        self.log_dict({"val_loss": loss, "val_corr": r_value})
-    
+        if self.task == 'regression':
+            loss = F.mse_loss(torch.flatten(y_hat), y)
+        elif self.task == 'classification':
+            loss = F.cross_entropy(y_hat, y.long())
+        self.log("val_loss", loss)
+
     def prepare_data(self):
         lt = int(len(self.dataset)*(1-self.val_size))
         lv = len(self.dataset)-lt
@@ -133,7 +143,7 @@ class DirectPred(pl.LightningModule):
     def val_dataloader(self):
         return DataLoader(self.dat_val, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=False)
     
-    def evaluate(self, dataset):
+    def predict(self, dataset):
         """
         Evaluate the DirectPred model on a given dataset.
 
@@ -141,15 +151,15 @@ class DirectPred(pl.LightningModule):
             dataset: The dataset to evaluate the model on.
 
         Returns:
-            float: The Pearson correlation coefficient (r_value) between the true labels and the predicted labels.
+            predicted labels
         """
         self.eval()
         layers = dataset.dat.keys()
         x_list = [dataset.dat[x] for x in layers]
-        y_hat = self.forward(x_list)[0]
-        r_value = stats.linregress(dataset.y.detach().numpy(),
-                                   torch.flatten(y_hat).detach().numpy())[2]
-        return r_value
+        y_pred = self.forward(x_list)[0].detach().numpy()
+        if self.task == 'classification':
+            return np.argmax(y_pred, axis=1)
+        return y_pred
 
 
 
