@@ -5,6 +5,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report
+from sklearn.metrics import mean_squared_error, r2_score
 
 
 def plot_umap_scatter(df, n_neighbors=15, min_dist=0.1, n_components=2, metric='euclidean'):
@@ -96,3 +97,8 @@ def evaluate_classifier(y_true, y_pred):
     print("\nClassification Report:")
     report = classification_report(y_true, y_pred)
     print(report)
+
+def evaluate_regressor(y_true, y_pred):
+    mse = mean_squared_error(y_true, y_pred)
+    r2 = r2_score(y_true, y_pred)
+    return {"mse": mse, "r2": r2}
