@@ -39,12 +39,12 @@ class supervised_vae(pl.LightningModule):
         model = supervised_vae(num_layers=2, input_dims=[100, 200], hidden_dims=[64, 32], latent_dim=16, num_class=1)
 
     """
-    def __init__(self, config, dataset, num_class = 1, val_size = 0.2):
+    def __init__(self, config, dataset, task, val_size = 0.2):
         super(supervised_vae, self).__init__()
         self.config = config
         self.dataset = dataset
         self.val_size = val_size
-        self.num_class = num_class
+        self.task = task
         self.dat_train, self.dat_val = self.prepare_data()
         
         layers = list(dataset.dat.keys())
@@ -57,11 +57,15 @@ class supervised_vae(pl.LightningModule):
         # list of decoders to decode each omics layer separately 
         self.decoders = nn.ModuleList([Decoder(config['latent_dim'], [config['hidden_dim']], input_dims[i]) for i in range(len(layers))])
 
+        if self.task == 'regression':
+            num_class = 1
+        elif self.task == 'classification':
+            num_class = len(np.unique(self.dataset.y))
+
         # define supervisor head
         self.MLP = MLP(input_dim = config['latent_dim'], 
                        hidden_dim = config['supervisor_hidden_dim'], 
                        output_dim = num_class)
-        
                                        
     def multi_encoder(self, x_list):
         """
@@ -166,7 +170,11 @@ class supervised_vae(pl.LightningModule):
         mmd_loss_list = [self.MMD_loss(z.shape[1], z, x_hat_list[i], x_list[i]) for i in range(len(layers))]
         mmd_loss = torch.mean(torch.stack(mmd_loss_list))
 
-        sp_loss = F.mse_loss(y_pred, y)
+        if self.task == 'regression':
+            sp_loss = F.mse_loss(torch.flatten(y_pred), y)
+        elif self.task == 'classification':
+            sp_loss = F.cross_entropy(y_pred, y.long())
+            
         loss = mmd_loss + sp_loss
         
         self.log('train_loss', loss)
@@ -199,7 +207,11 @@ class supervised_vae(pl.LightningModule):
         mmd_loss_list = [self.MMD_loss(z.shape[1], z, x_hat_list[i], x_list[i]) for i in range(len(layers))]
         mmd_loss = torch.mean(torch.stack(mmd_loss_list))
 
-        sp_loss = F.mse_loss(y_pred, y)
+        if self.task == 'regression':
+            sp_loss = F.mse_loss(torch.flatten(y_pred), y)
+        elif self.task == 'classification':
+            sp_loss = F.cross_entropy(y_pred, y.long())
+
         loss = mmd_loss + sp_loss
         
         self.log('val_loss', loss)
@@ -237,7 +249,7 @@ class supervised_vae(pl.LightningModule):
         z.index = dataset.samples
         return z
     
-    def evaluate(self, dataset):
+    def predict(self, dataset):
         """
         Evaluate the model on a dataset.
 
@@ -245,15 +257,17 @@ class supervised_vae(pl.LightningModule):
             dataset (CustomDataset): Custom dataset containing input matrices for each omics layer.
 
         Returns:
-            float: Pearson correlation coefficient between true and predicted values.
+            predicted values.
         """
         self.eval()
         layers = list(dataset.dat.keys())
         x_list = [dataset.dat[x] for x in layers]
         X_hat, z, mean, log_var, y_pred = self.forward(x_list)
-        r_value = stats.linregress(dataset.y.detach().numpy(),
-                                   torch.flatten(y_pred).detach().numpy())[2]
-        return r_value
+        
+        y_pred = y_pred.detach().numpy()
+        if self.task == 'classification':
+            return np.argmax(y_pred, axis=1)
+        return y_pred
     
     def compute_kernel(self, x, y):
         """
