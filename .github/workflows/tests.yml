@@ -59,7 +59,7 @@ jobs:
       run: |
         conda activate my_env
         python setup.py install
-        
+
     - name: Run Unit Tests
       shell: bash -l {0}
       run: |

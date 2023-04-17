@@ -52,8 +52,12 @@ srun python vignettes/DirectPred.py
 srun python vignettes/svae.py
 ```
 
+Run unit tests
+```python
+pytest -vvv tests/unit
+```
 
-This will run all the tests in the tests directory.
+This will run all the unit tests in the tests directory.
 
 # Contributing
 If you would like to contribute to the project, please open an issue or a pull request on the GitHub repository.
