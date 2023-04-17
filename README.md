@@ -3,6 +3,7 @@
   <img alt="logo" src="img/logo.png" width="65%" height="65%">
 </p>
 
+[![Tests](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tests.yml/badge.svg)](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tests.yml)
 ![benchmarks](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/benchmarks.yml/badge.svg)
 
 # flexynesis
