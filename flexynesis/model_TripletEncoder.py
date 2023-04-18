@@ -217,3 +217,18 @@ class MultiTripletNetwork(pl.LightningModule):
         y_pred = np.argmax(y_pred.detach().numpy(), axis=1)
         return z, y_pred
 
+    def predict(self, dataset):
+        """
+        Evaluate the model on a given dataset.
+
+        Args:
+            dataset: The dataset to evaluate the model on.
+
+        Returns:
+            predicted labels
+        """
+        self.eval()
+        y_pred = self.classifier(self.multi_embedding_network(dataset.dat))
+        # convert to labels 
+        y_pred = np.argmax(y_pred.detach().numpy(), axis=1)
+        return y_pred
