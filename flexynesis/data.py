@@ -8,6 +8,8 @@ import os
 from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler, PowerTransformer
 from .feature_selection import filter_by_laplacian
 
+from itertools import chain
+
 # given a MultiOmicDataset object, convert to Triplets (anchor,positive,negative)
 class TripletMultiOmicDataset(Dataset):
     """
@@ -128,10 +130,11 @@ class MultiomicDataset(Dataset):
 
 # convert_to_labels: if true, given a numeric list, convert to binary labels by median value 
 class DataImporter:
-    def __init__(self, path, outcome_var, data_types, min_features=None, top_percentile=None):
+    def __init__(self, path, outcome_var, data_types, concatenate = False, min_features=None, top_percentile=None):
         self.path = path
         self.outcome_var = outcome_var
         self.data_types = data_types
+        self.concatenate = concatenate
         self.min_features = min_features
         self.top_percentile = top_percentile
         # Initialize the label encoder
@@ -172,6 +175,14 @@ class DataImporter:
             test_dat, test_y, test_samples = self.process_data(testing_data, split = 'test', 
                                                 harmonize_with=train_dat)
             testing_dataset = self.get_torch_dataset(test_dat, test_y, test_samples)
+       
+        # for early fusion, concatenate all data matrices and feature lists 
+        if self.concatenate:
+            training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in training_dataset.dat.keys()], dim = 1)}
+            training_dataset.features = {'all': list(chain(*training_dataset.features.values()))}
+            
+            testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in testing_dataset.dat.keys()], dim = 1)}
+            testing_dataset.features = {'all': list(chain(*testing_dataset.features.values()))}
             
         return training_dataset, testing_dataset
     
@@ -214,6 +225,7 @@ class DataImporter:
         # on whatever features are left in training data
         if harmonize_with:
             dat = self.harmonize(harmonize_with, dat)
+        
         return dat, y, samples
 
     def get_labels(self, dat, ann):
