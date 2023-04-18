@@ -97,6 +97,7 @@ def evaluate_classifier(y_true, y_pred):
     print("\nClassification Report:")
     report = classification_report(y_true, y_pred)
     print(report)
+    return {"balanced_acc": balanced_acc, "f1_score": f1, "kappa": kappa}
 
 def evaluate_regressor(y_true, y_pred):
     mse = mean_squared_error(y_true, y_pred)
