@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int)
     parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float)
     parser.add_argument("--data_types", help="Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str)
-    #parser.add_argument("--convert_to_labels", help="Whether to convert numerical values to categorical values by median value", type=bool, choices=[True, False])
+    parser.add_argument("--outfile", help="Path to the output file to save the model evaluation stats", type=str)
     
     torch.set_num_threads(4)
 
@@ -71,6 +71,17 @@ def main():
     # do a hyperparameter search training multiple models and get the best_configuration 
     model, best_params = tuner.perform_tuning()
     
+    # make predictions on the test dataset
+    y_pred = model.predict(test_dataset)
+    
+    # evaluate predictions 
+    if args.task == 'regression':
+        stats = flexynesis.utils.evaluate_regressor(test_dataset.y, y_pred)
+    if args.task == 'classification':
+        stats = flexynesis.utils.evaluate_classifier(test_dataset.y, y_pred)
+    
+    # save to file 
+    pd.DataFrame(stats.items()).transpose().to_csv(args.outfile, header=False, index=False)
     
 if __name__ == "__main__":
     main()
