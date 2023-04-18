@@ -43,13 +43,14 @@ def main():
     inputDir = args.data_path
     
     # Set concatenate to True to use early fusion, otherwise it will run intermediate fusion
-    concatenate = False # TODO: update DataImporter to account for this
+    concatenate = False 
     if args.fusion_type == 'early':
         concatenate = True
         
     data_importer = flexynesis.DataImporter(path = args.data_path, 
                                             outcome_var = args.outcome_var, 
                                             data_types = args.data_types.strip().split(','),
+                                            concatenate = concatenate, 
                                             min_features= args.features_min, 
                                             top_percentile= args.features_top_percentile)
     
