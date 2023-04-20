@@ -9,6 +9,12 @@
 # flexynesis
 A deep-learning based multi-modal data integration suite that aims to achieve synesis in a flexible manner
 
+# Benchmarks
+For the latest benchmark results see: 
+https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dashboard.html
+
+The code for the benchmarking pipeline is at: https://github.com/BIMSBbioinfo/flexynesis-benchmarks
+
 # Environment
 
 To create a clone of the development environment, use the `spec-file.txt`:
