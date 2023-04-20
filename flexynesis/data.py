@@ -160,7 +160,7 @@ class DataImporter:
         if testing_path:
             self.validate_data_folders(training_path, testing_path)
         else:
-            self.validate_data_folder(training_path)
+            self.validate_data_folders(training_path)
 
         training_data = self.read_data(training_path)
 
