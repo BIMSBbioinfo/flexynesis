@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img alt="logo" src="img/logo.png" width="65%" height="65%">
+  <img alt="logo" src="img/logo.png" width="50%" height="50%">
 </p>
 
 [![Tests](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tests.yml/badge.svg)](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tests.yml)
