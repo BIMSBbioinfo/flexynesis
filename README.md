@@ -52,12 +52,6 @@ python setup.py install
 
 # Testing
 
-Test the vignettes 
-```
-srun python vignettes/DirectPred.py
-srun python vignettes/svae.py
-```
-
 Run unit tests
 ```python
 pytest -vvv tests/unit
