@@ -57,9 +57,10 @@ def main():
     train_dataset, test_dataset = data_importer.import_data()
 
     # augment the dataset using PC distortions
-    print("augmenting dataset")
-    train_dataset = flexynesis.augment_dataset_with_pc_distortion(train_dataset, [0, 1, 2], [0.8, 1.2], 1)
-    print("New dataset size:", len(train_dataset))
+    # TODO: make it configurable by the user
+    #print("augmenting dataset")
+    #train_dataset = flexynesis.augment_dataset_with_pc_distortion(train_dataset, [0, 1, 2], [0.8, 1.2], 1)
+    #print("New dataset size:", len(train_dataset))
     
     # define a tuner object, which will instantiate a DirectPred class 
     # using the input dataset and the tuning configuration from the config.py
