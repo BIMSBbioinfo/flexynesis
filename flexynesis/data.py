@@ -150,31 +150,72 @@ class DataImporter:
             if file.endswith(file_ext):
                 file_path = os.path.join(folder_path, file)
                 file_name = os.path.splitext(file)[0]
+                print("importing ",file_path)
                 data[file_name] = pd.read_csv(file_path, index_col=0)
         return data
+    
+    def cleanup_data(self, df_dict, variance_threshold=1e-5):
+        cleaned_dfs = {}
+        sample_masks = []
+
+        # First pass: remove near-zero-variation features and create masks for informative samples
+        for key, df in df_dict.items():
+            original_features_count = df.shape[0]
+
+            # Step 1: Remove near-zero-variation features
+            # Compute variances of features (along rows)
+            feature_variances = df.var(axis=1)
+            # Keep only features with variance above the threshold
+            df = df.loc[feature_variances > variance_threshold, :]
+
+            removed_features_count = original_features_count - df.shape[0]
+            print(f"DataFrame {key} - Removed {removed_features_count} features.")
+
+            # Step 2: Create masks for informative samples
+            # Compute standard deviation of samples (along columns)
+            sample_stdevs = df.std(axis=0)
+            # Create mask for samples that do not have std dev of 0 or NaN
+            mask = np.logical_and(sample_stdevs != 0, np.logical_not(np.isnan(sample_stdevs)))
+            sample_masks.append(mask)
+
+            cleaned_dfs[key] = df
+
+        # Find samples that are informative in all dataframes
+        common_mask = pd.DataFrame(sample_masks).all()
+
+        # Second pass: apply common mask to all dataframes
+        for key in cleaned_dfs.keys():
+            original_samples_count = cleaned_dfs[key].shape[1]
+            cleaned_dfs[key] = cleaned_dfs[key].loc[:, common_mask]
+            removed_samples_count = original_samples_count - cleaned_dfs[key].shape[1]
+            print(f"DataFrame {key} - Removed {removed_samples_count} samples ({removed_samples_count / original_samples_count * 100:.2f}%).")
+
+        return cleaned_dfs
 
     def import_data(self):
         training_path = os.path.join(self.path, 'train')
-        testing_path = os.path.join(self.path, 'test') if 'test' in os.listdir(self.path) else None
+        testing_path = os.path.join(self.path, 'test') 
 
-        if testing_path:
-            self.validate_data_folders(training_path, testing_path)
-        else:
-            self.validate_data_folders(training_path)
-
+        self.validate_data_folders(training_path, testing_path)
+        
         training_data = self.read_data(training_path)
+        testing_data = self.read_data(testing_path)
 
-        if testing_path:
-            testing_data = self.read_data(testing_path)
-
-        train_dat, train_y, train_samples = self.process_data(training_data)
+        # cleanup uninformative features/samples, assign labels, do feature selection on training data
+        train_dat, train_y, train_samples = self.process_data(training_data, split = 'train')
+        test_dat, test_y, test_samples = self.process_data(testing_data, split = 'test')
+        
+        # harmonize feature sets in train/test
+        train_dat, test_dat = self.harmonize(train_dat, test_dat)
+        
+        # Normalize the training data (for testing data, use normalisation factors
+        # learned from training data to apply on test data (see fit = False)
+        train_dat = self.normalize_data(train_dat, scaler_type="standard", fit=True)
+        test_dat = self.normalize_data(test_dat, scaler_type="standard", fit=False)
+        
+        # convert to pytorch datasets 
         training_dataset = self.get_torch_dataset(train_dat, train_y, train_samples)
-
-        testing_dataset = None
-        if testing_data:
-            test_dat, test_y, test_samples = self.process_data(testing_data, split = 'test', 
-                                                harmonize_with=train_dat)
-            testing_dataset = self.get_torch_dataset(test_dat, test_y, test_samples)
+        testing_dataset = self.get_torch_dataset(test_dat, test_y, test_samples)
        
         # for early fusion, concatenate all data matrices and feature lists 
         if self.concatenate:
@@ -201,31 +242,17 @@ class DataImporter:
             raise ValueError(f"Missing files in testing folder: {', '.join(missing_files)}")
 
 
-    def process_data(self, data, split = 'train', harmonize_with=None):
-        #dat = {k: v for k, v in data.items() if k != 'clin'}
-        dat = {x: data[x] for x in self.data_types}
+    def process_data(self, data, split = 'train'):
+        # remove uninformative features and samples with no information (from data matrices)
+        dat = self.cleanup_data({x: data[x] for x in self.data_types})
         ann = data['clin']
+        
         dat, y, samples = self.get_labels(dat, ann)
         
-        # Transform and Normalize the training data (for testing data, use transformation/normalisation factors
-        # learned from training data to apply on test data (see fit = False)
-        if split == 'train':
-            # dat = self.transform_data(dat, transformation_type = 'log', fit=True)
-            dat = self.normalize_data(dat, scaler_type="standard", fit=True)
-        elif split == 'test':
-            # dat = self.transform_data(dat, transformation_type=  'log', fit=False)
-            dat = self.normalize_data(dat, scaler_type="standard", fit=False)
-
-        # feature selection is only applied to training data
+        # do feature selection: only applied to training data
         if split == 'train': 
             if self.min_features or self.top_percentile:
                 dat = self.filter(dat, self.min_features, self.top_percentile)
-        
-        # test data is harmonized with training data based 
-        # on whatever features are left in training data
-        if harmonize_with:
-            dat = self.harmonize(harmonize_with, dat)
-        
         return dat, y, samples
 
     def get_labels(self, dat, ann):
@@ -261,6 +288,7 @@ class DataImporter:
         return MultiomicDataset(dat, y, features, samples)
 
     def normalize_data(self, data, scaler_type="standard", fit=True):
+        print("normalizing data")
         # notice matrix transpositions during fit and finally after transformation
         # because data matrices have features on rows, 
         # while scaling methods assume features to be on the columns. 
@@ -303,11 +331,16 @@ class DataImporter:
         return transformed_data    
 
     def filter(self, dat, min_features, top_percentile):
+        print("Filtering features based on Laplacian Score")
         counts = {x: max(int(dat[x].shape[0] * top_percentile), min_features) for x in dat.keys()}
         dat = {x: filter_by_laplacian(dat[x].T, topN=counts[x]).T for x in dat.keys()}
         return dat
 
     def harmonize(self, dat1, dat2):
-        features = {x: dat1[x].index for x in self.data_types}
-        dat2 = {x: dat2[x].loc[features[x]] for x in dat2.keys()}
-        return dat2
+        print("Harmonizing features between train and test")
+        # Get common features
+        common_features = {x: dat1[x].index.intersection(dat2[x].index) for x in self.data_types}
+        # Subset both datasets to only include common features
+        dat1 = {x: dat1[x].loc[common_features[x]] for x in dat1.keys()}
+        dat2 = {x: dat2[x].loc[common_features[x]] for x in dat2.keys()}
+        return dat1, dat2
