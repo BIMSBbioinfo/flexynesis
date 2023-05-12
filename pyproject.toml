@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flexynesis"
+version = "0.1.0"
+authors = [
+    {name = "Bora Uyar", email = "bora.uyar@mdc-berlin.de"},
+]
+description = """A deep-learning based multi-omics bulk sequencing
+    data integration suite with a focus on (pre-)clinical endpoint
+    prediction."""
+readme = "README.md"
+classifiers=[
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+]
+dependencies = [
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "pytorch-lightning",
+    "pyyaml",
+    "scikit-optimize",
+    "scipy",
+    "seaborn",
+    "torch",
+    "torchvision",
+    "tqdm",
+    "umap-learn",
+]
+
+[project.scripts]
+flexynesis = "flexynesis.__main__:main"
+
+[project.urls]
+homepage = "https://github.com/BIMSBbioinfo/flexynesis"
+
+[project.optional-dependencies]
+test = [
+    "pytest"
+]
+
+[tool.setuptools]
+packages = ["flexynesis"]
+
+[tool.pytest.ini_options]
+norecursedirs = [
+    ".git",
+    ".github",
+    "dist",
+    "build",
+    "docs",
+]
+addopts = [
+    "--strict-markers",
+    "--doctest-modules",
+    "--color=yes",
+    "--disable-pytest-warnings",
+]
+filterwarnings = "ignore::DeprecationWarning"
