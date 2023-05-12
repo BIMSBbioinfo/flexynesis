@@ -36,6 +36,36 @@ To export existing spec-file.txt:
 conda list --explicit > spec-file.txt
 ```
 
+# Guix
+
+You can also create a reproducible development environment with [GNU Guix](https://guix.gnu.org).  You will need [this Guix commit](https://git.savannah.gnu.org/cgit/guix.git/commit/?id=e3e011a08141058598cc7631aeb52d620a3ccb8c) or later.
+
+```
+guix shell
+```
+
+or
+
+```
+guix shell -m manifest.scm
+```
+
+You can build a Guix package from the current committed state of your git checkout like this:
+
+```
+guix pack -f guix.scm
+```
+
+Do this to build a Docker image containing this package together with a matching Python installation:
+
+```
+guix pack -C none \
+  -e '(load "guix.scm")' \
+  -f docker \
+  -S /bin=bin -S /lib=lib -S /share=share \
+  glibc-locales coreutils bash python
+```
+
 # Installation
 
 To install the project using setuptools, you can follow these steps:
