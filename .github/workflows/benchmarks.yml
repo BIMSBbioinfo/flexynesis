@@ -45,7 +45,7 @@ jobs:
       shell: bash -l {0}
       run: |
         conda activate my_env
-        python setup.py install
+        pip install -e .
 
     - name: Download dataset1
       run: |
