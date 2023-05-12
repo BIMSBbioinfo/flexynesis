@@ -144,7 +144,7 @@ class supervised_vae(pl.LightningModule):
         Returns:
             torch.optim.Adam: Adam optimizer with learning rate 1e-3.
         """
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.config['lr'])
         return optimizer
 
     def training_step(self, train_batch, batch_idx):
@@ -165,6 +165,11 @@ class supervised_vae(pl.LightningModule):
         x_list = [dat[x] for x in layers]
         mean, log_var = self.multi_encoder(x_list)
         z = self.reparameterization(mean, torch.exp(0.5 * log_var)) # takes exponential function (log var -> var)
+        
+        # Check for NaNs in the latent space
+        if torch.isnan(z).any():
+            raise ValueError("NaN value detected in latent factors")
+        
         x_hat_list = [self.decoders[i](z) for i in range(len(x_list))]
         y_pred = self.MLP(z)
         
@@ -179,7 +184,7 @@ class supervised_vae(pl.LightningModule):
             
         loss = mmd_loss + sp_loss
         
-        self.log('train_loss', loss)
+        self.log_dict({'train_loss': loss, 'mmd': mmd_loss, 'sp': sp_loss}, prog_bar=True)
         return loss
     
     def validation_step(self, val_batch, batch_idx):
@@ -216,7 +221,7 @@ class supervised_vae(pl.LightningModule):
 
         loss = mmd_loss + sp_loss
         
-        self.log('val_loss', loss)
+        self.log('val_loss', loss, prog_bar=True)
         return loss
                                        
     def prepare_data(self):
