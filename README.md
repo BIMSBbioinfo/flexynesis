@@ -53,9 +53,9 @@ cd flexynesis
 conda create --name flexynesis --file spec-file.txt
 conda activate flexynesis
 ```
-4. Install the project using setuptools:
+4. Install the project:
 ```
-python setup.py install
+pip install -e .
 ```
 
 # Testing
