@@ -64,7 +64,7 @@ class HyperparameterTuning:
         print("Building final model with best params:",best_params_dict)
         # Train the model with the best hyperparameters
         model = self.model_class(best_params_dict, self.dataset, self.task)
-        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']))
+        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), gradient_clip_val=1.0)
         trainer.fit(model)
         return model, best_params
     
