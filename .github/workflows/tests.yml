@@ -7,7 +7,7 @@ on:
     paths:
       - "flexynesis/**"
       - "tests/**"
-      - "setup.py"
+      - "pyproject.toml"
       - "spec-file.txt"
       - ".github/workflows/tests.yml"
 
@@ -15,7 +15,7 @@ on:
     paths:
       - "flexynesis/**"
       - "tests/**"
-      - "setup.py"
+      - "pyproject.toml"
       - "spec-file.txt"
       - ".github/workflows/tests.yml"
 
@@ -58,7 +58,7 @@ jobs:
       shell: bash -l {0}
       run: |
         conda activate my_env
-        python setup.py install
+        pip install -e .
 
     - name: Run Unit Tests
       shell: bash -l {0}
