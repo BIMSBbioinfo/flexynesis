@@ -46,6 +46,8 @@ class supervised_vae(pl.LightningModule):
         self.val_size = val_size
         self.task = task
         self.dat_train, self.dat_val = self.prepare_data()
+        # sometimes the model may have exploding/vanishing gradients leading to NaN values
+        self.nan_detected = False 
         
         layers = list(dataset.dat.keys())
         input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]

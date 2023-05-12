@@ -27,11 +27,16 @@ class HyperparameterTuning:
     def objective(self, params):
         model = self.model_class(params, self.dataset, self.task)
         print(params)
-        trainer = pl.Trainer(max_epochs=int(params['epochs']))
+        trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=1)
         print(trainer)
-        # Train and validate the model
-        trainer.fit(model)
-        val_loss = trainer.validate(model)[0]['val_loss']
+        try:
+            # Train the model
+            trainer.fit(model)
+            # Validate the model
+            val_loss = trainer.validate(model)[0]['val_loss']
+        except ValueError as e:
+            print(str(e))
+            val_loss = float('inf')  # or some other value indicating failure
         return val_loss    
     
     def perform_tuning(self):
