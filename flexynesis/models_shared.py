@@ -12,35 +12,29 @@ class Encoder(nn.Module):
     log variance for the latent space representation.
     """
     def __init__(self, input_dim, hidden_dims, latent_dim):
-        """
-        Initializes the Encoder class with given input dimensions, hidden layer dimensions, and latent dimensions.
-        
-        Args:
-            input_dim (int): The dimensionality of the input data.
-            hidden_dims (list): A list of integers representing the dimensions of the hidden layers.
-            latent_dim (int): The dimensionality of the latent space.
-        """
         super(Encoder, self).__init__()
 
         self.LeakyReLU = nn.LeakyReLU(0.2)
         
-        # Create a list to store the hidden layers
         hidden_layers = []
         
-        # Add the input layer to the first hidden layer
         hidden_layers.append(nn.Linear(input_dim, hidden_dims[0]))
+        nn.init.xavier_uniform_(hidden_layers[-1].weight)
         hidden_layers.append(self.LeakyReLU)
+        hidden_layers.append(nn.BatchNorm1d(hidden_dims[0]))
 
-        # Create the hidden layers
         for i in range(len(hidden_dims)-1):
             hidden_layers.append(nn.Linear(hidden_dims[i], hidden_dims[i+1]))
+            nn.init.xavier_uniform_(hidden_layers[-1].weight)
             hidden_layers.append(self.LeakyReLU)
+            hidden_layers.append(nn.BatchNorm1d(hidden_dims[i+1]))
 
-        # Add the hidden layers to the model using nn.Sequential
         self.hidden_layers = nn.Sequential(*hidden_layers)
         
         self.FC_mean  = nn.Linear(hidden_dims[-1], latent_dim)
+        nn.init.xavier_uniform_(self.FC_mean.weight)
         self.FC_var   = nn.Linear(hidden_dims[-1], latent_dim)
+        nn.init.xavier_uniform_(self.FC_var.weight)
         
     def forward(self, x):
         """
@@ -67,34 +61,27 @@ class Decoder(nn.Module):
     generating the reconstructed output data.
     """
     def __init__(self, latent_dim, hidden_dims, output_dim):
-        """
-        Initializes the Decoder class with given latent dimensions, hidden layer dimensions, and output dimensions.
-        
-        Args:
-            latent_dim (int): The dimensionality of the latent space.
-            hidden_dims (list): A list of integers representing the dimensions of the hidden layers.
-            output_dim (int): The dimensionality of the output data.
-        """
         super(Decoder, self).__init__()
 
         self.LeakyReLU = nn.LeakyReLU(0.2)
 
-        # Create a list to store the hidden layers
         hidden_layers = []
 
-        # Add the input layer to the first hidden layer
         hidden_layers.append(nn.Linear(latent_dim, hidden_dims[0]))
+        nn.init.xavier_uniform_(hidden_layers[-1].weight)
         hidden_layers.append(self.LeakyReLU)
+        hidden_layers.append(nn.BatchNorm1d(hidden_dims[0]))
 
-        # Create the hidden layers
         for i in range(len(hidden_dims) - 1):
             hidden_layers.append(nn.Linear(hidden_dims[i], hidden_dims[i + 1]))
+            nn.init.xavier_uniform_(hidden_layers[-1].weight)
             hidden_layers.append(self.LeakyReLU)
+            hidden_layers.append(nn.BatchNorm1d(hidden_dims[i+1]))
 
-        # Add the hidden layers to the model using nn.Sequential
         self.hidden_layers = nn.Sequential(*hidden_layers)
 
         self.FC_output = nn.Linear(hidden_dims[-1], output_dim)
+        nn.init.xavier_uniform_(self.FC_output.weight)
 
     def forward(self, x):
         """
@@ -131,7 +118,7 @@ class MLP(nn.Module):
         self.layer_1 = nn.Linear(input_dim, hidden_dim)
         self.layer_out = nn.Linear(hidden_dim, output_dim) if output_dim > 1 else nn.Linear(hidden_dim, 1, bias=False)
         self.relu = nn.ReLU() 
-        self.dropout = nn.Dropout(p=0.4)
+        self.dropout = nn.Dropout(p=0.1)
         self.batchnorm = nn.BatchNorm1d(hidden_dim)
 
     def forward(self, x):
