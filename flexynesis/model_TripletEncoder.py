@@ -120,7 +120,7 @@ class MultiTripletNetwork(pl.LightningModule):
         Returns:
             torch.optim.Optimizer: The configured optimizer.
         """
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.config['lr'])
         return optimizer
     
     def triplet_loss(self, anchor, positive, negative, margin=1.0):
