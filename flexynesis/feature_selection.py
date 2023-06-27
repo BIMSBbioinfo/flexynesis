@@ -106,6 +106,13 @@ def filter_by_laplacian(X, k=5, t=None, topN = 100, remove_redundant = True, thr
     Returns:
     X_selected: (n_samples, n_features) - Filtered data matrix
     """
+    
+    # only apply filtering if topN < n_features
+    if topN >= X.shape[1]: 
+        print("Returning original matrix, demanded # of features is ", 
+        "larger than existing number of features")
+        return X
+    
     # compute laplacian scores
     scores = laplacian_score(X.values, k, t)
     
