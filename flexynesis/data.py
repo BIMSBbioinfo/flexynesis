@@ -154,7 +154,7 @@ class DataImporter:
                 data[file_name] = pd.read_csv(file_path, index_col=0)
         return data
     
-    def cleanup_data(self, df_dict, variance_threshold=1e-5):
+    def cleanup_data(self, df_dict, variance_threshold=1e-5, na_threshold=0.1):
         cleaned_dfs = {}
         sample_masks = []
 
@@ -167,7 +167,19 @@ class DataImporter:
             feature_variances = df.var(axis=1)
             # Keep only features with variance above the threshold
             df = df.loc[feature_variances > variance_threshold, :]
-
+            
+            # Step 2: Remove features with too many NA values
+            # Compute percentage of NA values for each feature
+            na_percentages = df.isna().mean(axis=1)
+            # Keep only features with percentage of NA values below the threshold
+            df = df.loc[na_percentages < na_threshold, :]
+            
+            print("Imputing NA values to median of features",np.sum(df.isna().sum()))
+            # Step 3: Fill NA values with the median of the feature
+            for i in df.index:
+                df.loc[i] = df.loc[i].fillna(df.loc[i].median())
+            print("NA values after fill ",np.sum(df.isna().sum()))
+           
             removed_features_count = original_features_count - df.shape[0]
             print(f"DataFrame {key} - Removed {removed_features_count} features.")
 
