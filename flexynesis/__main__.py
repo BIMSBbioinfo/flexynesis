@@ -66,16 +66,19 @@ def main():
     model, best_params = tuner.perform_tuning()
     
     # make predictions on the test dataset
-    y_pred = model.predict(test_dataset)
+    y_pred_dict = model.predict(test_dataset)
     
     # evaluate predictions 
-    if args.task == 'regression':
-        stats = flexynesis.utils.evaluate_regressor(test_dataset.y, y_pred)
-    if args.task == 'classification':
-        stats = flexynesis.utils.evaluate_classifier(test_dataset.y, y_pred)
-    
+    for var in y_pred_dict.keys():
+        print(var)
+        ind = ~torch.isnan(test_dataset.ann[var])
+        if test_dataset.variable_types[var] == 'numerical':
+            print(flexynesis.evaluate_regressor(test_dataset.ann[var][ind], y_pred_dict[var][ind]))
+        else:
+            print(flexynesis.evaluate_classifier(test_dataset.ann[var][ind], y_pred_dict[var][ind]))
+            
     # save to file 
-    pd.DataFrame(stats.items()).transpose().to_csv(args.outfile, header=False, index=False)
+    # pd.DataFrame(stats.items()).transpose().to_csv(args.outfile, header=False, index=False)
     
 if __name__ == "__main__":
     main()
