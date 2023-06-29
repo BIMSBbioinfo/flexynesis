@@ -83,10 +83,11 @@ class MultiomicDataset(Dataset):
         A PyTorch dataset that can be used for training or evaluation.
     """
 
-    def __init__(self, dat, ann, features, samples):
+    def __init__(self, dat, ann, variable_types, features, samples):
         """Initialize the dataset."""
         self.dat = dat
         self.ann = ann
+        self.variable_types = variable_types
         self.features = features
         self.samples = samples 
 
@@ -212,11 +213,7 @@ class DataImporter:
         train_dat = self.normalize_data(train_dat, scaler_type="standard", fit=True)
         test_dat = self.normalize_data(test_dat, scaler_type="standard", fit=False)
         
-        # convert to MultiomicDataset
-        # training_dataset = MultiomicDataset(train_dat, train_ann, train_features, train_samples)
-        # testing_dataset = MultiomicDataset(test_dat, test_ann, test_features, test_samples)
-        
-        # convert to pytorch datasets 
+        # encode the variable annotations, convert data matrices and annotations pytorch datasets 
         training_dataset = self.get_torch_dataset(train_dat, train_ann, train_samples)
         testing_dataset = self.get_torch_dataset(test_dat, test_ann, test_samples)
        
@@ -280,19 +277,21 @@ class DataImporter:
         # Combine the encoded categorical data with the numerical data
         df_encoded = pd.concat([df.select_dtypes(exclude=['object', 'category']), df_categorical], axis=1)
 
-        return df_encoded
+        # Store the variable types
+        variable_types = {col: 'categorical' for col in df_categorical.columns}
+        variable_types.update({col: 'numerical' for col in df.select_dtypes(exclude=['object', 'category']).columns})
+    
+        return df_encoded, variable_types
 
     def get_torch_dataset(self, dat, ann, samples):
         features = {x: dat[x].index for x in dat.keys()}
         dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
 
-        # Check if any of the DataFrame columns are categorical
-        if ann.select_dtypes(include=['object', 'category']).shape[1] > 0:
-            ann = self.encode_labels(ann)
+        ann, variable_types = self.encode_labels(ann)
 
         # Convert DataFrame to tensor
         # ann = torch.tensor(ann.values, dtype=torch.float)
-        return MultiomicDataset(dat, ann, features, samples)
+        return MultiomicDataset(dat, ann, variable_types, features, samples)
     
     def normalize_data(self, data, scaler_type="standard", fit=True):
         print("normalizing data")
