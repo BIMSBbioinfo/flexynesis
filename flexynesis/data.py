@@ -103,7 +103,7 @@ class MultiomicDataset(Dataset):
                 2. The label for the given sample.
         """
         subset_dat = {x: self.dat[x][index] for x in self.dat.keys()}
-        subset_ann = self.ann.iloc[index]
+        subset_ann = {x: self.ann[x][index] for x in self.ann.keys()}
         return subset_dat, subset_ann
     
     def __len__ (self):
@@ -112,7 +112,7 @@ class MultiomicDataset(Dataset):
         Returns:
             An integer representing the number of samples in the dataset.
         """
-        return self.ann.shape[0]
+        return len(self.samples)
     
 # convert_to_labels: if true, given a numeric list, convert to binary labels by median value 
 class DataImporter:
@@ -264,6 +264,8 @@ class DataImporter:
 
     def encode_labels(self, df):
         def encode_column(series):
+            # Fill NA values with 'missing' 
+            # series = series.fillna('missing')
             if series.name not in self.encoders:
                 self.encoders[series.name] = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
                 encoded_series = self.encoders[series.name].fit_transform(series.to_frame())
@@ -273,14 +275,14 @@ class DataImporter:
 
         # Select only the categorical columns
         df_categorical = df.select_dtypes(include=['object', 'category']).apply(encode_column)
-        
+
         # Combine the encoded categorical data with the numerical data
         df_encoded = pd.concat([df.select_dtypes(exclude=['object', 'category']), df_categorical], axis=1)
 
         # Store the variable types
         variable_types = {col: 'categorical' for col in df_categorical.columns}
         variable_types.update({col: 'numerical' for col in df.select_dtypes(exclude=['object', 'category']).columns})
-    
+
         return df_encoded, variable_types
 
     def get_torch_dataset(self, dat, ann, samples):
@@ -290,7 +292,7 @@ class DataImporter:
         ann, variable_types = self.encode_labels(ann)
 
         # Convert DataFrame to tensor
-        # ann = torch.tensor(ann.values, dtype=torch.float)
+        ann = {col: torch.from_numpy(ann[col].values) for col in ann.columns}
         return MultiomicDataset(dat, ann, variable_types, features, samples)
     
     def normalize_data(self, data, scaler_type="standard", fit=True):
