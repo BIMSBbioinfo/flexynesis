@@ -16,32 +16,11 @@ from .models_shared import *
     
 
 class DirectPred(pl.LightningModule):
-    """
-    DirectPred is a PyTorch Lightning module for multi-omics data fusion and prediction.
-
-    This class implements a deep learning model for fusing and predicting from multiple omics layers/matrices.
-    Each omics layer is encoded separately using an MLP encoder. The resulting latent representations
-    are then concatenated and passed through a fully connected network (fusion layer) to make predictions.
-
-    Args:
-        num_layers (int): Number of omics layers/matrices.
-        input_dims (list of int): A list of input dimensions for each omics layer.
-        latent_dim (int, optional): The dimension of the latent space for each encoder. Defaults to 16.
-        num_class (int, optional): Number of output classes for the prediction task. Defaults to 1.
-        **kwargs: Additional keyword arguments to be passed to the MLP encoders.
-
-    Example:
-
-        # Instantiate a DirectPred model with 2 omics layers and input dimensions of 100 and 200
-        model = DirectPred(num_layers=2, input_dims=[100, 200], latent_dim=16, num_class=1)
-
-    """
-
-    def __init__(self, config, dataset, task, val_size = 0.2):
+    def __init__(self, config, dataset, target_variables, val_size = 0.2):
         super(DirectPred, self).__init__()
         self.config = config
         self.dataset = dataset
-        self.task = task
+        self.target_variables = target_variables
         self.val_size = val_size
         self.dat_train, self.dat_val = self.prepare_data()
         layers = list(dataset.dat.keys())
@@ -51,15 +30,17 @@ class DirectPred(pl.LightningModule):
             MLP(input_dim=input_dims[i],
                 hidden_dim=self.config['hidden_dim'],
                 output_dim=self.config['latent_dim']) for i in range(len(layers))])
-        if self.task == 'regression':
-            num_class = 1
-        elif self.task == 'classification':
-            num_class = len(np.unique(self.dataset.y))
 
-        self.MLP = MLP(input_dim=self.config['latent_dim'] * len(layers),
-                       hidden_dim=self.config['hidden_dim'],
-                       output_dim=num_class)
-        
+        self.MLPs = nn.ModuleDict() # using ModuleDict to store multiple MLPs
+        for target_var in self.target_variables:
+            if self.dataset.variable_types[target_var] == 'numerical':
+                num_class = 1
+            else:
+                num_class = len(np.unique(self.dataset.ann[target_var]))
+            self.MLPs[target_var] = MLP(input_dim=self.config['latent_dim'] * len(layers),
+                                         hidden_dim=self.config['hidden_dim'],
+                                         output_dim=num_class)
+
     def forward(self, x_list):
         """
         Forward pass of the DirectPred model.
@@ -68,15 +49,18 @@ class DirectPred(pl.LightningModule):
             x_list (list of torch.Tensor): A list of input matrices (omics layers), one for each layer.
 
         Returns:
-            tuple: A tuple containing the predicted output (y_pred) and a list of latent embeddings for each omics layer.
-        """
+            dict: A dictionary where each key-value pair corresponds to the target variable name and its predicted output respectively.
+        """        
         embeddings_list = []
         # Process each input matrix with its corresponding Encoder
         for i, x in enumerate(x_list):
             embeddings_list.append(self.encoders[i](x))
-        # Push concatenated encodings through a fully connected network to predict
-        y_pred = self.MLP(torch.cat(embeddings_list, dim=1))
-        return y_pred, embeddings_list
+        embeddings_concat = torch.cat(embeddings_list, dim=1)
+
+        outputs = {}
+        for target_var, mlp in self.MLPs.items():
+            outputs[target_var] = mlp(embeddings_concat)
+        return outputs    
     
     def configure_optimizers(self):
         """
@@ -98,19 +82,44 @@ class DirectPred(pl.LightningModule):
             batch_idx (int): The index of the current batch.
 
         Returns:
-            torch.Tensor: The loss for the current training step.
+            torch.Tensor: The total loss for the current training step.
         """
-        dat, y = train_batch
+        dat, y_dict = train_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
-        y_hat = self.forward(x_list)[0]
-        
-        if self.task == 'regression':
-            loss = F.mse_loss(torch.flatten(y_hat), y)
-        elif self.task == 'classification':
-            loss = F.cross_entropy(y_hat, y.long())
-        self.log("train_loss", loss)
-        return loss
+
+        outputs = self.forward(x_list)
+        total_loss = 0        
+        for target_var in self.target_variables:
+            y_hat = outputs[target_var]
+            y = y_dict[target_var]
+
+            if self.dataset.variable_types[target_var] == 'numerical':
+                # Ignore instances with missing labels for numerical variables
+                valid_indices = ~torch.isnan(y)
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    loss = F.mse_loss(torch.flatten(y_hat), y.float())
+                    self.log(f"train_loss_{target_var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
+            else:
+                # Ignore instances with missing labels for categorical variables
+                # Assuming that missing values were encoded as -1
+                valid_indices = (y != -1) & (~torch.isnan(y))
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    loss = F.cross_entropy(y_hat, y.long())
+                    self.log(f"train_loss_{target_var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
+        self.log("train_loss", total_loss)
+        return total_loss
+
     
     def validation_step(self, val_batch, batch_idx):
         """
@@ -119,16 +128,42 @@ class DirectPred(pl.LightningModule):
         Args:
             val_batch (tuple): A tuple containing the input data and labels for the current batch.
             batch_idx (int): The index of the current batch.
+
+        Returns:
+            torch.Tensor: The total loss for the current validation step.
         """
-        dat, y = val_batch
+        dat, y_dict = val_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
-        y_hat = self.forward(x_list)[0]
-        if self.task == 'regression':
-            loss = F.mse_loss(torch.flatten(y_hat), y)
-        elif self.task == 'classification':
-            loss = F.cross_entropy(y_hat, y.long())
-        self.log("val_loss", loss)
+
+        outputs = self.forward(x_list)
+        total_loss = 0        
+        for target_var in self.target_variables:
+            y_hat = outputs[target_var]
+            y = y_dict[target_var]
+
+            if self.dataset.variable_types[target_var] == 'numerical':
+                valid_indices = ~torch.isnan(y)
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    loss = F.mse_loss(torch.flatten(y_hat), y.float())
+                    self.log(f"val_loss_{target_var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
+            else:
+                valid_indices = (y != -1) & (~torch.isnan(y))
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    loss = F.cross_entropy(y_hat, y.long())
+                    self.log(f"val_loss_{target_var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
+        self.log("val_loss", total_loss)
+        return total_loss
 
     def prepare_data(self):
         lt = int(len(self.dataset)*(1-self.val_size))
@@ -151,15 +186,21 @@ class DirectPred(pl.LightningModule):
             dataset: The dataset to evaluate the model on.
 
         Returns:
-            predicted labels
+            A dictionary where each key is a target variable and the corresponding value is the predicted output for that variable.
         """
         self.eval()
         layers = dataset.dat.keys()
         x_list = [dataset.dat[x] for x in layers]
-        y_pred = self.forward(x_list)[0].detach().numpy()
-        if self.task == 'classification':
-            return np.argmax(y_pred, axis=1)
-        return y_pred
+        outputs = self.forward(x_list)
+
+        predictions = {}
+        for target_var in self.target_variables:
+            y_pred = outputs[target_var].detach().numpy()
+            if self.dataset.variable_types[target_var] == 'categorical':
+                predictions[target_var] = np.argmax(y_pred, axis=1)
+            else:
+                predictions[target_var] = y_pred
+        return predictions
 
 
 
