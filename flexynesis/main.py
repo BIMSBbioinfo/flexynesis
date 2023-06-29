@@ -16,16 +16,16 @@ import numpy as np
 
 
 class HyperparameterTuning:
-    def __init__(self, dataset, model_class, config_name, task, n_iter = 10):
+    def __init__(self, dataset, model_class, target_variables, config_name, n_iter = 10):
         self.dataset = dataset
         self.model_class = model_class
+        self.target_variables = target_variables
         self.config_name = config_name
         self.space = search_spaces[config_name]
         self.n_iter = n_iter
-        self.task = task
 
     def objective(self, params):
-        model = self.model_class(params, self.dataset, self.task)
+        model = self.model_class(params, self.dataset, self.target_variables)
         print(params)
         trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=1)
         print(trainer)
@@ -63,7 +63,7 @@ class HyperparameterTuning:
         best_params_dict = {param.name: value for param, value in zip(self.space, best_params)}
         print("Building final model with best params:",best_params_dict)
         # Train the model with the best hyperparameters
-        model = self.model_class(best_params_dict, self.dataset, self.task)
+        model = self.model_class(best_params_dict, self.dataset, self.target_variables)
         trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), gradient_clip_val=1.0)
         trainer.fit(model)
         return model, best_params

@@ -10,8 +10,7 @@ def main():
     
     parser.add_argument("--data_path", help="Path to the folder with train/test data files", type=str)
     parser.add_argument("--model_class", help="The kind of model class to instantiate", type=str, choices=["DirectPred", "supervised_vae", "MultiTripletNetwork"])
-    parser.add_argument("--outcome_var", help="Which outcome variable in 'clin.csv' to use for predictions", type = str)
-    parser.add_argument("--task", help="What kind of modeling task to do", type = str, choices=["regression", "classification"])
+    parser.add_argument("--target_variables", help="Which variables in 'clin.csv' to use for predictions", type = str)
     parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"])
     parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int)
     parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int)
@@ -48,24 +47,18 @@ def main():
         concatenate = True
         
     data_importer = flexynesis.DataImporter(path = args.data_path, 
-                                            outcome_var = args.outcome_var, 
                                             data_types = args.data_types.strip().split(','),
                                             concatenate = concatenate, 
                                             min_features= args.features_min, 
                                             top_percentile= args.features_top_percentile)
     
     train_dataset, test_dataset = data_importer.import_data()
-
-    # augment the dataset using PC distortions
-    # TODO: make it configurable by the user
-    #print("augmenting dataset")
-    #train_dataset = flexynesis.augment_dataset_with_pc_distortion(train_dataset, [0, 1, 2], [0.8, 1.2], 1)
-    #print("New dataset size:", len(train_dataset))
     
     # define a tuner object, which will instantiate a DirectPred class 
     # using the input dataset and the tuning configuration from the config.py
-    tuner = flexynesis.HyperparameterTuning(train_dataset, model_class = model_class, 
-                                            task = args.task,
+    tuner = flexynesis.HyperparameterTuning(train_dataset, 
+                                            model_class = model_class, 
+                                            target_variables = args.target_variables.strip().split(','), 
                                             config_name = config_name, 
                                             n_iter=int(args.hpo_iter))    
     
