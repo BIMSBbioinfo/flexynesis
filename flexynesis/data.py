@@ -5,7 +5,7 @@ from functools import reduce
 import torch
 import os
 
-from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler, PowerTransformer
+from sklearn.preprocessing import OrdinalEncoder, StandardScaler, MinMaxScaler, PowerTransformer
 from .feature_selection import filter_by_laplacian
 
 from itertools import chain
@@ -75,7 +75,7 @@ class MultiomicDataset(Dataset):
 
     Args:
         dat (dict): A dictionary with keys corresponding to different types of data and values corresponding to matrices of the same shape. All matrices must have the same number of samples (rows).
-        y (list or np.array): A 1D array of labels with length equal to the number of samples.
+        ann (data.frame): Data frame with samples on the rows, sample annotations on the columns 
         features (list or np.array): A 1D array of feature names with length equal to the number of columns in each matrix.
         samples (list or np.array): A 1D array of sample names with length equal to the number of rows in each matrix.
 
@@ -83,10 +83,10 @@ class MultiomicDataset(Dataset):
         A PyTorch dataset that can be used for training or evaluation.
     """
 
-    def __init__(self, dat, y, features, samples):
+    def __init__(self, dat, ann, features, samples):
         """Initialize the dataset."""
         self.dat = dat
-        self.y = y
+        self.ann = ann
         self.features = features
         self.samples = samples 
 
@@ -102,8 +102,8 @@ class MultiomicDataset(Dataset):
                 2. The label for the given sample.
         """
         subset_dat = {x: self.dat[x][index] for x in self.dat.keys()}
-        subset_y = self.y[index]
-        return subset_dat, subset_y
+        subset_ann = self.ann.iloc[index]
+        return subset_dat, subset_ann
     
     def __len__ (self):
         """Get the total number of samples in the dataset.
@@ -111,34 +111,18 @@ class MultiomicDataset(Dataset):
         Returns:
             An integer representing the number of samples in the dataset.
         """
-        return len(self.y)
+        return self.ann.shape[0]
     
-    def subset(self, indices):
-        """Create a new dataset containing only the specified indices.
-
-        Args:
-            indices (list or np.array): A 1D array of indices to include in the subset.
-
-        Returns:
-            A new MultiomicDataset containing the specified subset of data.
-        """
-        indices = np.asarray(indices)
-        subset_dat = {key: self.dat[key][indices] for key in self.dat.keys()}
-        subset_y = np.asarray(self.y)[indices]
-        subset_samples = np.asarray(self.samples)[indices]
-        return MultiomicDataset(subset_dat, subset_y, self.features, subset_samples)
-
 # convert_to_labels: if true, given a numeric list, convert to binary labels by median value 
 class DataImporter:
-    def __init__(self, path, outcome_var, data_types, concatenate = False, min_features=None, top_percentile=None):
+    def __init__(self, path, data_types, concatenate = False, min_features=None, top_percentile=None):
         self.path = path
-        self.outcome_var = outcome_var
         self.data_types = data_types
         self.concatenate = concatenate
         self.min_features = min_features
         self.top_percentile = top_percentile
-        # Initialize the label encoder
-        self.label_encoder = None # only used of labels are categorical
+        # Initialize a dictionary to store the label encoders
+        self.encoders = {} # used if labels are categorical 
         # initialize data scalers
         self.scalers = None
         # initialize data transformers
@@ -213,9 +197,9 @@ class DataImporter:
         training_data = self.read_data(training_path)
         testing_data = self.read_data(testing_path)
 
-        # cleanup uninformative features/samples, assign labels, do feature selection on training data
-        train_dat, train_y, train_samples = self.process_data(training_data, split = 'train')
-        test_dat, test_y, test_samples = self.process_data(testing_data, split = 'test')
+        # cleanup uninformative features/samples, subset annotation data, do feature selection on training data
+        train_dat, train_ann, train_samples, train_features = self.process_data(training_data, split = 'train')
+        test_dat, test_ann, test_samples, test_features = self.process_data(testing_data, split = 'test')
         
         # harmonize feature sets in train/test
         train_dat, test_dat = self.harmonize(train_dat, test_dat)
@@ -225,9 +209,13 @@ class DataImporter:
         train_dat = self.normalize_data(train_dat, scaler_type="standard", fit=True)
         test_dat = self.normalize_data(test_dat, scaler_type="standard", fit=False)
         
+        # convert to MultiomicDataset
+        # training_dataset = MultiomicDataset(train_dat, train_ann, train_features, train_samples)
+        # testing_dataset = MultiomicDataset(test_dat, test_ann, test_features, test_samples)
+        
         # convert to pytorch datasets 
-        training_dataset = self.get_torch_dataset(train_dat, train_y, train_samples)
-        testing_dataset = self.get_torch_dataset(test_dat, test_y, test_samples)
+        training_dataset = self.get_torch_dataset(train_dat, train_ann, train_samples)
+        testing_dataset = self.get_torch_dataset(test_dat, test_ann, test_samples)
        
         # for early fusion, concatenate all data matrices and feature lists 
         if self.concatenate:
@@ -258,47 +246,51 @@ class DataImporter:
         # remove uninformative features and samples with no information (from data matrices)
         dat = self.cleanup_data({x: data[x] for x in self.data_types})
         ann = data['clin']
-        
-        dat, y, samples = self.get_labels(dat, ann)
-        
+        dat, ann, samples = self.get_labels(dat, ann)
         # do feature selection: only applied to training data
         if split == 'train': 
             if self.min_features or self.top_percentile:
                 dat = self.filter(dat, self.min_features, self.top_percentile)
-        return dat, y, samples
+        features = {x: dat[x].index for x in dat.keys()}
+        return dat, ann, samples, features
 
     def get_labels(self, dat, ann):
-        y = ann[self.outcome_var]
-        y = y[~y.isna()]
-
+        # subset samples and reorder annotations for the samples 
         samples = list(reduce(set.intersection, [set(item) for item in [dat[x].columns for x in dat.keys()]]))
-        samples = list(set(y.index).intersection(samples))
+        samples = list(set(ann.index).intersection(samples))
         dat = {x: dat[x][samples] for x in dat.keys()}
-        y = y[samples]
-        return dat, y, samples
+        ann = ann.loc[samples]
+        return dat, ann, samples
 
-    def encode_labels(self, labels):
-        if self.label_encoder is None:
-            self.label_encoder = LabelEncoder()
-            encoded_labels = self.label_encoder.fit_transform(labels)
-        else:
-            encoded_labels = self.label_encoder.transform(labels)
-        return encoded_labels
+    def encode_labels(self, df):
+        def encode_column(series):
+            if series.name not in self.encoders:
+                self.encoders[series.name] = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
+                encoded_series = self.encoders[series.name].fit_transform(series.to_frame())
+            else:
+                encoded_series = self.encoders[series.name].transform(series.to_frame())
+            return encoded_series.ravel()
 
-    def get_torch_dataset(self, dat, labels, samples):
+        # Select only the categorical columns
+        df_categorical = df.select_dtypes(include=['object', 'category']).apply(encode_column)
+        
+        # Combine the encoded categorical data with the numerical data
+        df_encoded = pd.concat([df.select_dtypes(exclude=['object', 'category']), df_categorical], axis=1)
+
+        return df_encoded
+
+    def get_torch_dataset(self, dat, ann, samples):
         features = {x: dat[x].index for x in dat.keys()}
         dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
 
-        # Check if the labels are categorical or numerical
-        is_categorical = not np.issubdtype(np.array(labels).dtype, np.number)
+        # Check if any of the DataFrame columns are categorical
+        if ann.select_dtypes(include=['object', 'category']).shape[1] > 0:
+            ann = self.encode_labels(ann)
 
-        # Encode labels if they are categorical
-        if is_categorical:
-            labels = self.encode_labels(labels)
-
-        y = torch.from_numpy(np.array(labels)).float()
-        return MultiomicDataset(dat, y, features, samples)
-
+        # Convert DataFrame to tensor
+        # ann = torch.tensor(ann.values, dtype=torch.float)
+        return MultiomicDataset(dat, ann, features, samples)
+    
     def normalize_data(self, data, scaler_type="standard", fit=True):
         print("normalizing data")
         # notice matrix transpositions during fit and finally after transformation
