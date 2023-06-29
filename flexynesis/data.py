@@ -158,12 +158,15 @@ class DataImporter:
             # Keep only features with percentage of NA values below the threshold
             df = df.loc[na_percentages < na_threshold, :]
             
-            print("Imputing NA values to median of features",np.sum(df.isna().sum()))
             # Step 3: Fill NA values with the median of the feature
-            for i in df.index:
-                df.loc[i] = df.loc[i].fillna(df.loc[i].median())
-            print("NA values after fill ",np.sum(df.isna().sum()))
-           
+            # Check if there are any NA values in the DataFrame
+            if np.sum(df.isna().sum()) > 0:
+                print("Imputing NA values to median of features", np.sum(df.isna().sum()))
+                for i in df.index:
+                    df.loc[i] = df.loc[i].fillna(df.loc[i].median())
+                    
+            print("Number of NA values: ",np.sum(df.isna().sum()))
+                                   
             removed_features_count = original_features_count - df.shape[0]
             print(f"DataFrame {key} - Removed {removed_features_count} features.")
 
