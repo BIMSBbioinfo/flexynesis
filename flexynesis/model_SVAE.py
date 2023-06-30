@@ -39,12 +39,15 @@ class supervised_vae(pl.LightningModule):
         model = supervised_vae(num_layers=2, input_dims=[100, 200], hidden_dims=[64, 32], latent_dim=16, num_class=1)
 
     """
-    def __init__(self, config, dataset, task, val_size = 0.2):
+    def __init__(self,  config, dataset, target_variables, batch_variables = None, val_size = 0.2):
         super(supervised_vae, self).__init__()
         self.config = config
         self.dataset = dataset
+        self.target_variables = target_variables
+        self.batch_variables = batch_variables
+        self.variables = target_variables + batch_variables if batch_variables else target_variables
         self.val_size = val_size
-        self.task = task
+
         self.dat_train, self.dat_val = self.prepare_data()
         # sometimes the model may have exploding/vanishing gradients leading to NaN values
         self.nan_detected = False 
@@ -59,15 +62,17 @@ class supervised_vae(pl.LightningModule):
         # list of decoders to decode each omics layer separately 
         self.decoders = nn.ModuleList([Decoder(config['latent_dim'], [config['hidden_dim']], input_dims[i]) for i in range(len(layers))])
 
-        if self.task == 'regression':
-            num_class = 1
-        elif self.task == 'classification':
-            num_class = len(np.unique(self.dataset.y))
-
-        # define supervisor head
-        self.MLP = MLP(input_dim = config['latent_dim'], 
-                       hidden_dim = config['supervisor_hidden_dim'], 
-                       output_dim = num_class)
+        # define supervisor heads
+        # using ModuleDict to store multiple MLPs
+        self.MLPs = nn.ModuleDict()         
+        for var in self.variables:
+            if self.dataset.variable_types[var] == 'numerical':
+                num_class = 1
+            else:
+                num_class = len(np.unique(self.dataset.ann[var]))
+            self.MLPs[var] = MLP(input_dim = config['latent_dim'], 
+                                 hidden_dim = config['supervisor_hidden_dim'], 
+                                 output_dim = num_class)
                                        
     def multi_encoder(self, x_list):
         """
@@ -117,10 +122,12 @@ class supervised_vae(pl.LightningModule):
         # Decode each latent variable with its corresponding Decoder
         x_hat_list = [self.decoders[i](z) for i in range(len(x_list))]
 
-        #run the supervisor 
-        y_pred = self.MLP(z)
-        
-        return x_hat_list, z, mean, log_var, y_pred
+        #run the supervisor heads using the latent layer as input
+        outputs = {}
+        for var, mlp in self.MLPs.items():
+            outputs[var] = mlp(z)
+            
+        return x_hat_list, z, mean, log_var, outputs
         
     def reparameterization(self, mean, var):
         """
@@ -149,80 +156,155 @@ class supervised_vae(pl.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
         """
-        Perform a training step.
+        Perform a single training step.
 
         Args:
-            train_batch (tuple): Tuple containing:
-                - dat (dict): Dictionary containing input matrices for each omics layer.
-                - y (torch.Tensor): Ground truth labels.
-            batch_idx (int): Index of the current batch.
+            train_batch (tuple): A tuple containing the input data and labels for the current batch.
+            batch_idx (int): The index of the current batch.
 
         Returns:
-            torch.Tensor: Loss value for the current training step.
+            torch.Tensor: The total loss for the current training step.
         """
-        dat, y = train_batch
+        dat, y_dict = train_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
-        mean, log_var = self.multi_encoder(x_list)
-        z = self.reparameterization(mean, torch.exp(0.5 * log_var)) # takes exponential function (log var -> var)
+        
+        x_hat_list, z, mean, log_var, outputs = self.forward(x_list)
         
         # Check for NaNs in the latent space
         if torch.isnan(z).any():
             raise ValueError("NaN value detected in latent factors")
         
-        x_hat_list = [self.decoders[i](z) for i in range(len(x_list))]
-        y_pred = self.MLP(z)
-        
         # compute mmd loss for each layer and take average
         mmd_loss_list = [self.MMD_loss(z.shape[1], z, x_hat_list[i], x_list[i]) for i in range(len(layers))]
         mmd_loss = torch.mean(torch.stack(mmd_loss_list))
 
-        if self.task == 'regression':
-            sp_loss = F.mse_loss(torch.flatten(y_pred), y)
-        elif self.task == 'classification':
-            sp_loss = F.cross_entropy(y_pred, y.long())
-            
-        loss = mmd_loss + sp_loss
+        # compute loss values for the supervisor heads 
+        total_loss = 0        
+        for var in self.variables:
+            y_hat = outputs[var]
+            y = y_dict[var]
+
+            if self.dataset.variable_types[var] == 'numerical':
+                # Ignore instances with missing labels for numerical variables
+                valid_indices = ~torch.isnan(y)
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    
+                    loss = F.mse_loss(torch.flatten(y_hat), y.float())
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
+                    self.log(f"train_loss_{var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
+            else:
+                # Ignore instances with missing labels for categorical variables
+                # Assuming that missing values were encoded as -1
+                valid_indices = (y != -1) & (~torch.isnan(y))
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    loss = F.cross_entropy(y_hat, y.long())
+                    
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
+                    self.log(f"train_loss_{var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
         
-        self.log_dict({'train_loss': loss, 'mmd': mmd_loss, 'sp': sp_loss}, prog_bar=True)
-        return loss
+        train_loss = mmd_loss + total_loss
+        
+        self.log_dict({'train_loss': train_loss, 'mmd': mmd_loss, 'sp': total_loss}, prog_bar=True)
+        return train_loss
     
     def validation_step(self, val_batch, batch_idx):
         """
-        Perform a validation step.
+        Perform a single training step.
 
         Args:
-            val_batch (tuple): Tuple containing:
-                - dat (dict): Dictionary containing input matrices for each omics layer.
-                - y (torch.Tensor): Ground truth labels.
-            batch_idx (int): Index of the current batch.
+            val_batch (tuple): A tuple containing the input data and labels for the current batch.
+            batch_idx (int): The index of the current batch.
 
         Returns:
-            torch.Tensor: Loss value for the current validation step.
+            torch.Tensor: The total loss for the current training step.
         """
-
-        dat, y = val_batch
+        dat, y_dict = val_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
-        mean, log_var = self.multi_encoder(x_list)
         
-        z = self.reparameterization(mean, torch.exp(0.5 * log_var)) # takes exponential function (log var -> var)
-        x_hat_list = [self.decoders[i](z) for i in range(len(x_list))]
-        y_pred = self.MLP(z)
+        x_hat_list, z, mean, log_var, outputs = self.forward(x_list)
+        
+        # Check for NaNs in the latent space
+        if torch.isnan(z).any():
+            raise ValueError("NaN value detected in latent factors")
         
         # compute mmd loss for each layer and take average
         mmd_loss_list = [self.MMD_loss(z.shape[1], z, x_hat_list[i], x_list[i]) for i in range(len(layers))]
         mmd_loss = torch.mean(torch.stack(mmd_loss_list))
 
-        if self.task == 'regression':
-            sp_loss = F.mse_loss(torch.flatten(y_pred), y)
-        elif self.task == 'classification':
-            sp_loss = F.cross_entropy(y_pred, y.long())
+        # compute loss values for the supervisor heads 
+        total_loss = 0        
+        for var in self.variables:
+            y_hat = outputs[var]
+            y = y_dict[var]
 
-        loss = mmd_loss + sp_loss
+            if self.dataset.variable_types[var] == 'numerical':
+                # Ignore instances with missing labels for numerical variables
+                valid_indices = ~torch.isnan(y)
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    
+                    loss = F.mse_loss(torch.flatten(y_hat), y.float())
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
+                    self.log(f"train_loss_{var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
+            else:
+                # Ignore instances with missing labels for categorical variables
+                # Assuming that missing values were encoded as -1
+                valid_indices = (y != -1) & (~torch.isnan(y))
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    loss = F.cross_entropy(y_hat, y.long())
+                    
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
+                    self.log(f"train_loss_{var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
         
-        self.log('val_loss', loss, prog_bar=True)
-        return loss
+        val_loss = mmd_loss + total_loss
+        
+        self.log_dict({'val_loss': val_loss, 'mmd': mmd_loss, 'sp': total_loss}, prog_bar=True)
+        return val_loss
                                        
     def prepare_data(self):
         lt = int(len(self.dataset)*(1-self.val_size))
@@ -269,12 +351,17 @@ class supervised_vae(pl.LightningModule):
         self.eval()
         layers = list(dataset.dat.keys())
         x_list = [dataset.dat[x] for x in layers]
-        X_hat, z, mean, log_var, y_pred = self.forward(x_list)
+        X_hat, z, mean, log_var, outputs = self.forward(x_list)
         
-        y_pred = y_pred.detach().numpy()
-        if self.task == 'classification':
-            return np.argmax(y_pred, axis=1)
-        return y_pred
+        predictions = {}
+        for var in self.variables:
+            y_pred = outputs[var].detach().numpy()
+            if self.dataset.variable_types[var] == 'categorical':
+                predictions[var] = np.argmax(y_pred, axis=1)
+            else:
+                predictions[var] = y_pred
+
+        return predictions
     
     def compute_kernel(self, x, y):
         """
