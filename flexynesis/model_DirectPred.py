@@ -16,13 +16,13 @@ from .models_shared import *
     
 
 class DirectPred(pl.LightningModule):
-    def __init__(self, config, dataset, target_variables, batch_variables, val_size = 0.2):
+    def __init__(self, config, dataset, target_variables, batch_variables = None, val_size = 0.2):
         super(DirectPred, self).__init__()
         self.config = config
         self.dataset = dataset
         self.target_variables = target_variables
         self.batch_variables = batch_variables
-        self.variables = target_variables + batch_variables
+        self.variables = target_variables + batch_variables if batch_variables else target_variables
         self.val_size = val_size
         self.dat_train, self.dat_val = self.prepare_data()
         layers = list(dataset.dat.keys())
@@ -102,7 +102,15 @@ class DirectPred(pl.LightningModule):
                 if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
                     y_hat = y_hat[valid_indices]
                     y = y[valid_indices]
+                    
                     loss = F.mse_loss(torch.flatten(y_hat), y.float())
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
                     self.log(f"train_loss_{var}", loss)
                     total_loss += loss
                 else:
@@ -115,6 +123,14 @@ class DirectPred(pl.LightningModule):
                     y_hat = y_hat[valid_indices]
                     y = y[valid_indices]
                     loss = F.cross_entropy(y_hat, y.long())
+                    
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
                     self.log(f"train_loss_{var}", loss)
                     total_loss += loss
                 else:
@@ -150,6 +166,14 @@ class DirectPred(pl.LightningModule):
                     y_hat = y_hat[valid_indices]
                     y = y[valid_indices]
                     loss = F.mse_loss(torch.flatten(y_hat), y.float())
+                    
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
                     self.log(f"val_loss_{var}", loss)
                     total_loss += loss
                 else:
@@ -160,6 +184,14 @@ class DirectPred(pl.LightningModule):
                     y_hat = y_hat[valid_indices]
                     y = y[valid_indices]
                     loss = F.cross_entropy(y_hat, y.long())
+                    
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
                     self.log(f"val_loss_{var}", loss)
                     total_loss += loss
                 else:
