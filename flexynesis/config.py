@@ -7,7 +7,7 @@ search_spaces = {
         Integer(64, 512, name='hidden_dim'),
         Real(0.0001, 0.01, prior='log-uniform', name='lr'),
         Integer(32, 128, name='batch_size'),
-        Categorical([100, 200], name='epochs')
+        Categorical([100, 200, 300, 400], name='epochs')
     ], 
     'SVAE': [
         Integer(16, 128, name='latent_dim'),
@@ -15,7 +15,7 @@ search_spaces = {
         Integer(8, 32, name='supervisor_hidden_dim'),
         Real(0.0001, 0.01, prior='log-uniform', name='lr'),
         Integer(32, 128, name='batch_size'),
-        Categorical([100, 200], name='epochs')
+        Categorical([100, 200, 300, 400], name='epochs')
     ],
     'MultiTripletNetwork': [
         Integer(16, 128, name='embedding_dim'),
@@ -23,6 +23,6 @@ search_spaces = {
         Integer(8, 32, name='classifier_hidden_dim'),
         Real(0.0001, 0.01, prior='log-uniform', name='lr'),
         Integer(32, 128, name='batch_size'),
-        Categorical([100, 200], name='epochs')
+        Categorical([100, 200, 300, 400], name='epochs')
     ]
 }
