@@ -40,15 +40,17 @@ def plot_umap_scatter(df, n_neighbors=15, min_dist=0.1, n_components=2, metric='
     plt.title('UMAP Scatter Plot')
     plt.show()
 
-def plot_pca(matrix, categories):
+def plot_pca(matrix, labels, color_type='categorical'):
     """
     Plots the first two principal components of the input matrix in a 2D scatter plot,
-    with points colored based on the provided categories.
-    
+    with points colored based on the provided labels.
+
     Args:
-    matrix (np.array): Input data matrix (n_samples, n_features)
-    categories (list): List of categorical values (strings or integers)
+        matrix (np.array): Input data matrix (n_samples, n_features)
+        labels (list): List of labels (strings or integers)
+        color_type (str): Type of the color scale ('categorical' or 'numerical')
     """
+
     # Compute PCA
     pca = PCA(n_components=2)
     transformed_matrix = pca.fit_transform(matrix)
@@ -56,29 +58,34 @@ def plot_pca(matrix, categories):
     # Create a pandas DataFrame for easier plotting
     transformed_df = pd.DataFrame(transformed_matrix, columns=["PC1", "PC2"])
 
-    # Add the categories to the DataFrame
-    transformed_df["Category"] = categories
+    # Add the labels to the DataFrame
+    transformed_df["Label"] = labels
 
-    # Create a unique colormap for the categories
-    unique_categories = list(set(categories))
-    colormap = plt.cm.get_cmap("viridis", len(unique_categories))
+    if color_type == 'categorical':
+        labels = [x if not np.isnan(x) else 'missing' for x in labels]
+        unique_labels = list(set(labels))
+        colormap = plt.cm.get_cmap("tab10", len(unique_labels))
 
-    # Plot the first two principal components with points colored by category
-    for i, category in enumerate(unique_categories):
-        plt.scatter(
-            transformed_df[transformed_df["Category"] == category]["PC1"],
-            transformed_df[transformed_df["Category"] == category]["PC2"],
-            color=colormap(i),
-            label=category,
-            alpha=0.7
-        )
+        for i, label in enumerate(unique_labels):
+            plt.scatter(
+                transformed_df[transformed_df["Label"] == label]["PC1"],
+                transformed_df[transformed_df["Label"] == label]["PC2"],
+                color=colormap(i),
+                label=label,
+                alpha=0.8
+            )
 
-    plt.xlabel("Principal Component 1")
-    plt.ylabel("Principal Component 2")
-    plt.title("PCA Scatter Plot with Colored Categories")
-    plt.legend(title="Categories")
+        plt.xlabel("Principal Component 1")
+        plt.ylabel("Principal Component 2")
+        plt.title("PCA Scatter Plot with Colored Labels")
+        plt.legend(title="Labels")
+
+    elif color_type == 'numerical':
+        sc = plt.scatter(transformed_df["PC1"], transformed_df["PC2"], 
+                         c=labels, alpha=0.7)
+        plt.colorbar(sc, label='Label')
+
     plt.show()
-    
     
 def evaluate_classifier(y_true, y_pred):
     # Balanced accuracy
