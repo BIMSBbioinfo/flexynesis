@@ -236,5 +236,29 @@ class DirectPred(pl.LightningModule):
                 predictions[var] = y_pred
         return predictions
 
+    def transform(self, dataset):
+        """
+        Transform the input data into a lower-dimensional space using the trained encoders.
+
+        Args:
+            dataset: The input dataset containing the omics data.
+
+        Returns:
+            pd.DataFrame: A dataframe of embeddings where the row indices are 
+                          dataset.samples and the column names are created by appending 
+                          the substring "E" to each dimension index.
+        """
+        self.eval()
+        embeddings_list = []
+        # Process each input matrix with its corresponding Encoder
+        for i, x in enumerate(dataset.dat.values()):
+            embeddings_list.append(self.encoders[i](x))
+        embeddings_concat = torch.cat(embeddings_list, dim=1)
+
+        # Converting tensor to numpy array and then to DataFrame
+        embeddings_df = pd.DataFrame(embeddings_concat.detach().numpy(), 
+                                     index=dataset.samples,
+                                     columns=[f"E{dim}" for dim in range(embeddings_concat.shape[1])])
+        return embeddings_df
 
 
