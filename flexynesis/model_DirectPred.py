@@ -16,11 +16,13 @@ from .models_shared import *
     
 
 class DirectPred(pl.LightningModule):
-    def __init__(self, config, dataset, target_variables, val_size = 0.2):
+    def __init__(self, config, dataset, target_variables, batch_variables, val_size = 0.2):
         super(DirectPred, self).__init__()
         self.config = config
         self.dataset = dataset
         self.target_variables = target_variables
+        self.batch_variables = batch_variables
+        self.variables = target_variables + batch_variables
         self.val_size = val_size
         self.dat_train, self.dat_val = self.prepare_data()
         layers = list(dataset.dat.keys())
@@ -32,12 +34,12 @@ class DirectPred(pl.LightningModule):
                 output_dim=self.config['latent_dim']) for i in range(len(layers))])
 
         self.MLPs = nn.ModuleDict() # using ModuleDict to store multiple MLPs
-        for target_var in self.target_variables:
-            if self.dataset.variable_types[target_var] == 'numerical':
+        for var in self.variables:
+            if self.dataset.variable_types[var] == 'numerical':
                 num_class = 1
             else:
-                num_class = len(np.unique(self.dataset.ann[target_var]))
-            self.MLPs[target_var] = MLP(input_dim=self.config['latent_dim'] * len(layers),
+                num_class = len(np.unique(self.dataset.ann[var]))
+            self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(layers),
                                          hidden_dim=self.config['hidden_dim'],
                                          output_dim=num_class)
 
@@ -58,8 +60,8 @@ class DirectPred(pl.LightningModule):
         embeddings_concat = torch.cat(embeddings_list, dim=1)
 
         outputs = {}
-        for target_var, mlp in self.MLPs.items():
-            outputs[target_var] = mlp(embeddings_concat)
+        for var, mlp in self.MLPs.items():
+            outputs[var] = mlp(embeddings_concat)
         return outputs    
     
     def configure_optimizers(self):
@@ -90,18 +92,18 @@ class DirectPred(pl.LightningModule):
 
         outputs = self.forward(x_list)
         total_loss = 0        
-        for target_var in self.target_variables:
-            y_hat = outputs[target_var]
-            y = y_dict[target_var]
+        for var in self.variables:
+            y_hat = outputs[var]
+            y = y_dict[var]
 
-            if self.dataset.variable_types[target_var] == 'numerical':
+            if self.dataset.variable_types[var] == 'numerical':
                 # Ignore instances with missing labels for numerical variables
                 valid_indices = ~torch.isnan(y)
                 if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
                     y_hat = y_hat[valid_indices]
                     y = y[valid_indices]
                     loss = F.mse_loss(torch.flatten(y_hat), y.float())
-                    self.log(f"train_loss_{target_var}", loss)
+                    self.log(f"train_loss_{var}", loss)
                     total_loss += loss
                 else:
                     total_loss += 0.0  # if no valid labels, set loss to 0
@@ -113,7 +115,7 @@ class DirectPred(pl.LightningModule):
                     y_hat = y_hat[valid_indices]
                     y = y[valid_indices]
                     loss = F.cross_entropy(y_hat, y.long())
-                    self.log(f"train_loss_{target_var}", loss)
+                    self.log(f"train_loss_{var}", loss)
                     total_loss += loss
                 else:
                     total_loss += 0.0  # if no valid labels, set loss to 0
@@ -138,17 +140,17 @@ class DirectPred(pl.LightningModule):
 
         outputs = self.forward(x_list)
         total_loss = 0        
-        for target_var in self.target_variables:
-            y_hat = outputs[target_var]
-            y = y_dict[target_var]
+        for var in self.variables:
+            y_hat = outputs[var]
+            y = y_dict[var]
 
-            if self.dataset.variable_types[target_var] == 'numerical':
+            if self.dataset.variable_types[var] == 'numerical':
                 valid_indices = ~torch.isnan(y)
                 if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
                     y_hat = y_hat[valid_indices]
                     y = y[valid_indices]
                     loss = F.mse_loss(torch.flatten(y_hat), y.float())
-                    self.log(f"val_loss_{target_var}", loss)
+                    self.log(f"val_loss_{var}", loss)
                     total_loss += loss
                 else:
                     total_loss += 0.0  # if no valid labels, set loss to 0
@@ -158,7 +160,7 @@ class DirectPred(pl.LightningModule):
                     y_hat = y_hat[valid_indices]
                     y = y[valid_indices]
                     loss = F.cross_entropy(y_hat, y.long())
-                    self.log(f"val_loss_{target_var}", loss)
+                    self.log(f"val_loss_{var}", loss)
                     total_loss += loss
                 else:
                     total_loss += 0.0  # if no valid labels, set loss to 0
@@ -194,12 +196,12 @@ class DirectPred(pl.LightningModule):
         outputs = self.forward(x_list)
 
         predictions = {}
-        for target_var in self.target_variables:
-            y_pred = outputs[target_var].detach().numpy()
-            if self.dataset.variable_types[target_var] == 'categorical':
-                predictions[target_var] = np.argmax(y_pred, axis=1)
+        for var in self.variables:
+            y_pred = outputs[var].detach().numpy()
+            if self.dataset.variable_types[var] == 'categorical':
+                predictions[var] = np.argmax(y_pred, axis=1)
             else:
-                predictions[target_var] = y_pred
+                predictions[var] = y_pred
         return predictions
 
 
