@@ -10,7 +10,8 @@ def main():
     
     parser.add_argument("--data_path", help="Path to the folder with train/test data files", type=str)
     parser.add_argument("--model_class", help="The kind of model class to instantiate", type=str, choices=["DirectPred", "supervised_vae", "MultiTripletNetwork"])
-    parser.add_argument("--target_variables", help="Which variables in 'clin.csv' to use for predictions", type = str)
+    parser.add_argument("--target_variables", help="Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", type = str)
+    parser.add_argument("--batch_variables", help="(Optional) Which variables in 'clin.csv' to use for data integration / batch correction, comma-separated if multiple", type = str)
     parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"])
     parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int)
     parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int)
@@ -58,7 +59,8 @@ def main():
     # using the input dataset and the tuning configuration from the config.py
     tuner = flexynesis.HyperparameterTuning(train_dataset, 
                                             model_class = model_class, 
-                                            target_variables = args.target_variables.strip().split(','), 
+                                            target_variables = args.target_variables,
+                                            batch_variables = args.batch_variables,
                                             config_name = config_name, 
                                             n_iter=int(args.hpo_iter))    
     
