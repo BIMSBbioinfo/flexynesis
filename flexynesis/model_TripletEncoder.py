@@ -57,43 +57,53 @@ class MultiEmbeddingNetwork(nn.Module):
 
 class MultiTripletNetwork(pl.LightningModule):
     """
-    A PyTorch Lightning module implementing a multi-triplet network with a classifier for multi-modal data.
-    
-    The network consists of a multi-embedding network that computes embeddings for different input modalities
-    and a classifier that takes the concatenated embeddings as input and predicts class labels.
-
-    Attributes:
-        multi_embedding_network (MultiEmbeddingNetwork): A multi-embedding network for multiple input modalities.
-        classifier (Classifier): A classifier network for predicting class labels from fused embeddings.
     """
-    def __init__(self, config, dataset, task = 'classification', val_size = 0.2):
+    def __init__(self, config, dataset, target_variables, batch_variables = None, val_size = 0.2):
         """
         Initialize the MultiTripletNetwork with the given parameters.
 
         Args:
-            num_layers (int): The number of layers in the multi-embedding network.
-            input_sizes (list of int): A list of input sizes for each embedding network in the multi-embedding network.
-            hidden_sizes (list of int): A list of hidden sizes for each embedding network in the multi-embedding network.
-            output_size (int): The size of the fused embedding output from the multi-embedding network.
-            num_classes (int): The number of output classes for the classifier.
+            TODO
         """
         super(MultiTripletNetwork, self).__init__()
         
         self.config = config
-        self.task = task
+        self.target_variables = target_variables
+        self.batch_variables = batch_variables
+        self.variables = target_variables + batch_variables if batch_variables else target_variables
         self.val_size = val_size
+        self.dataset = dataset
+        self.ann = self.dataset.ann
+        self.variable_types = self.dataset.variable_types
         
         layers = list(dataset.dat.keys())
         input_sizes = [len(dataset.features[layers[i]]) for i in range(len(layers))]
         hidden_sizes = [config['hidden_dim'] for x in range(len(layers))]
-        num_classes = len(np.unique(dataset.y))
         
+        
+        # The first target variable is the main variable that dictates the triplets 
+        # it has to be a categorical variable 
+        main_var = self.target_variables[0] 
+        if self.dataset.variable_types[main_var] == 'numerical':
+            raise ValueError("The first target variable",main_var," must be a categorical variable")
+            
+        # create train/validation splits and convert TripletMultiOmicDataset format
+        self.dataset = TripletMultiOmicDataset(self.dataset, main_var)
+        self.dat_train, self.dat_val = self.prepare_data() 
+        
+        # define embedding network for data matrices 
         self.multi_embedding_network = MultiEmbeddingNetwork(input_sizes, hidden_sizes, config['embedding_dim'])
-        self.classifier = Classifier(config['embedding_dim'] * len(layers), [config['classifier_hidden_dim']], num_classes)
-        
-        dataset.y = dataset.y.long() # convert double to long for categorical integers
-        self.dataset = TripletMultiOmicDataset(dataset) # convert to TripletMultiOmicDataset
-        self.dat_train, self.dat_val = self.prepare_data() # split for train/validation
+
+        # define supervisor heads for both target and batch variables 
+        self.MLPs = nn.ModuleDict() # using ModuleDict to store multiple MLPs
+        for var in self.variables:
+            if self.variable_types[var] == 'numerical':
+                num_class = 1
+            else:
+                num_class = len(np.unique(self.ann[var]))
+            self.MLPs[var] = MLP(input_dim=self.config['embedding_dim'] * len(layers),
+                                 hidden_dim=self.config['supervisor_hidden_dim'],
+                                 output_dim=num_class)
                                                                               
     def forward(self, anchor, positive, negative):
         """
@@ -107,11 +117,16 @@ class MultiTripletNetwork(pl.LightningModule):
         Returns:
             tuple: A tuple containing the anchor, positive, and negative embeddings and the predicted class labels.
         """
+        # triplet encoding
         anchor_embedding = self.multi_embedding_network(anchor)
         positive_embedding = self.multi_embedding_network(positive)
         negative_embedding = self.multi_embedding_network(negative)
-        y_pred = self.classifier(anchor_embedding)
-        return anchor_embedding, positive_embedding, negative_embedding, y_pred
+        
+        #run the supervisor heads using the anchor embeddings as input
+        outputs = {}
+        for var, mlp in self.MLPs.items():
+            outputs[var] = mlp(anchor_embedding)
+        return anchor_embedding, positive_embedding, negative_embedding, outputs
     
     def configure_optimizers(self):
         """
@@ -152,32 +167,114 @@ class MultiTripletNetwork(pl.LightningModule):
         Returns:
             loss (torch.Tensor): The computed loss for the current training step.
         """
-        anchor, positive, negative, y = train_batch[0], train_batch[1], train_batch[2], train_batch[3]
-        anchor_embedding, positive_embedding, negative_embedding, y_pred = self.forward(anchor, positive, negative)
+        anchor, positive, negative, y_dict = train_batch[0], train_batch[1], train_batch[2], train_batch[3]
+        anchor_embedding, positive_embedding, negative_embedding, outputs = self.forward(anchor, positive, negative)
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
-        # compute classifier loss 
-        cl_loss = F.cross_entropy(y_pred, y)
-        loss = triplet_loss + cl_loss 
+        
+        # compute loss values for the supervisor heads 
+        total_loss = 0        
+        for var in self.variables:
+            y_hat = outputs[var]
+            y = y_dict[var]
+
+            if self.variable_types[var] == 'numerical':
+                # Ignore instances with missing labels for numerical variables
+                valid_indices = ~torch.isnan(y)
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    
+                    loss = F.mse_loss(torch.flatten(y_hat), y.float())
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
+                    self.log(f"train_loss_{var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
+            else:
+                # Ignore instances with missing labels for categorical variables
+                # Assuming that missing values were encoded as -1
+                valid_indices = (y != -1) & (~torch.isnan(y))
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    loss = F.cross_entropy(y_hat, y.long())
+                    
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
+                    self.log(f"train_loss_{var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
+        
+        loss = triplet_loss + total_loss
+        
         self.log('train_loss', loss)
         return loss
     
     def validation_step(self, val_batch, batch_idx):
-        """
-        Performs one validation step on a batch of data.
-        
-        Args:
-            val_batch (tuple): A tuple containing the embeddings for the anchor, positive, negative samples and the label of the anchor sample.
-            batch_idx (int): The index of the current batch.
-            
-        Returns:
-            loss (torch.Tensor): The computed loss for the current validation step.
-        """
-        anchor, positive, negative, y = val_batch[0], val_batch[1], val_batch[2], val_batch[3]
-        anchor_embedding, positive_embedding, negative_embedding, y_pred = self.forward(anchor, positive, negative)
+        anchor, positive, negative, y_dict = val_batch[0], val_batch[1], val_batch[2], val_batch[3]
+        anchor_embedding, positive_embedding, negative_embedding, outputs = self.forward(anchor, positive, negative)
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
-        y_pred = self.classifier(anchor_embedding)
-        cl_loss = F.cross_entropy(y_pred, y)
-        loss = triplet_loss + cl_loss 
+        
+        # compute loss values for the supervisor heads 
+        total_loss = 0        
+        for var in self.variables:
+            y_hat = outputs[var]
+            y = y_dict[var]
+
+            if self.variable_types[var] == 'numerical':
+                # Ignore instances with missing labels for numerical variables
+                valid_indices = ~torch.isnan(y)
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    
+                    loss = F.mse_loss(torch.flatten(y_hat), y.float())
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
+                    self.log(f"train_loss_{var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
+            else:
+                # Ignore instances with missing labels for categorical variables
+                # Assuming that missing values were encoded as -1
+                valid_indices = (y != -1) & (~torch.isnan(y))
+                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                    y_hat = y_hat[valid_indices]
+                    y = y[valid_indices]
+                    loss = F.cross_entropy(y_hat, y.long())
+                    
+                    if self.batch_variables is not None and var in self.batch_variables:
+                        y_shuffled = y[torch.randperm(len(y))]
+                        # compute the difference between prediction error 
+                        # when using actual labels and shuffled labels 
+                        loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
+                        loss = torch.abs(loss - loss_shuffled)
+                        
+                    self.log(f"train_loss_{var}", loss)
+                    total_loss += loss
+                else:
+                    total_loss += 0.0  # if no valid labels, set loss to 0
+        
+        loss = triplet_loss + total_loss
+        
         self.log('val_loss', loss)
         return loss
     
@@ -207,15 +304,11 @@ class MultiTripletNetwork(pl.LightningModule):
             y_pred (np.ndarray): A numpy array containing the predicted labels.
         """
         self.eval()
+        # get anchor embeddings 
         z = pd.DataFrame(self.multi_embedding_network(dataset.dat).detach().numpy())
         z.columns = [''.join(['LF', str(x+1)]) for x in z.columns]
         z.index = dataset.samples
-        
-        # also return predictions 
-        y_pred = self.classifier(self.multi_embedding_network(dataset.dat))
-        # convert to labels 
-        y_pred = np.argmax(y_pred.detach().numpy(), axis=1)
-        return z, y_pred
+        return z
 
     def predict(self, dataset):
         """
@@ -225,10 +318,22 @@ class MultiTripletNetwork(pl.LightningModule):
             dataset: The dataset to evaluate the model on.
 
         Returns:
-            predicted labels
+            A dictionary where each key is a target variable and the corresponding value is the predicted output for that variable.
         """
         self.eval()
-        y_pred = self.classifier(self.multi_embedding_network(dataset.dat))
-        # convert to labels 
-        y_pred = np.argmax(y_pred.detach().numpy(), axis=1)
-        return y_pred
+        # get anchor embedding
+        anchor_embedding = self.multi_embedding_network(dataset.dat)
+        # get MLP outputs for each var
+        outputs = {}
+        for var, mlp in self.MLPs.items():
+            outputs[var] = mlp(anchor_embedding)
+        
+        # get predictions from the mlp outputs for each var
+        predictions = {}
+        for var in self.variables:
+            y_pred = outputs[var].detach().numpy()
+            if self.variable_types[var] == 'categorical':
+                predictions[var] = np.argmax(y_pred, axis=1)
+            else:
+                predictions[var] = y_pred
+        return predictions
