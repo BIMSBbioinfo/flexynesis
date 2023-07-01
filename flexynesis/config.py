@@ -20,7 +20,7 @@ search_spaces = {
     'MultiTripletNetwork': [
         Integer(16, 128, name='embedding_dim'),
         Integer(64, 512, name='hidden_dim'),
-        Integer(8, 32, name='classifier_hidden_dim'),
+        Integer(8, 32, name='supervisor_hidden_dim'),
         Real(0.0001, 0.01, prior='log-uniform', name='lr'),
         Integer(32, 128, name='batch_size'),
         Categorical([100, 200, 300, 400], name='epochs')
