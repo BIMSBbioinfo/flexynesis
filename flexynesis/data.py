@@ -13,62 +13,36 @@ from itertools import chain
 # given a MultiOmicDataset object, convert to Triplets (anchor,positive,negative)
 class TripletMultiOmicDataset(Dataset):
     """
-    Train: For each sample (anchor) randomly chooses a positive and negative samples
-    Test: Creates fixed triplets for testing
+    For each sample (anchor) randomly chooses a positive and negative samples
     """
 
-    def __init__(self, mydataset, train = True):
-        self.mydataset = mydataset
-        self.train = train
-        if self.train:
-            self.train_data = self.mydataset
-            self.labels_set, self.label_to_indices = self.get_label_indices(self.mydataset.y)
-        else:
-            self.test_data = self.mydataset
-            self.test_triplets = self.generate_triplets(labels = self.mydataset.y, 
-                                                        N = len(self.test_data))
+    def __init__(self, mydataset, main_var):
+        self.dataset = mydataset
+        self.main_var = main_var
+        self.labels_set, self.label_to_indices = self.get_label_indices(self.dataset.ann[self.main_var])
     def __getitem__(self, index):
-        if self.train:
-            # get anchor sample and its label
-            anchor, label = self.train_data[index][0], self.train_data[index][1].item()
-            # choose another sample with same label
-            positive_index = index
-            while positive_index == index:
-                positive_index = np.random.choice(self.label_to_indices[label])
-            # choose another sample with a different label 
-            negative_label = np.random.choice(list(self.labels_set - set([label])))
-            negative_index = np.random.choice(self.label_to_indices[negative_label])
-            pos = self.train_data[positive_index][0] # positive example
-            neg = self.train_data[negative_index][0] # negative example
-        else:
-            anchor = self.test_data[self.test_triplets[index][0]][0]
-            pos = self.test_data[self.test_triplets[index][1]][0]
-            neg = self.test_data[self.test_triplets[index][2]][0]
-            label = self.test_data[index][1].item()
-        return anchor, pos, neg, label
+        # get anchor sample and its label
+        anchor, y_dict = self.dataset[index][0], self.dataset[index][1] 
+        # choose another sample with same label
+        label = y_dict[self.main_var].item()
+        positive_index = index
+        while positive_index == index:
+            positive_index = np.random.choice(self.label_to_indices[label])
+        # choose another sample with a different label 
+        negative_label = np.random.choice(list(self.labels_set - set([label])))
+        negative_index = np.random.choice(self.label_to_indices[negative_label])
+        pos = self.dataset[positive_index][0] # positive example
+        neg = self.dataset[negative_index][0] # negative example
+        return anchor, pos, neg, y_dict
 
     def __len__(self):
-        return len(self.mydataset)
+        return len(self.dataset)
     
     def get_label_indices(self, labels):
         labels_set = set(labels.numpy())
         label_to_indices = {label: np.where(labels.numpy() == label)[0]
                              for label in labels_set}
-        return labels_set, label_to_indices    
-
-    def generate_triplets(self, labels, N, seed = 42):
-        labels_set, label_to_indices = self.get_label_indices(labels)
-        random_state = np.random.RandomState(seed)
-        triplets = [[i,
-                     random_state.choice(label_to_indices[labels[i].item()]),
-                     random_state.choice(label_to_indices[
-                         np.random.choice(
-                             list(labels_set - set([labels[i].item()]))
-                         )
-                     ])
-                    ] for i in range(N)]
-        return triplets
-
+        return labels_set, label_to_indices   
 
 class MultiomicDataset(Dataset):
     """A PyTorch dataset for multiomic data.
