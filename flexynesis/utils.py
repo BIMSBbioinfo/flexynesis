@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import umap
+from umap import UMAP
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
@@ -8,84 +8,71 @@ from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score
 from sklearn.metrics import mean_squared_error, r2_score
 from scipy.stats import pearsonr
 
-def plot_umap_scatter(df, n_neighbors=15, min_dist=0.1, n_components=2, metric='euclidean'):
+def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', scatter_kwargs=None, legend_kwargs=None, figsize=(10, 8)):
     """
-    Plots a UMAP scatter plot from a Pandas DataFrame.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame, shape (n_samples, n_features)
-        The input data as a Pandas DataFrame.
-    n_neighbors : int, optional, default: 15
-        The number of neighbors to consider for each data point in the UMAP algorithm.
-    min_dist : float, optional, default: 0.1
-        The minimum distance between data points in the UMAP embedding.
-    n_components : int, optional, default: 2
-        The number of dimensions for the UMAP embedding (typically 2 or 3).
-    metric : str, optional, default: 'euclidean'
-        The distance metric to use for the UMAP algorithm.
-    """
-
-    # Convert DataFrame to NumPy array
-    data = df.to_numpy()
-
-    # Compute UMAP embedding
-    reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components, metric=metric)
-    embedding = reducer.fit_transform(data)
-
-    # Plot the UMAP scatter plot
-    plt.scatter(embedding[:, 0], embedding[:, 1], s=10)
-    plt.xlabel('UMAP Component 1')
-    plt.ylabel('UMAP Component 2')
-    plt.title('UMAP Scatter Plot')
-    plt.show()
-
-def plot_pca(matrix, labels, color_type='categorical'):
-    """
-    Plots the first two principal components of the input matrix in a 2D scatter plot,
-    with points colored based on the provided labels.
+    Plots the first two dimensions of the transformed input matrix in a 2D scatter plot,
+    with points colored based on the provided labels. The transformation method can be either PCA or UMAP.
+    
+    This function allows users to control several aspects of the plot such as the figure size, scatter plot properties, and legend properties.
 
     Args:
-        matrix (np.array): Input data matrix (n_samples, n_features)
-        labels (list): List of labels (strings or integers)
-        color_type (str): Type of the color scale ('categorical' or 'numerical')
+        matrix (np.array): Input data matrix (n_samples, n_features).
+        labels (list): List of labels (strings or integers).
+        method (str): Transformation method ('pca' or 'umap'). Default is 'pca'.
+        color_type (str): Type of the color scale ('categorical' or 'numerical'). Default is 'categorical'.
+        scatter_kwargs (dict, optional): Additional keyword arguments for plt.scatter. Default is None.
+        legend_kwargs (dict, optional): Additional keyword arguments for plt.legend. Default is None.
+        figsize (tuple): Size of the figure (width, height). Default is (10, 8).
     """
+    
+    plt.figure(figsize=figsize)
+    
+    scatter_kwargs = scatter_kwargs if scatter_kwargs else {}
+    legend_kwargs = legend_kwargs if legend_kwargs else {}
 
-    # Compute PCA
-    pca = PCA(n_components=2)
-    transformed_matrix = pca.fit_transform(matrix)
+    # Compute transformation
+    if method.lower() == 'pca':
+        transformer = PCA(n_components=2)
+    elif method.lower() == 'umap':
+        transformer = UMAP(n_components=2)
+    else:
+        raise ValueError("Invalid method. Expected 'pca' or 'umap'")
+        
+    transformed_matrix = transformer.fit_transform(matrix)
 
     # Create a pandas DataFrame for easier plotting
-    transformed_df = pd.DataFrame(transformed_matrix, columns=["PC1", "PC2"])
+    transformed_df = pd.DataFrame(transformed_matrix, columns=[f"{method.upper()}1", f"{method.upper()}2"])
 
     # Add the labels to the DataFrame
     transformed_df["Label"] = labels
 
+    labels = ['missing' if pd.isnull(x) or x in {'nan', 'None'} else x for x in labels]
+
     if color_type == 'categorical':
-        labels = [x if not np.isnan(x) else 'missing' for x in labels]
         unique_labels = list(set(labels))
         colormap = plt.cm.get_cmap("tab10", len(unique_labels))
 
         for i, label in enumerate(unique_labels):
             plt.scatter(
-                transformed_df[transformed_df["Label"] == label]["PC1"],
-                transformed_df[transformed_df["Label"] == label]["PC2"],
+                transformed_df[transformed_df["Label"] == label][f"{method.upper()}1"],
+                transformed_df[transformed_df["Label"] == label][f"{method.upper()}2"],
                 color=colormap(i),
                 label=label,
-                alpha=0.8
+                **scatter_kwargs
             )
 
-        plt.xlabel("Principal Component 1")
-        plt.ylabel("Principal Component 2")
-        plt.title("PCA Scatter Plot with Colored Labels")
-        plt.legend(title="Labels")
-
+        plt.xlabel(f"{method.upper()} Dimension 1", fontsize=14)
+        plt.ylabel(f"{method.upper()} Dimension 2", fontsize=14)
+        plt.title(f"{method.upper()} Scatter Plot with Colored Labels", fontsize=18)
+        plt.legend(title="Labels", **legend_kwargs)
     elif color_type == 'numerical':
-        sc = plt.scatter(transformed_df["PC1"], transformed_df["PC2"], 
-                         c=labels, alpha=0.7)
+        sc = plt.scatter(transformed_df[f"{method.upper()}1"], transformed_df[f"{method.upper()}2"], 
+                         c=labels, **scatter_kwargs)
         plt.colorbar(sc, label='Label')
 
+    plt.legend(**legend_kwargs)
     plt.show()
+
     
 def evaluate_classifier(y_true, y_pred):
     # Balanced accuracy
