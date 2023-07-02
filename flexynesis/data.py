@@ -90,12 +90,15 @@ class MultiomicDataset(Dataset):
     
 # convert_to_labels: if true, given a numeric list, convert to binary labels by median value 
 class DataImporter:
-    def __init__(self, path, data_types, concatenate = False, min_features=None, top_percentile=None):
+    def __init__(self, path, data_types, concatenate = False, min_features=None, 
+                 top_percentile=None, variance_threshold=1e-5, na_threshold=0.1):
         self.path = path
         self.data_types = data_types
         self.concatenate = concatenate
         self.min_features = min_features
         self.top_percentile = top_percentile
+        self.variance_threshold = variance_threshold
+        self.na_threshold = na_threshold
         # Initialize a dictionary to store the label encoders
         self.encoders = {} # used if labels are categorical 
         # initialize data scalers
@@ -113,7 +116,7 @@ class DataImporter:
                 data[file_name] = pd.read_csv(file_path, index_col=0)
         return data
     
-    def cleanup_data(self, df_dict, variance_threshold=1e-5, na_threshold=0.1):
+    def cleanup_data(self, df_dict):
         cleaned_dfs = {}
         sample_masks = []
 
@@ -125,13 +128,13 @@ class DataImporter:
             # Compute variances of features (along rows)
             feature_variances = df.var(axis=1)
             # Keep only features with variance above the threshold
-            df = df.loc[feature_variances > variance_threshold, :]
+            df = df.loc[feature_variances > self.variance_threshold, :]
             
             # Step 2: Remove features with too many NA values
             # Compute percentage of NA values for each feature
             na_percentages = df.isna().mean(axis=1)
             # Keep only features with percentage of NA values below the threshold
-            df = df.loc[na_percentages < na_threshold, :]
+            df = df.loc[na_percentages < self.na_threshold, :]
             
             # Step 3: Fill NA values with the median of the feature
             # Check if there are any NA values in the DataFrame
