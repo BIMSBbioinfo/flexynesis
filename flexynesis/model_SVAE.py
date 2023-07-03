@@ -154,26 +154,24 @@ class supervised_vae(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config['lr'])
         return optimizer
 
-    def training_step(self, train_batch, batch_idx):
+    # common step for train/validation 
+    def common_step(self, batch, batch_idx, stage=None):
         """
         Perform a single training step.
 
         Args:
-            train_batch (tuple): A tuple containing the input data and labels for the current batch.
+            batch (tuple): A tuple containing the input data and labels for the current batch.
             batch_idx (int): The index of the current batch.
+            stage (str): 'train' or 'val' 
 
         Returns:
-            torch.Tensor: The total loss for the current training step.
+            torch.Tensor: The total loss for the current step.
         """
-        dat, y_dict = train_batch
+        dat, y_dict = batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         
         x_hat_list, z, mean, log_var, outputs = self.forward(x_list)
-        
-        # Check for NaNs in the latent space
-        if torch.isnan(z).any():
-            raise ValueError("NaN value detected in latent factors")
         
         # compute mmd loss for each layer and take average
         mmd_loss_list = [self.MMD_loss(z.shape[1], z, x_hat_list[i], x_list[i]) for i in range(len(layers))]
@@ -200,7 +198,7 @@ class supervised_vae(pl.LightningModule):
                         loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
                         loss = torch.abs(loss - loss_shuffled)
                         
-                    self.log(f"train_loss_{var}", loss)
+                    self.log(f'{stage}_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
                     total_loss += loss
                 else:
                     total_loss += 0.0  # if no valid labels, set loss to 0
@@ -220,91 +218,21 @@ class supervised_vae(pl.LightningModule):
                         loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
                         loss = torch.abs(loss - loss_shuffled)
                         
-                    self.log(f"train_loss_{var}", loss)
+                    self.log(f'{stage}_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
                     total_loss += loss
                 else:
                     total_loss += 0.0  # if no valid labels, set loss to 0
         
-        train_loss = mmd_loss + total_loss
-        
-        self.log_dict({'train_loss': train_loss, 'mmd': mmd_loss, 'sp': total_loss}, prog_bar=True)
-        return train_loss
+        total_loss = mmd_loss + total_loss    
+        return total_loss
+    
+    def training_step(self, train_batch, batch_idx):
+        loss = self.common_step(train_batch, batch_idx, stage='train')
+        return loss
     
     def validation_step(self, val_batch, batch_idx):
-        """
-        Perform a single training step.
-
-        Args:
-            val_batch (tuple): A tuple containing the input data and labels for the current batch.
-            batch_idx (int): The index of the current batch.
-
-        Returns:
-            torch.Tensor: The total loss for the current training step.
-        """
-        dat, y_dict = val_batch
-        layers = dat.keys()
-        x_list = [dat[x] for x in layers]
-        
-        x_hat_list, z, mean, log_var, outputs = self.forward(x_list)
-        
-        # Check for NaNs in the latent space
-        if torch.isnan(z).any():
-            raise ValueError("NaN value detected in latent factors")
-        
-        # compute mmd loss for each layer and take average
-        mmd_loss_list = [self.MMD_loss(z.shape[1], z, x_hat_list[i], x_list[i]) for i in range(len(layers))]
-        mmd_loss = torch.mean(torch.stack(mmd_loss_list))
-
-        # compute loss values for the supervisor heads 
-        total_loss = 0        
-        for var in self.variables:
-            y_hat = outputs[var]
-            y = y_dict[var]
-
-            if self.dataset.variable_types[var] == 'numerical':
-                # Ignore instances with missing labels for numerical variables
-                valid_indices = ~torch.isnan(y)
-                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
-                    y_hat = y_hat[valid_indices]
-                    y = y[valid_indices]
-                    
-                    loss = F.mse_loss(torch.flatten(y_hat), y.float())
-                    if self.batch_variables is not None and var in self.batch_variables:
-                        y_shuffled = y[torch.randperm(len(y))]
-                        # compute the difference between prediction error 
-                        # when using actual labels and shuffled labels 
-                        loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
-                        loss = torch.abs(loss - loss_shuffled)
-                        
-                    self.log(f"train_loss_{var}", loss)
-                    total_loss += loss
-                else:
-                    total_loss += 0.0  # if no valid labels, set loss to 0
-            else:
-                # Ignore instances with missing labels for categorical variables
-                # Assuming that missing values were encoded as -1
-                valid_indices = (y != -1) & (~torch.isnan(y))
-                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
-                    y_hat = y_hat[valid_indices]
-                    y = y[valid_indices]
-                    loss = F.cross_entropy(y_hat, y.long())
-                    
-                    if self.batch_variables is not None and var in self.batch_variables:
-                        y_shuffled = y[torch.randperm(len(y))]
-                        # compute the difference between prediction error 
-                        # when using actual labels and shuffled labels 
-                        loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
-                        loss = torch.abs(loss - loss_shuffled)
-                        
-                    self.log(f"train_loss_{var}", loss)
-                    total_loss += loss
-                else:
-                    total_loss += 0.0  # if no valid labels, set loss to 0
-        
-        val_loss = mmd_loss + total_loss
-        
-        self.log_dict({'val_loss': val_loss, 'mmd': mmd_loss, 'sp': total_loss}, prog_bar=True)
-        return val_loss
+        loss = self.common_step(val_batch, batch_idx, stage='val')
+        return loss
                                        
     def prepare_data(self):
         lt = int(len(self.dataset)*(1-self.val_size))
