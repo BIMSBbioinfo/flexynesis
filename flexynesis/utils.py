@@ -73,6 +73,34 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
     plt.legend(**legend_kwargs)
     plt.show()
 
+def plot_true_vs_predicted(true_values, predicted_values):
+    """
+    Plots a scatterplot of true vs predicted values, with a regression line and annotated with the Pearson correlation coefficient.
+
+    Args:
+        true_values (list or np.array): True values
+        predicted_values (list or np.array): Predicted values
+    """
+    # Calculate correlation coefficient
+    corr, _ = pearsonr(true_values, predicted_values)
+    corr_text = f"Pearson r: {corr:.2f}"
+    
+    # Generate scatter plot
+    plt.scatter(true_values, predicted_values, alpha=0.5)
+    
+    # Add regression line
+    m, b = np.polyfit(true_values, predicted_values, 1)
+    plt.plot(true_values, m*np.array(true_values) + b, color='red')
+    
+    # Add correlation text
+    plt.text(min(true_values), max(predicted_values), corr_text, fontsize=12, ha='left', va='top')
+    
+    # Add labels and title
+    plt.xlabel('True Values')
+    plt.ylabel('Predicted Values')
+    plt.title('True vs Predicted Values')
+    
+    plt.show()
     
 def evaluate_classifier(y_true, y_pred):
     # Balanced accuracy
@@ -98,3 +126,4 @@ def evaluate_regressor(y_true, y_pred):
     r2 = r2_score(y_true, y_pred)
     pearson_corr, _ = pearsonr(y_true, y_pred)
     return {"mse": mse, "r2": r2, "pearson_corr": pearson_corr}
+
