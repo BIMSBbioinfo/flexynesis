@@ -329,3 +329,22 @@ class DataImporter:
         dat1 = {x: dat1[x].loc[common_features[x]] for x in dat1.keys()}
         dat2 = {x: dat2[x].loc[common_features[x]] for x in dat2.keys()}
         return dat1, dat2
+    
+
+def split_by_median(tensor_dict):
+    new_dict = {}
+    for key, tensor in tensor_dict.items():
+        # Check if the tensor is of a floating point type (i.e., it's numerical)
+        if tensor.dtype in {torch.float16, torch.float32, torch.float64}:
+            # Remove NaNs and compute median
+            tensor_no_nan = tensor[torch.isfinite(tensor)]
+            median_val = tensor_no_nan.sort().values[tensor_no_nan.numel() // 2]
+            
+            # Convert to categorical, but preserve NaNs
+            tensor_cat = (tensor > median_val).float()
+            tensor_cat[torch.isnan(tensor)] = float('nan')
+            new_dict[key] = tensor_cat
+        else:
+            # If tensor is not numerical, leave it as it is
+            new_dict[key] = tensor
+    return new_dict
