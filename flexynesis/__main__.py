@@ -79,8 +79,14 @@ def main():
         else:
             print(flexynesis.evaluate_classifier(test_dataset.ann[var][ind], y_pred_dict[var][ind]))
             
-    # save to file 
-    # pd.DataFrame(stats.items()).transpose().to_csv(args.outfile, header=False, index=False)
+    # save to file just the first var (temporarily)
+    var = list(y_pred_dict.keys())[0]
+    ind = ~torch.isnan(test_dataset.ann[var])
+    if test_dataset.variable_types[var] == 'numerical':
+        stats = flexynesis.evaluate_regressor(test_dataset.ann[var][ind], y_pred_dict[var][ind])
+    else:
+        stats = flexynesis.evaluate_classifier(test_dataset.ann[var][ind], y_pred_dict[var][ind])
+    pd.DataFrame(stats.items()).transpose().to_csv(args.outfile, header=False, index=False)
     
 if __name__ == "__main__":
     main()
