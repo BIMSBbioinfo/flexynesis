@@ -34,7 +34,7 @@ class HyperparameterTuning:
             # Train the model
             trainer.fit(model)
             # Validate the model
-            val_loss = trainer.validate(model)[0]['val_loss']
+            val_loss = trainer.validate(model)[0]['val_loss_epoch']
         except ValueError as e:
             print(str(e))
             val_loss = float('inf')  # or some other value indicating failure
