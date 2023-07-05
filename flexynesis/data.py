@@ -90,7 +90,7 @@ class MultiomicDataset(Dataset):
     
 # convert_to_labels: if true, given a numeric list, convert to binary labels by median value 
 class DataImporter:
-    def __init__(self, path, data_types, concatenate = False, min_features=None, 
+    def __init__(self, path, data_types, log_transform = False, concatenate = False, min_features=None, 
                  top_percentile=None, variance_threshold=1e-5, na_threshold=0.1):
         self.path = path
         self.data_types = data_types
@@ -99,6 +99,7 @@ class DataImporter:
         self.top_percentile = top_percentile
         self.variance_threshold = variance_threshold
         self.na_threshold = na_threshold
+        self.log_transform = log_transform
         # Initialize a dictionary to store the label encoders
         self.encoders = {} # used if labels are categorical 
         # initialize data scalers
@@ -184,6 +185,12 @@ class DataImporter:
         
         # harmonize feature sets in train/test
         train_dat, test_dat = self.harmonize(train_dat, test_dat)
+        
+        # log_transform 
+        if self.log_transform:
+            print("transforming data to log scale")
+            train_dat = self.transform_data(train_dat)
+            test_dat = self.transform_data(test_dat)
         
         # Normalize the training data (for testing data, use normalisation factors
         # learned from training data to apply on test data (see fit = False)
@@ -291,28 +298,8 @@ class DataImporter:
                            for x in data.keys()}
         return normalized_data
     
-    def transform_data(self, data, transformation_type=None, fit=True):
-        if fit:
-            self.transformers = {}
-
-        if transformation_type:
-            if transformation_type == 'log':
-                transformed_data = {x: np.log1p(data[x].T).T for x in data.keys()}
-            elif transformation_type == 'sqrt':
-                transformed_data = {x: np.sqrt(data[x].T).T for x in data.keys()}
-            elif transformation_type == 'box-cox':
-                transformed_data = {}
-                for x in data.keys():
-                    if fit:
-                        pt = PowerTransformer(method='box-cox')
-                        self.transformers[x] = pt.fit(data[x].T)
-                    transformed_data[x] = pd.DataFrame(self.transformers[x].transform(data[x].T),
-                                                        index=data[x].columns,
-                                                        columns=data[x].index).T
-            else:
-                raise ValueError("Invalid transformation_type. Choose 'log', 'sqrt', or 'box-cox'.")
-        else:
-            transformed_data = data
+    def transform_data(self, data):
+        transformed_data = {x: np.log1p(data[x].T).T for x in data.keys()}
         return transformed_data    
 
     def filter(self, dat, min_features, top_percentile):
