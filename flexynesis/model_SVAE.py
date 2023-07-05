@@ -153,21 +153,75 @@ class supervised_vae(pl.LightningModule):
         """
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config['lr'])
         return optimizer
+    
+    def compute_loss(self, var, y, y_hat):
+        if self.dataset.variable_types[var] == 'numerical':
+            # Ignore instances with missing labels for numerical variables
+            valid_indices = ~torch.isnan(y)
+            if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                y_hat = y_hat[valid_indices]
+                y = y[valid_indices]
 
-    # common step for train/validation 
-    def common_step(self, batch, batch_idx, stage=None):
-        """
-        Perform a single training step.
+                loss = F.mse_loss(torch.flatten(y_hat), y.float())
+                if self.batch_variables is not None and var in self.batch_variables:
+                    # compute the difference between prediction error 
+                    # when using actual labels and shuffled labels 
+                    y_shuffled = y[torch.randperm(len(y))]
+                    loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
+                    loss = torch.abs(loss - loss_shuffled)
+            else:
+                loss = 0 # if no valid labels, set loss to 0
+        else:
+            # Ignore instances with missing labels for categorical variables
+            # Assuming that missing values were encoded as -1
+            valid_indices = (y != -1) & (~torch.isnan(y))
+            if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                y_hat = y_hat[valid_indices]
+                y = y[valid_indices]
+                loss = F.cross_entropy(y_hat, y.long())
 
-        Args:
-            batch (tuple): A tuple containing the input data and labels for the current batch.
-            batch_idx (int): The index of the current batch.
-            stage (str): 'train' or 'val' 
+                if self.batch_variables is not None and var in self.batch_variables:
+                    # compute the difference between prediction error 
+                    # when using actual labels and shuffled labels 
+                    y_shuffled = y[torch.randperm(len(y))]
+                    loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
+                    loss = torch.abs(loss - loss_shuffled)
+            else: 
+                loss = 0
+        return loss
+    
+    def training_step(self, train_batch, batch_idx):
+        dat, y_dict = train_batch
+        layers = dat.keys()
+        x_list = [dat[x] for x in layers]
+        
+        x_hat_list, z, mean, log_var, outputs = self.forward(x_list)
+        
+        # compute mmd loss for each layer and take average
+        mmd_loss_list = [self.MMD_loss(z.shape[1], z, x_hat_list[i], x_list[i]) for i in range(len(layers))]
+        mmd_loss = torch.mean(torch.stack(mmd_loss_list))
 
-        Returns:
-            torch.Tensor: The total loss for the current step.
-        """
-        dat, y_dict = batch
+        # compute loss values for the supervisor heads 
+        total_loss = 0
+        
+        losses = [mmd_loss]
+        
+        for var in self.variables:
+            y_hat = outputs[var]
+            y = y_dict[var]
+            
+            loss = self.compute_loss(var, y, y_hat)
+            self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            total_loss += loss  
+            losses.append(loss)
+        #print(self.current_epoch, losses)
+        
+        total_loss = mmd_loss + total_loss
+        
+        return total_loss
+    
+    def validation_step(self, val_batch, batch_idx):
+        dat, y_dict = val_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         
@@ -182,57 +236,14 @@ class supervised_vae(pl.LightningModule):
         for var in self.variables:
             y_hat = outputs[var]
             y = y_dict[var]
-
-            if self.dataset.variable_types[var] == 'numerical':
-                # Ignore instances with missing labels for numerical variables
-                valid_indices = ~torch.isnan(y)
-                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
-                    y_hat = y_hat[valid_indices]
-                    y = y[valid_indices]
-                    
-                    loss = F.mse_loss(torch.flatten(y_hat), y.float())
-                    if self.batch_variables is not None and var in self.batch_variables:
-                        y_shuffled = y[torch.randperm(len(y))]
-                        # compute the difference between prediction error 
-                        # when using actual labels and shuffled labels 
-                        loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
-                        loss = torch.abs(loss - loss_shuffled)
-                        
-                    self.log(f'{stage}_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-                    total_loss += loss
-                else:
-                    total_loss += 0.0  # if no valid labels, set loss to 0
-            else:
-                # Ignore instances with missing labels for categorical variables
-                # Assuming that missing values were encoded as -1
-                valid_indices = (y != -1) & (~torch.isnan(y))
-                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
-                    y_hat = y_hat[valid_indices]
-                    y = y[valid_indices]
-                    loss = F.cross_entropy(y_hat, y.long())
-                    
-                    if self.batch_variables is not None and var in self.batch_variables:
-                        y_shuffled = y[torch.randperm(len(y))]
-                        # compute the difference between prediction error 
-                        # when using actual labels and shuffled labels 
-                        loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
-                        loss = torch.abs(loss - loss_shuffled)
-                        
-                    self.log(f'{stage}_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-                    total_loss += loss
-                else:
-                    total_loss += 0.0  # if no valid labels, set loss to 0
+            
+            loss = self.compute_loss(var, y, y_hat)
+            self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            total_loss += loss  
         
-        total_loss = mmd_loss + total_loss    
+        total_loss = mmd_loss + total_loss
+        
         return total_loss
-    
-    def training_step(self, train_batch, batch_idx):
-        loss = self.common_step(train_batch, batch_idx, stage='train')
-        return loss
-    
-    def validation_step(self, val_batch, batch_idx):
-        loss = self.common_step(val_batch, batch_idx, stage='val')
-        return loss
                                        
     def prepare_data(self):
         lt = int(len(self.dataset)*(1-self.val_size))
