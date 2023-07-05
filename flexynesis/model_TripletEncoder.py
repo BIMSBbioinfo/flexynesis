@@ -156,18 +156,43 @@ class MultiTripletNetwork(pl.LightningModule):
         losses = torch.relu(distance_positive - distance_negative + margin)
         return losses.mean()    
 
-    def common_step(self, batch, batch_idx, stage=None):
-        """
-        Performs one training step on a batch of data.
-        
-        Args:
-            train_batch (tuple): A tuple containing the embeddings for the anchor, positive, negative samples and the label of the anchor sample.
-            batch_idx (int): The index of the current batch.
-            
-        Returns:
-            loss (torch.Tensor): The computed loss for the current training step.
-        """
-        anchor, positive, negative, y_dict = batch[0], batch[1], batch[2], batch[3]
+    def compute_loss(self, var, y, y_hat):
+        if self.variable_types[var] == 'numerical':
+            # Ignore instances with missing labels for numerical variables
+            valid_indices = ~torch.isnan(y)
+            if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                y_hat = y_hat[valid_indices]
+                y = y[valid_indices]
+
+                loss = F.mse_loss(torch.flatten(y_hat), y.float())
+                if self.batch_variables is not None and var in self.batch_variables:
+                    y_shuffled = y[torch.randperm(len(y))]
+                    # compute the difference between prediction error 
+                    # when using actual labels and shuffled labels 
+                    loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
+                    loss = torch.abs(loss - loss_shuffled)
+            else:
+                loss = 0 # if no valid labels, set loss to 0
+        else:
+            # Ignore instances with missing labels for categorical variables
+            # Assuming that missing values were encoded as -1
+            valid_indices = (y != -1) & (~torch.isnan(y))
+            if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                y_hat = y_hat[valid_indices]
+                y = y[valid_indices]
+                loss = F.cross_entropy(y_hat, y.long())
+
+                if self.batch_variables is not None and var in self.batch_variables:
+                    y_shuffled = y[torch.randperm(len(y))]
+                    # compute the difference between prediction error 
+                    # when using actual labels and shuffled labels 
+                    loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
+                    loss = torch.abs(loss - loss_shuffled)
+            else: 
+                loss = 0
+        return loss
+    def training_step(self, train_batch, batch_idx):
+        anchor, positive, negative, y_dict = train_batch[0], train_batch[1], train_batch[2], train_batch[3]
         anchor_embedding, positive_embedding, negative_embedding, outputs = self.forward(anchor, positive, negative)
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
         
@@ -176,57 +201,27 @@ class MultiTripletNetwork(pl.LightningModule):
         for var in self.variables:
             y_hat = outputs[var]
             y = y_dict[var]
-
-            if self.variable_types[var] == 'numerical':
-                # Ignore instances with missing labels for numerical variables
-                valid_indices = ~torch.isnan(y)
-                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
-                    y_hat = y_hat[valid_indices]
-                    y = y[valid_indices]
-                    
-                    loss = F.mse_loss(torch.flatten(y_hat), y.float())
-                    if self.batch_variables is not None and var in self.batch_variables:
-                        y_shuffled = y[torch.randperm(len(y))]
-                        # compute the difference between prediction error 
-                        # when using actual labels and shuffled labels 
-                        loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
-                        loss = torch.abs(loss - loss_shuffled)
-                        
-                    self.log(f'{stage}_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-                    total_loss += loss
-                else:
-                    total_loss += 0.0  # if no valid labels, set loss to 0
-            else:
-                # Ignore instances with missing labels for categorical variables
-                # Assuming that missing values were encoded as -1
-                valid_indices = (y != -1) & (~torch.isnan(y))
-                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
-                    y_hat = y_hat[valid_indices]
-                    y = y[valid_indices]
-                    loss = F.cross_entropy(y_hat, y.long())
-                    
-                    if self.batch_variables is not None and var in self.batch_variables:
-                        y_shuffled = y[torch.randperm(len(y))]
-                        # compute the difference between prediction error 
-                        # when using actual labels and shuffled labels 
-                        loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
-                        loss = torch.abs(loss - loss_shuffled)
-                        
-                    self.log(f'{stage}_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-                    total_loss += loss
-                else:
-                    total_loss += 0.0  # if no valid labels, set loss to 0
-        
+            loss = self.compute_loss(var, y, y_hat)
+            self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            total_loss += loss 
         total_loss = triplet_loss + total_loss
         return total_loss
     
-    def training_step(self, train_batch, batch_idx):
-        loss = self.common_step(train_batch, batch_idx, stage='train')
-        return loss
-    
     def validation_step(self, val_batch, batch_idx):
-        loss = self.common_step(val_batch, batch_idx, stage='val')
-        return loss
+        anchor, positive, negative, y_dict = val_batch[0], val_batch[1], val_batch[2], val_batch[3]
+        anchor_embedding, positive_embedding, negative_embedding, outputs = self.forward(anchor, positive, negative)
+        triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
+        
+        # compute loss values for the supervisor heads 
+        total_loss = 0        
+        for var in self.variables:
+            y_hat = outputs[var]
+            y = y_dict[var]
+            loss = self.compute_loss(var, y, y_hat)
+            self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            total_loss += loss 
+        total_loss = triplet_loss + total_loss
+        return total_loss
     
     def prepare_data(self):
         lt = int(len(self.dataset)*(1-self.val_size))
