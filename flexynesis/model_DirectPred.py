@@ -74,61 +74,43 @@ class DirectPred(pl.LightningModule):
 
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config['lr'])
         return optimizer
-
-    # common steps between training/validation step functions 
-    def common_step(self, batch, batch_idx, stage=None):
-        
-        dat, y_dict = batch       
-        layers = dat.keys()
-        x_list = [dat[x] for x in layers]
-
-        outputs = self.forward(x_list)
-        total_loss = 0        
-        for var in self.variables:
-            y_hat = outputs[var]
-            y = y_dict[var]
-
-            if self.dataset.variable_types[var] == 'numerical':
-                # Ignore instances with missing labels for numerical variables
-                valid_indices = ~torch.isnan(y)
-                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
-                    y_hat = y_hat[valid_indices]
-                    y = y[valid_indices]
-                    
-                    loss = F.mse_loss(torch.flatten(y_hat), y.float())
-                    if self.batch_variables is not None and var in self.batch_variables:
-                        y_shuffled = y[torch.randperm(len(y))]
-                        # compute the difference between prediction error 
-                        # when using actual labels and shuffled labels 
-                        loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
-                        loss = torch.abs(loss - loss_shuffled)
-                        
-                    self.log(f'{stage}_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-                    total_loss += loss
-                else:
-                    total_loss += 0.0  # if no valid labels, set loss to 0
-            else:
-                # Ignore instances with missing labels for categorical variables
-                # Assuming that missing values were encoded as -1
-                valid_indices = (y != -1) & (~torch.isnan(y))
-                if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
-                    y_hat = y_hat[valid_indices]
-                    y = y[valid_indices]
-                    loss = F.cross_entropy(y_hat, y.long())
-                    
-                    if self.batch_variables is not None and var in self.batch_variables:
-                        y_shuffled = y[torch.randperm(len(y))]
-                        # compute the difference between prediction error 
-                        # when using actual labels and shuffled labels 
-                        loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
-                        loss = torch.abs(loss - loss_shuffled)
-                        
-                    self.log(f'{stage}_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-                    total_loss += loss
-                else:
-                    total_loss += 0.0  # if no valid labels, set loss to 0
-        return total_loss
     
+    def compute_loss(self, var, y, y_hat):
+        if self.dataset.variable_types[var] == 'numerical':
+            # Ignore instances with missing labels for numerical variables
+            valid_indices = ~torch.isnan(y)
+            if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                y_hat = y_hat[valid_indices]
+                y = y[valid_indices]
+
+                loss = F.mse_loss(torch.flatten(y_hat), y.float())
+                if self.batch_variables is not None and var in self.batch_variables:
+                    y_shuffled = y[torch.randperm(len(y))]
+                    # compute the difference between prediction error 
+                    # when using actual labels and shuffled labels 
+                    loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
+                    loss = torch.abs(loss - loss_shuffled)
+            else:
+                loss = 0 # if no valid labels, set loss to 0
+        else:
+            # Ignore instances with missing labels for categorical variables
+            # Assuming that missing values were encoded as -1
+            valid_indices = (y != -1) & (~torch.isnan(y))
+            if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+                y_hat = y_hat[valid_indices]
+                y = y[valid_indices]
+                loss = F.cross_entropy(y_hat, y.long())
+
+                if self.batch_variables is not None and var in self.batch_variables:
+                    y_shuffled = y[torch.randperm(len(y))]
+                    # compute the difference between prediction error 
+                    # when using actual labels and shuffled labels 
+                    loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
+                    loss = torch.abs(loss - loss_shuffled) 
+            else: 
+                loss = 0
+        return loss
+
     def training_step(self, train_batch, batch_idx):
         """
         Perform a single training step.
@@ -138,8 +120,20 @@ class DirectPred(pl.LightningModule):
         Returns:
             torch.Tensor: The total loss for the current training step.
         """
-        loss = self.common_step(train_batch, batch_idx, stage='train')
-        return loss
+        
+        dat, y_dict = train_batch       
+        layers = dat.keys()
+        x_list = [dat[x] for x in layers]
+        outputs = self.forward(x_list)
+        total_loss = 0        
+        for var in self.variables:
+            y_hat = outputs[var]
+            y = y_dict[var]
+
+            loss = self.compute_loss(var, y, y_hat)
+            self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            total_loss += loss            
+        return total_loss
 
     
     def validation_step(self, val_batch, batch_idx):
@@ -153,9 +147,21 @@ class DirectPred(pl.LightningModule):
         Returns:
             torch.Tensor: The total loss for the current validation step.
         """
-        loss = self.common_step(val_batch, batch_idx, stage='val')
-        return loss
+        dat, y_dict = val_batch       
+        layers = dat.keys()
+        x_list = [dat[x] for x in layers]
+        outputs = self.forward(x_list)
+        total_loss = 0        
+        for var in self.variables:
+            y_hat = outputs[var]
+            y = y_dict[var]
 
+            loss = self.compute_loss(var, y, y_hat)
+            self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            total_loss += loss            
+        return total_loss
+
+    
     def prepare_data(self):
         lt = int(len(self.dataset)*(1-self.val_size))
         lv = len(self.dataset)-lt
