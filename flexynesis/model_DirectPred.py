@@ -2,8 +2,6 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import TQDMProgressBar
-from pytorch_lightning.strategies import DDPStrategy
 from torch.utils.data import Dataset, DataLoader, random_split
 
 import pandas as pd
