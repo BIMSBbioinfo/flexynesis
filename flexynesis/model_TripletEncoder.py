@@ -8,8 +8,6 @@ import pandas as pd
 import numpy as np
 
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import TQDMProgressBar
-from pytorch_lightning.strategies import DDPStrategy
 
 from .models_shared import *
 from .data import TripletMultiOmicDataset
