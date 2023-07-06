@@ -15,7 +15,8 @@
         "python-seaborn"
         "python-torchvision"
         "python-tqdm"
-        "python-umap-learn"))
+        "python-umap-learn",
+	"python-rich"))
 (define %dev-packages
   (list "python-pytest"))
 

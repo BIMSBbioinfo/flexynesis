@@ -30,6 +30,7 @@ https://conda.anaconda.org/conda-forge/linux-64/keyutils-1.6.1-h166bdaf_0.tar.bz
 https://repo.anaconda.com/pkgs/main/linux-64/lame-3.100-h7b6447c_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/lerc-3.0-h295c915_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/libdeflate-1.17-h5eee18b_0.conda
+https://conda.anaconda.org/conda-forge/linux-64/libedit-3.1.20191231-he28a2e2_2.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/libffi-3.4.2-h6a678d5_6.conda
 https://repo.anaconda.com/pkgs/main/linux-64/libiconv-1.16-h7f8727e_2.conda
 https://conda.anaconda.org/conda-forge/linux-64/libsodium-1.0.18-h36c2ea0_1.tar.bz2
@@ -48,7 +49,7 @@ https://repo.anaconda.com/pkgs/main/linux-64/xz-5.2.10-h5eee18b_1.conda
 https://conda.anaconda.org/conda-forge/linux-64/yaml-0.2.5-h7f98852_2.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/zlib-1.2.13-h5eee18b_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/glib-2.69.1-he621ea3_2.conda
-https://conda.anaconda.org/conda-forge/linux-64/libedit-3.1.20191231-he28a2e2_2.tar.bz2
+https://conda.anaconda.org/conda-forge/linux-64/krb5-1.19.3-h3790be6_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/libevent-2.1.12-h8f2d780_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/libidn2-2.3.2-h7f8727e_0.conda
 https://conda.anaconda.org/conda-forge/linux-64/libllvm10-10.0.1-he513fc3_3.tar.bz2
@@ -65,8 +66,8 @@ https://repo.anaconda.com/pkgs/main/linux-64/dbus-1.13.18-hb2f20db_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/freetype-2.12.1-h4a9f257_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/gnutls-3.6.15-he1e5248_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/gstreamer-1.14.1-h5eee18b_1.conda
-https://conda.anaconda.org/conda-forge/linux-64/krb5-1.19.3-h3790be6_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/libclang-10.0.1-default_hb85057a_2.conda
+https://repo.anaconda.com/pkgs/main/linux-64/libpq-12.9-h16c4e8d_3.conda
 https://repo.anaconda.com/pkgs/main/linux-64/libtiff-4.5.0-h6a678d5_2.conda
 https://repo.anaconda.com/pkgs/main/linux-64/libxkbcommon-1.0.1-hfa300c1_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/libxslt-1.1.35-h4e12654_0.conda
@@ -76,7 +77,6 @@ https://conda.anaconda.org/pytorch/linux-64/ffmpeg-4.3-hf484d3e_0.tar.bz2
 https://repo.anaconda.com/pkgs/main/linux-64/fontconfig-2.14.1-hef1e5e3_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/gst-plugins-base-1.14.1-h6a678d5_1.conda
 https://repo.anaconda.com/pkgs/main/linux-64/lcms2-2.12-h3be6417_0.conda
-https://repo.anaconda.com/pkgs/main/linux-64/libpq-12.9-h16c4e8d_3.conda
 https://repo.anaconda.com/pkgs/main/linux-64/libwebp-1.2.4-h11a3e52_1.conda
 https://repo.anaconda.com/pkgs/main/linux-64/nss-3.74-h0370c37_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/python-3.9.16-h7a1cb2a_2.conda
@@ -98,7 +98,6 @@ https://repo.anaconda.com/pkgs/main/linux-64/gmpy2-2.1.2-py39heeb90bb_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/idna-3.4-py39h06a4308_0.conda
 https://conda.anaconda.org/conda-forge/noarch/ipython_genutils-0.2.0-py_1.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/json5-0.9.5-pyh9f0ad1d_0.tar.bz2
-https://conda.anaconda.org/conda-forge/noarch/jupyterlab_widgets-3.0.6-pyhd8ed1ab_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/kiwisolver-1.4.4-py39h6a678d5_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/llvmlite-0.39.1-py39he621ea3_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/markupsafe-2.1.1-py39h7f8727e_0.conda
@@ -136,7 +135,6 @@ https://conda.anaconda.org/conda-forge/noarch/traitlets-5.9.0-pyhd8ed1ab_0.conda
 https://conda.anaconda.org/conda-forge/noarch/webencodings-0.5.1-py_1.tar.bz2
 https://conda.anaconda.org/conda-forge/noarch/websocket-client-1.5.1-pyhd8ed1ab_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/wheel-0.38.4-py39h06a4308_0.conda
-https://conda.anaconda.org/conda-forge/noarch/widgetsnbextension-4.0.6-pyhd8ed1ab_0.conda
 https://conda.anaconda.org/conda-forge/noarch/zipp-3.15.0-pyhd8ed1ab_0.conda
 https://conda.anaconda.org/conda-forge/noarch/asttokens-2.2.1-pyhd8ed1ab_0.conda
 https://conda.anaconda.org/conda-forge/noarch/babel-2.12.1-pyhd8ed1ab_1.conda
@@ -195,7 +193,6 @@ https://conda.anaconda.org/conda-forge/linux-64/ipython-8.4.0-py39hf3d152e_0.tar
 https://conda.anaconda.org/conda-forge/noarch/nbconvert-core-7.2.9-pyhd8ed1ab_0.conda
 https://repo.anaconda.com/pkgs/main/linux-64/requests-2.28.1-py39h06a4308_1.conda
 https://conda.anaconda.org/conda-forge/linux-64/ipykernel-5.5.5-py39hef51801_0.tar.bz2
-https://conda.anaconda.org/conda-forge/noarch/ipywidgets-8.0.5-pyhd8ed1ab_0.conda
 https://conda.anaconda.org/conda-forge/noarch/jupyter_server-1.23.6-pyhd8ed1ab_0.conda
 https://conda.anaconda.org/conda-forge/noarch/jupyterlab_server-2.21.0-pyhd8ed1ab_0.conda
 https://conda.anaconda.org/conda-forge/noarch/notebook-shim-0.2.2-pyhd8ed1ab_0.tar.bz2
