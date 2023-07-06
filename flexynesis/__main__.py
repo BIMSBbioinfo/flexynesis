@@ -4,6 +4,7 @@ import yaml
 import torch
 import pandas as pd
 import flexynesis
+import warnings
 
 def main():
     parser = argparse.ArgumentParser(description="Flexynesis - Your PyTorch model training interface")
@@ -20,6 +21,9 @@ def main():
     parser.add_argument("--outfile", help="Path to the output file to save the model evaluation stats", type=str)
     
     torch.set_num_threads(4)
+    warnings.filterwarnings("ignore", ".*does not have many workers.*")
+    warnings.filterwarnings("ignore", "has been removed as a dependency of the")
+    warnings.filterwarnings("ignore", "The `srun` command is available on your system but is not used")
 
     args = parser.parse_args()
 
