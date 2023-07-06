@@ -1,24 +1,37 @@
 ;; Use this to set up a development environment.
-;;   guix shell -m manifest.scm
+;;   guix time-machine -C channels.scm -- shell -m manifest.scm
 ;;
 ;; Optionally, add "--pure" or "--container" for more isolation.
 
-(define %packages
-  (list "python-matplotlib"
-        "python-numpy"
-        "python-pandas"
-        "python-pytorch"
-        "python-pytorch-lightning"
-        "python-pyyaml"
-        "python-scikit-optimize"
-        "python-scipy"
-        "python-seaborn"
-        "python-torchvision"
-        "python-tqdm"
-        "python-umap-learn",
-	"python-rich"))
-(define %dev-packages
-  (list "python-pytest"))
+(import (guix packages))
 
-(specifications->manifest
- (cons "python" (append %packages %dev-packages)))
+(define replace-cpu-torch-with-gpu-torch
+  (if (getenv "FLEXYNESIS_USE_CPU")
+      identity  ;don't do anything
+      (let ((cpu-torch (specification->package "python-pytorch"))
+            (gpu-torch (specification->package "python-pytorch-with-cuda11")))
+        (package-input-rewriting `((,cpu-torch . ,gpu-torch))))))
+
+(define %packages
+  (map replace-cpu-torch-with-gpu-torch
+       (map specification->package
+            (list "python-matplotlib"
+                  "python-numpy"
+                  "python-pandas"
+                  "python-pytorch"
+                  "python-pytorch-lightning"
+                  "python-pyyaml"
+                  "python-rich"
+                  "python-scikit-optimize"
+                  "python-scipy"
+                  "python-seaborn"
+                  "python-torchvision"
+                  "python-tqdm"
+                  "python-umap-learn"))))
+(define %dev-packages
+  (map specification->package
+       (list "python-pytest")))
+
+(packages->manifest
+ (cons (specification->package "python")
+       (append %packages %dev-packages)))

@@ -2,7 +2,7 @@
 ;; Note that uncommitted changes will not be included!
 
 ;; Use like this:
-;;   guix build -f guix.scm
+;;   guix time-machine -C channels.scm -- build -f guix.scm
 
 (use-modules (guix build-system pyproject)
              (guix git)
@@ -24,10 +24,8 @@
        (add-before 'check 'set-numba-cache-dir
          (lambda _
            (setenv "NUMBA_CACHE_DIR" "/tmp"))))))
-  (propagated-inputs
-   (map specification->package %packages))
-  (native-inputs
-   (map specification->package %dev-packages))
+  (propagated-inputs %packages)
+  (native-inputs %dev-packages)
   (home-page "https://github.com/BIMSBbioinfo/flexynesis")
   (synopsis "Multi-omics bulk sequencing data integration suite")
   (description "This is a deep-learning based multi-omics bulk
