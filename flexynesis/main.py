@@ -2,10 +2,8 @@ import torch
 from torch.utils.data import DataLoader, random_split
 
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import TQDMProgressBar
-from pytorch_lightning.strategies import DDPStrategy
-from pytorch_lightning.loggers import TensorBoardLogger
-
+from pytorch_lightning.callbacks import RichProgressBar
+from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
 from tqdm import tqdm
 
 from skopt import Optimizer
@@ -13,6 +11,7 @@ from skopt.utils import use_named_args
 from .config import search_spaces
 
 import numpy as np
+
 
 
 class HyperparameterTuning:
@@ -24,12 +23,17 @@ class HyperparameterTuning:
         self.config_name = config_name
         self.space = search_spaces[config_name]
         self.n_iter = n_iter
+        self.progress_bar = RichProgressBar(
+                                theme = RichProgressBarTheme(
+                                    progress_bar = 'green1',
+                                    metrics = 'yellow', time='gray',
+                                    progress_bar_finished='red'))
 
     def objective(self, params):
         model = self.model_class(params, self.dataset, self.target_variables, self.batch_variables)
         print(params)
-        trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=1)
-        print(trainer)
+        trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=1, 
+                            callbacks = self.progress_bar) 
         try:
             # Train the model
             trainer.fit(model)
@@ -65,7 +69,7 @@ class HyperparameterTuning:
         print("Building final model with best params:",best_params_dict)
         # Train the model with the best hyperparameters
         model = self.model_class(best_params_dict, self.dataset, self.target_variables, self.batch_variables)
-        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), gradient_clip_val=1.0)
+        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), callbacks = self.progress_bar)
         trainer.fit(model)
         return model, best_params
     
