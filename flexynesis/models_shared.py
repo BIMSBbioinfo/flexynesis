@@ -133,12 +133,11 @@ class MLP(nn.Module):
         """
         x = self.layer_1(x)
         x = self.dropout(x)
-        x = self.batchnorm(x)
+        if x.size(0) != 1:  # Skip BatchNorm if batch size is 1
+            x = self.batchnorm(x)
         x = self.relu(x)
         x = self.dropout(x)
         x = self.layer_out(x)
-        if self.layer_out.out_features == 1:
-            x = x.squeeze(-1)  # Remove the last dimension if the output size is 1
         return x
 
 class EmbeddingNetwork(nn.Module):
