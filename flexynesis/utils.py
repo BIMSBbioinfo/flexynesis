@@ -3,6 +3,7 @@ import numpy as np
 from umap import UMAP
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib
 from sklearn.decomposition import PCA
 from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report
 from sklearn.metrics import mean_squared_error, r2_score
@@ -43,14 +44,14 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
     # Create a pandas DataFrame for easier plotting
     transformed_df = pd.DataFrame(transformed_matrix, columns=[f"{method.upper()}1", f"{method.upper()}2"])
 
+    labels = [-1 if pd.isnull(x) or x in {'nan', 'None'} else x for x in labels]
+
     # Add the labels to the DataFrame
     transformed_df["Label"] = labels
 
-    labels = ['missing' if pd.isnull(x) or x in {'nan', 'None'} else x for x in labels]
-
     if color_type == 'categorical':
         unique_labels = list(set(labels))
-        colormap = plt.cm.get_cmap("tab10", len(unique_labels))
+        colormap = matplotlib.colormaps["tab20"]
 
         for i, label in enumerate(unique_labels):
             plt.scatter(
@@ -69,8 +70,6 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
         sc = plt.scatter(transformed_df[f"{method.upper()}1"], transformed_df[f"{method.upper()}2"], 
                          c=labels, **scatter_kwargs)
         plt.colorbar(sc, label='Label')
-
-    plt.legend(**legend_kwargs)
     plt.show()
 
 def plot_true_vs_predicted(true_values, predicted_values):
