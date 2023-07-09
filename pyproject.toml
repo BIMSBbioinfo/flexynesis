@@ -31,7 +31,8 @@ dependencies = [
     "torchvision",
     "tqdm",
     "umap-learn",
-    "rich"
+    "rich",
+    "captum"
 ]
 
 [project.scripts]
