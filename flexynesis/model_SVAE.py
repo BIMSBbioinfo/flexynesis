@@ -10,6 +10,8 @@ import numpy as np
 import pytorch_lightning as pl
 from scipy import stats
 
+from captum.attr import IntegratedGradients
+
 from .models_shared import *
 
 # Supervised Variational Auto-encoder that can train one or more layers of omics datasets 
@@ -358,5 +360,68 @@ class supervised_vae(pl.LightningModule):
         nll = (xhat - x).pow(2).mean() #negative log likelihood
         return mmd+nll
 
+    # Adaptor forward function for captum integrated gradients. 
+    def forward_target(self, *args):
+        input_data = list(args[:-2])  # one or more tensors (one per omics layer)
+        target_var = args[-2]  # target variable of interest
+        steps = args[-1]  # number of steps for IntegratedGradients().attribute 
+        outputs_list = []
+        for i in range(steps):
+            # get list of tensors for each step into a list of tensors
+            x_step = [input_data[j][i] for j in range(len(input_data))]
+            x_hat_list, z, mean, log_var, outputs = self.forward(x_step)
+            outputs_list.append(outputs[target_var])
+        return torch.cat(outputs_list, dim = 0)
+        
+    def compute_feature_importance(self, target_var, steps = 5):
+        """
+        Compute the feature importance.
+
+        Args:
+            input_data (torch.Tensor): The input data to compute the feature importance for.
+            target_var (str): The target variable to compute the feature importance for.
+        Returns:
+            attributions (list of torch.Tensor): The feature importances for each class.
+        """
+        x_list = [self.dataset.dat[x] for x in self.dataset.dat.keys()]
+                
+        # Initialize the Integrated Gradients method
+        ig = IntegratedGradients(self.forward_target)
+
+        input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
+
+        # Define a baseline (you might need to adjust this depending on your actual data)
+        baseline = tuple([torch.zeros_like(data) for data in input_data])
+
+        # Get the number of classes for the target variable
+        if self.dataset.variable_types[target_var] == 'numerical':
+            num_class = 1
+        else:
+            num_class = len(np.unique(self.dataset.ann[target_var]))
+
+        # Compute the feature importance for each class
+        attributions = []
+        if num_class > 1:
+            for target_class in range(num_class):
+                attributions.append(ig.attribute(input_data, baseline, additional_forward_args=(target_var, steps), target=target_class, n_steps=steps))
+        else:
+            attributions.append(ig.attribute(input_data, baseline, additional_forward_args=(target_var, steps), n_steps=steps))
+
+        # summarize feature importances
+        # Compute absolute attributions
+        abs_attr = [[torch.abs(a) for a in attr_class] for attr_class in attributions]
+        # average over samples 
+        imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
+
+        # combine into a single data frame 
+        df_list = []
+        layers = list(self.dataset.dat.keys())
+        for i in range(num_class):
+            for j in range(len(layers)):
+                features = self.dataset.features[layers[j]]
+                importances = imp[i][j][0].detach().numpy()
+                df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
+        df_imp = pd.concat(df_list, ignore_index = True)
+        self.feature_importance = df_imp
 
     
