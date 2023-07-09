@@ -10,8 +10,11 @@ import os, argparse
 from scipy import stats
 from functools import reduce
 
+from captum.attr import IntegratedGradients
+
 from .models_shared import *
-    
+
+
 
 class DirectPred(pl.LightningModule):
     def __init__(self, config, dataset, target_variables, batch_variables = None, val_size = 0.2):
@@ -23,6 +26,7 @@ class DirectPred(pl.LightningModule):
         self.variables = target_variables + batch_variables if batch_variables else target_variables
         self.val_size = val_size
         self.dat_train, self.dat_val = self.prepare_data()
+        
         layers = list(dataset.dat.keys())
         input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
         
@@ -50,7 +54,7 @@ class DirectPred(pl.LightningModule):
 
         Returns:
             dict: A dictionary where each key-value pair corresponds to the target variable name and its predicted output respectively.
-        """        
+        """
         embeddings_list = []
         # Process each input matrix with its corresponding Encoder
         for i, x in enumerate(x_list):
@@ -60,7 +64,8 @@ class DirectPred(pl.LightningModule):
         outputs = {}
         for var, mlp in self.MLPs.items():
             outputs[var] = mlp(embeddings_concat)
-        return outputs    
+        return outputs  
+    
     
     def configure_optimizers(self):
         """
@@ -221,5 +226,78 @@ class DirectPred(pl.LightningModule):
                                      index=dataset.samples,
                                      columns=[f"E{dim}" for dim in range(embeddings_concat.shape[1])])
         return embeddings_df
+        
+    # Adaptor forward function for captum integrated gradients. 
+    def forward_target(self, *args):
+        # Reassemble input_data
+        input_data = list(args[:-2])  # Reassemble all args before the last two into a list
+        target_var = args[-2]  # Get the second to last arg
+        steps = args[-1]  # Get the last arg
+        #print('input_data shape',[data.shape for data in input_data])
+        outputs_list = []
+        for i in range(steps):
+            #print('i:',i,' input_data shape',[input_data[j][i].shape for j in range(len(input_data))])
+            # get list of tensors for each step into a list of tensors
+            x_step = [input_data[j][i] for j in range(len(input_data))]
+            #print('i:',i,'x_step shape',[data.shape for data in x_step])
+            out = self.forward(x_step)
+            #print('out shape for i:',i,' for target var ',target_var,' ',out[target_var].shape)
+            outputs_list.append(out[target_var])
+        output0 = torch.cat(outputs_list, dim = 0)
+        print('output shape with dim = 0',output0.shape)
+        return torch.cat(outputs_list, dim = 0)
+        
+    def compute_feature_importance(self, target_var, steps = 5):
+        """
+        Compute the feature importance.
+
+        Args:
+            input_data (torch.Tensor): The input data to compute the feature importance for.
+            target_var (str): The target variable to compute the feature importance for.
+            method (str): The method to compute the feature importance. Only 'integrated_gradients' is supported at the moment.
+
+        Returns:
+            attributions (list of torch.Tensor): The feature importances for each class.
+        """
+        x_list = [self.dataset.dat[x] for x in self.dataset.dat.keys()]
+                
+        # Initialize the Integrated Gradients method
+        ig = IntegratedGradients(self.forward_target)
+
+        input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
+
+        # Define a baseline (you might need to adjust this depending on your actual data)
+        baseline = tuple([torch.zeros_like(data) for data in input_data])
+
+        # Get the number of classes for the target variable
+        if self.dataset.variable_types[target_var] == 'numerical':
+            num_class = 1
+        else:
+            num_class = len(np.unique(self.dataset.ann[target_var]))
+
+        # Compute the feature importance for each class
+        attributions = []
+        if num_class > 1:
+            for target_class in range(num_class):
+                attributions.append(ig.attribute(input_data, baseline, additional_forward_args=(target_var, steps), target=target_class, n_steps=steps))
+        else:
+            attributions.append(ig.attribute(input_data, baseline, additional_forward_args=(target_var, steps), n_steps=steps))
+
+        # summarize feature importances
+        # Compute absolute attributions
+        abs_attr = [[torch.abs(a) for a in attr_class] for attr_class in attributions]
+        # average over samples 
+        imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
+
+        # combine into a single data frame 
+        df_list = []
+        layers = list(self.dataset.dat.keys())
+        for i in range(num_class):
+            for j in range(len(layers)):
+                features = self.dataset.features[layers[j]]
+                importances = imp[i][j][0].detach().numpy()
+                df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
+        df_imp = pd.concat(df_list, ignore_index = True)
+        self.feature_importance = df_imp
 
 
