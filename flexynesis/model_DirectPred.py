@@ -229,22 +229,15 @@ class DirectPred(pl.LightningModule):
         
     # Adaptor forward function for captum integrated gradients. 
     def forward_target(self, *args):
-        # Reassemble input_data
-        input_data = list(args[:-2])  # Reassemble all args before the last two into a list
-        target_var = args[-2]  # Get the second to last arg
-        steps = args[-1]  # Get the last arg
-        #print('input_data shape',[data.shape for data in input_data])
+        input_data = list(args[:-2])  # one or more tensors (one per omics layer)
+        target_var = args[-2]  # target variable of interest
+        steps = args[-1]  # number of steps for IntegratedGradients().attribute 
         outputs_list = []
         for i in range(steps):
-            #print('i:',i,' input_data shape',[input_data[j][i].shape for j in range(len(input_data))])
             # get list of tensors for each step into a list of tensors
             x_step = [input_data[j][i] for j in range(len(input_data))]
-            #print('i:',i,'x_step shape',[data.shape for data in x_step])
             out = self.forward(x_step)
-            #print('out shape for i:',i,' for target var ',target_var,' ',out[target_var].shape)
             outputs_list.append(out[target_var])
-        output0 = torch.cat(outputs_list, dim = 0)
-        print('output shape with dim = 0',output0.shape)
         return torch.cat(outputs_list, dim = 0)
         
     def compute_feature_importance(self, target_var, steps = 5):
@@ -254,8 +247,6 @@ class DirectPred(pl.LightningModule):
         Args:
             input_data (torch.Tensor): The input data to compute the feature importance for.
             target_var (str): The target variable to compute the feature importance for.
-            method (str): The method to compute the feature importance. Only 'integrated_gradients' is supported at the moment.
-
         Returns:
             attributions (list of torch.Tensor): The feature importances for each class.
         """
