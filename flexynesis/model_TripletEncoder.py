@@ -12,6 +12,8 @@ import pytorch_lightning as pl
 from .models_shared import *
 from .data import TripletMultiOmicDataset
 
+from captum.attr import IntegratedGradients
+
 
 class MultiEmbeddingNetwork(nn.Module):
     """
@@ -280,3 +282,94 @@ class MultiTripletNetwork(pl.LightningModule):
             else:
                 predictions[var] = y_pred
         return predictions
+
+    
+    # Adaptor forward function for captum integrated gradients. 
+    # layer_sizes: number of features in each omic layer 
+    def forward_target(self, input_data, layer_sizes, target_var, steps):
+        outputs_list = []
+        for i in range(steps):
+            # for each step, get anchor/positive/negative tensors 
+            # (split the concatenated omics layers)
+            anchor = input_data[i][0].split(layer_sizes, dim = 1)
+            positive = input_data[i][1].split(layer_sizes, dim = 1)
+            negative = input_data[i][2].split(layer_sizes, dim = 1)
+            
+            # convert to dict
+            anchor = {k: anchor[k] for k in range(len(anchor))}
+            positive = {k: anchor[k] for k in range(len(positive))}
+            negative = {k: anchor[k] for k in range(len(negative))}
+            anchor_embedding, positive_embedding, negative_embedding, outputs = self.forward(anchor, positive, negative)
+            outputs_list.append(outputs[target_var])
+        return torch.cat(outputs_list, dim = 0)
+        
+    def compute_feature_importance(self, target_var, steps = 5):
+        """
+        Compute the feature importance.
+
+        Args:
+            input_data (torch.Tensor): The input data to compute the feature importance for.
+            target_var (str): The target variable to compute the feature importance for.
+        Returns:
+            attributions (list of torch.Tensor): The feature importances for each class.
+        """
+        
+        # self.dataset is a TripletMultiomicDataset, which has a different 
+        # structure than the MultiomicDataset. We use data loader to 
+        # read the triplets and get anchor/positive/negative tensors
+        # read the whole dataset
+        dl = DataLoader(self.dataset, batch_size=len(self.dataset))
+        it = iter(dl)
+        anchor, positive, negative, y_dict = next(it) 
+                
+        # Initialize the Integrated Gradients method
+        ig = IntegratedGradients(self.forward_target)
+
+        anchor = [data.requires_grad_() for data in list(anchor.values())]
+        positive = [data.requires_grad_() for data in list(positive.values())]
+        negative = [data.requires_grad_() for data in list(negative.values())]
+        
+        # concatenate multiomic layers of each list element
+        # then stack the anchor/positive/negative 
+        # the purpose is to get a single tensor
+        input_data = torch.stack([torch.cat(sublist, dim = 1) for sublist in [anchor, positive, negative]]).unsqueeze(0)
+
+        # layer sizes will be needed to revert the concatenated tensor 
+        # anchor/positive/negative have the same shape
+        layer_sizes = [anchor[i].shape[1] for i in range(len(anchor))] 
+
+        # Define a baseline 
+        baseline = torch.zeros_like(input_data)       
+
+        # Get the number of classes for the target variable
+        if self.variable_types[target_var] == 'numerical':
+            num_class = 1
+        else:
+            num_class = len(np.unique(self.ann[target_var]))
+
+        # Compute the feature importance for each class
+        attributions = []
+        if num_class > 1:
+            for target_class in range(num_class):
+                attributions.append(ig.attribute(input_data, baseline, additional_forward_args=(layer_sizes, target_var, steps), target=target_class, n_steps=steps))
+        else:
+            attributions.append(ig.attribute(input_data, baseline, additional_forward_args=(layer_sizes, target_var, steps), n_steps=steps))
+
+        # summarize feature importances
+        # Compute absolute attributions
+        abs_attr = [[torch.abs(a) for a in attr_class] for attr_class in attributions]
+        # average over samples 
+        imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
+
+        # combine into a single data frame 
+        df_list = []
+        layers = list(self.dataset.dataset.dat.keys())  # accessing multiomicdataset within tripletmultiomic dataset here
+        for i in range(num_class):
+            imp_layerwise = imp[i][0].split(layer_sizes, dim = 1)
+            for j in range(len(layers)):
+                features = self.dataset.dataset.features[layers[j]] # accessing multiomicdataset within tripletmultiomic dataset here
+                importances = imp_layerwise[j][0].detach().numpy() # 0 => extract importances only for the anchor 
+                df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
+        df_imp = pd.concat(df_list, ignore_index = True)
+        self.feature_importance = df_imp
+        return attributions
