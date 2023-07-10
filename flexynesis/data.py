@@ -88,6 +88,43 @@ class MultiomicDataset(Dataset):
         """
         return len(self.samples)
     
+    def get_feature_subset(self, feature_df):
+        """Get a subset of data matrices corresponding to specified features and concatenate them into a pandas DataFrame.
+
+        Args:
+            feature_df (pandas.DataFrame): A DataFrame which contains at least two columns: 'layer' and 'name'. 
+
+        Returns:
+            A pandas DataFrame that concatenates the data matrices for the specified features from all layers. 
+        """
+        # Convert the DataFrame to a dictionary
+        feature_dict = feature_df.groupby('layer')['name'].apply(list).to_dict()
+
+        dfs = []
+        for layer, features in feature_dict.items():
+            if layer in self.dat:
+                # Create a dictionary to look up indices by feature name for each layer
+                feature_index_dict = {feature: i for i, feature in enumerate(self.features[layer])}
+                # Get the indices for the requested features
+                indices = [feature_index_dict[feature] for feature in features if feature in feature_index_dict]
+                # Subset the data matrix for the current layer using the indices
+                subset = self.dat[layer][:, indices]
+                # Convert the subset to a pandas DataFrame, add the layer name as a prefix to each column name
+                df = pd.DataFrame(subset, columns=[f'{layer}_{feature}' for feature in features if feature in feature_index_dict])
+                dfs.append(df)
+            else:
+                print(f"Layer {layer} not found in the dataset.")
+
+        # Concatenate the dataframes along the columns axis
+        result = pd.concat(dfs, axis=1)
+
+        # Set the sample names as the row index
+        result.index = self.samples
+
+        return result
+
+
+    
 # convert_to_labels: if true, given a numeric list, convert to binary labels by median value 
 class DataImporter:
     def __init__(self, path, data_types, log_transform = False, concatenate = False, min_features=None, 
