@@ -124,5 +124,5 @@ def evaluate_regressor(y_true, y_pred):
     mse = mean_squared_error(y_true, y_pred)
     r2 = r2_score(y_true, y_pred)
     pearson_corr, _ = pearsonr(y_true, y_pred)
-    return {"mse": mse, "r2": r2, "pearson_corr": pearson_corr}
+    return {"mse": mse, "r2": r2, "pearson_corr": pearson_corr[0]}
 
