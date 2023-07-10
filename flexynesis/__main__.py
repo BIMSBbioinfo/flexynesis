@@ -18,7 +18,8 @@ def main():
     parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int)
     parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float)
     parser.add_argument("--data_types", help="Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str)
-    parser.add_argument("--outfile", help="Path to the output file to save the model evaluation stats", type=str)
+    parser.add_argument("--outdir", help="Path to the output file to save the model outputs", type=str)
+    parser.add_argument("--prefix", help="Job prefix to use for output files", type=str)
     
     torch.set_num_threads(4)
     warnings.filterwarnings("ignore", ".*does not have many workers.*")
@@ -75,22 +76,38 @@ def main():
     y_pred_dict = model.predict(test_dataset)
     
     # evaluate predictions 
+    # Create an empty list to store metrics
+    metrics_list = []
+
+    # Evaluate predictions
+    print("Computing model evaluation metrics")
     for var in y_pred_dict.keys():
-        print(var)
         ind = ~torch.isnan(test_dataset.ann[var])
         if test_dataset.variable_types[var] == 'numerical':
-            print(flexynesis.evaluate_regressor(test_dataset.ann[var][ind], y_pred_dict[var][ind]))
+            metrics = flexynesis.evaluate_regressor(test_dataset.ann[var][ind], y_pred_dict[var][ind])
         else:
-            print(flexynesis.evaluate_classifier(test_dataset.ann[var][ind], y_pred_dict[var][ind]))
-            
-    # save to file just the first var (temporarily)
-    var = list(y_pred_dict.keys())[0]
-    ind = ~torch.isnan(test_dataset.ann[var])
-    if test_dataset.variable_types[var] == 'numerical':
-        stats = flexynesis.evaluate_regressor(test_dataset.ann[var][ind], y_pred_dict[var][ind])
-    else:
-        stats = flexynesis.evaluate_classifier(test_dataset.ann[var][ind], y_pred_dict[var][ind])
-    pd.DataFrame(stats.items()).transpose().to_csv(args.outfile, header=False, index=False)
+            metrics = flexynesis.evaluate_classifier(test_dataset.ann[var][ind], y_pred_dict[var][ind])
+
+        for metric, value in metrics.items():
+            metrics_list.append({
+                'var': var,
+                'variable_type': test_dataset.variable_types[var],
+                'metric': metric,
+                'value': value
+            })
+
+    # Convert the list of metrics to a DataFrame
+    metrics_df = pd.DataFrame(metrics_list)
+    metrics_df.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
+    
+    # compute feature importance values
+    print("Computing variable importance scores")
+    df_list = []
+    for var in model.variables:
+        df_list.append(model.compute_feature_importance(var, steps = 20))
+    df_imp = pd.concat(df_list, ignore_index = True)
+    df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
+
     
 if __name__ == "__main__":
     main()
