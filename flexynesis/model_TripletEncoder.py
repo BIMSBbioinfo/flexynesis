@@ -371,5 +371,4 @@ class MultiTripletNetwork(pl.LightningModule):
                 importances = imp_layerwise[j][0].detach().numpy() # 0 => extract importances only for the anchor 
                 df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
         df_imp = pd.concat(df_list, ignore_index = True)
-        self.feature_importance = df_imp
-        return attributions
+        return df_imp

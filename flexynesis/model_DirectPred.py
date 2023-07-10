@@ -289,6 +289,6 @@ class DirectPred(pl.LightningModule):
                 importances = imp[i][j][0].detach().numpy()
                 df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
         df_imp = pd.concat(df_list, ignore_index = True)
-        self.feature_importance = df_imp
+        return df_imp
 
 
