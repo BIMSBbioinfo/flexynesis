@@ -108,6 +108,13 @@ def main():
     df_imp = pd.concat(df_list, ignore_index = True)
     df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
 
+    # get sample embeddings and save 
+    print("Extracting sample embeddings")
+    embeddings_train = model.transform(train_dataset)
+    embeddings_test = model.transform(test_dataset)
+    
+    embeddings_train.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.csv'])), header=True)
+    embeddings_test.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.csv'])), header=True)
     
 if __name__ == "__main__":
     main()
