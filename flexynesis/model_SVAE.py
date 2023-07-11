@@ -275,7 +275,7 @@ class supervised_vae(pl.LightningModule):
         x_list = [dataset.dat[x] for x in layers]
         M = self.forward(x_list)[1].detach().numpy()
         z = pd.DataFrame(M)
-        z.columns = [''.join(['LF', str(x+1)]) for x in z.columns]
+        z.columns = [''.join(['E', str(x)]) for x in z.columns]
         z.index = dataset.samples
         return z
     

@@ -251,7 +251,7 @@ class MultiTripletNetwork(pl.LightningModule):
         self.eval()
         # get anchor embeddings 
         z = pd.DataFrame(self.multi_embedding_network(dataset.dat).detach().numpy())
-        z.columns = [''.join(['LF', str(x+1)]) for x in z.columns]
+        z.columns = [''.join(['E', str(x)]) for x in z.columns]
         z.index = dataset.samples
         return z
 
