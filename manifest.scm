@@ -15,7 +15,8 @@
 (define %packages
   (map replace-cpu-torch-with-gpu-torch
        (map specification->package
-            (list "python-matplotlib"
+            (list "python-captum"
+                  "python-matplotlib"
                   "python-numpy"
                   "python-pandas"
                   "python-pytorch"
