@@ -5,6 +5,9 @@ from scipy.spatial.distance import pdist, squareform
 from sklearn.neighbors import kneighbors_graph
 from scipy.sparse import csgraph
 
+from scipy.sparse import csr_matrix, diags
+from tqdm import tqdm
+
 def laplacian_score(X, k=5, t=None):
     """
     Calculate Laplacian Score for each feature in the dataset.
@@ -23,29 +26,33 @@ def laplacian_score(X, k=5, t=None):
     dist_matrix = squareform(pdist(X))
 
     # Calculate the k-nearest neighbors adjacency matrix
-    W = kneighbors_graph(X, k, mode='connectivity', include_self=True).toarray()
+    W = kneighbors_graph(X, k, mode='connectivity', include_self=True)
 
     # Compute the heat kernel (optional)
     if t is not None:
-        W = np.exp(-dist_matrix ** 2 / t)
+        W = csr_matrix(np.exp(-dist_matrix ** 2 / t))
 
     # Normalize the adjacency matrix
-    D = np.diag(np.sum(W, axis=1))
-    D_inv_sqrt = np.diag(1.0 / np.sqrt(np.diag(D)))
-    S = np.dot(D_inv_sqrt, np.dot(W, D_inv_sqrt))
+    D = np.array(W.sum(axis=1)).flatten()
+    D_inv_sqrt = diags(1.0 / np.sqrt(D))
+
+    S = D_inv_sqrt @ W @ D_inv_sqrt
+    S = S.toarray()
 
     # Compute the Laplacian matrix
     L = csgraph.laplacian(W, normed=True)
 
     # Calculate Laplacian Score for each feature
     scores = []
-    for i in range(n_features):
+    D = diags(D)  # Convert to sparse diagonal matrix for efficient dot product
+    for i in tqdm(range(n_features), desc='Calculating Laplacian scores'):
         fi = X[:,i]
         fi = fi - np.dot(S, fi).sum() / n_samples
-        L_score = np.dot(fi.T, np.dot(L, fi)) / np.dot(fi.T, np.dot(D, fi))
+        L_score = np.dot(fi.T, L @ fi) / np.dot(fi.T, D @ fi)
         scores.append(L_score)
 
     return np.array(scores)
+
 
 def remove_redundant_features(X, laplacian_scores, threshold=0.8):
     """
@@ -67,7 +74,7 @@ def remove_redundant_features(X, laplacian_scores, threshold=0.8):
         The list of selected feature indices in the input data matrix X.
     """
 
-    # Compute the correlation matrix once
+    # Precompute the correlation matrix once
     correlation_matrix = np.corrcoef(X, rowvar=False)
     
     # Rank the features by Laplacian scores
@@ -75,7 +82,7 @@ def remove_redundant_features(X, laplacian_scores, threshold=0.8):
 
     selected_features = []
 
-    for idx in ranked_indices:
+    for idx in tqdm(ranked_indices, desc='Removing redundant features among top scoring ones'):
         correlated = False
 
         for selected_idx in selected_features:
@@ -91,7 +98,8 @@ def remove_redundant_features(X, laplacian_scores, threshold=0.8):
 
     return selected_features
 
-def filter_by_laplacian(X, k=5, t=None, topN = 100, remove_redundant = True, threshold = 0.8):
+
+def filter_by_laplacian(X, layer, k=5, t=None, topN=100, remove_redundant=True, threshold=0.8):
     """
     Given a data matrix, compute laplacian score for each feature
     and return a filtered data matrix based on top laplacian scores.
@@ -107,6 +115,8 @@ def filter_by_laplacian(X, k=5, t=None, topN = 100, remove_redundant = True, thr
     X_selected: (n_samples, n_features) - Filtered data matrix
     """
     
+    print("Implementing feature selection using laplacian score for layer:",layer,"with ",X.shape[1],"features")
+    
     # only apply filtering if topN < n_features
     if topN >= X.shape[1]: 
         print("Returning original matrix, demanded # of features is ", 
@@ -118,13 +128,17 @@ def filter_by_laplacian(X, k=5, t=None, topN = 100, remove_redundant = True, thr
     
     # Sort the features based on their Laplacian Scores
     sorted_indices = np.argsort(scores)
+    
+    # Choose the topN + 10% features with the lowest Laplacian Scores
+    topN_extended = int(topN + 0.10 * X.shape[1])
+    topN_extended = min(topN_extended, X.shape[1])  # Ensure we don't exceed the number of features
+    selected_features = sorted_indices[:topN_extended]
 
     if remove_redundant:
-        # sorted indices filtered for correlation
-        sorted_indices = remove_redundant_features(X.values, scores, threshold)
-        
-    # Choose the top k features with the lowest Laplacian Scores
-    selected_features = sorted_indices[:topN]
+        # Remove redundancy from topN + 10% features
+        selected_features = remove_redundant_features(X[X.columns[selected_features]].values, scores[selected_features], threshold)
+        # Prune down to topN features
+        selected_features = selected_features[:topN]
 
     # Extract the selected features from the dataset
     X_selected = X[X.columns[selected_features]]
