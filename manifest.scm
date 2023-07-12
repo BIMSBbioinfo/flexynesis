@@ -3,7 +3,8 @@
 ;;
 ;; Optionally, add "--pure" or "--container" for more isolation.
 
-(import (guix packages))
+(import (guix packages)
+        (guix profiles))
 
 (define replace-cpu-torch-with-gpu-torch
   (if (getenv "FLEXYNESIS_USE_CPU")
