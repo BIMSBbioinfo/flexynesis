@@ -5,6 +5,9 @@ from functools import reduce
 import torch
 import os
 
+from tqdm import tqdm
+
+
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler, MinMaxScaler, PowerTransformer
 from .feature_selection import filter_by_laplacian
 
@@ -176,10 +179,19 @@ class DataImporter:
             
             # Step 3: Fill NA values with the median of the feature
             # Check if there are any NA values in the DataFrame
+            
             if np.sum(df.isna().sum()) > 0:
-                print("Imputing NA values to median of features", np.sum(df.isna().sum()))
-                for i in df.index:
-                    df.loc[i] = df.loc[i].fillna(df.loc[i].median())
+                # Identify rows that contain missing values
+                missing_rows = df.isna().any(axis=1)
+                print("Imputing NA values to median of features, affected # of features ", np.sum(df.isna().sum()), " # of rows:",sum(missing_rows))
+
+                # Only calculate the median for rows with missing values
+                medians = df[missing_rows].median(axis=1)
+
+                # Iterate over the index using tqdm to display a progress bar
+                for i in tqdm(medians.index):
+                    # Replace missing values in the row with the corresponding median
+                    df.loc[i] = df.loc[i].fillna(medians[i])
                     
             print("Number of NA values: ",np.sum(df.isna().sum()))
                                    
@@ -340,9 +352,8 @@ class DataImporter:
         return transformed_data    
 
     def filter(self, dat, min_features, top_percentile):
-        print("Filtering features based on Laplacian Score")
         counts = {x: max(int(dat[x].shape[0] * top_percentile), min_features) for x in dat.keys()}
-        dat = {x: filter_by_laplacian(dat[x].T, topN=counts[x]).T for x in dat.keys()}
+        dat = {x: filter_by_laplacian(dat[x].T, x, topN=counts[x]).T for x in dat.keys()}
         return dat
 
     def harmonize(self, dat1, dat2):
