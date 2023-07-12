@@ -32,7 +32,7 @@ class HyperparameterTuning:
     def objective(self, params):
         model = self.model_class(params, self.dataset, self.target_variables, self.batch_variables)
         print(params)
-        trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=1, 
+        trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=5, 
                             callbacks = self.progress_bar) 
         try:
             # Train the model
@@ -69,7 +69,7 @@ class HyperparameterTuning:
         print("Building final model with best params:",best_params_dict)
         # Train the model with the best hyperparameters
         model = self.model_class(best_params_dict, self.dataset, self.target_variables, self.batch_variables)
-        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), callbacks = self.progress_bar)
+        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), log_every_n_steps=5, callbacks = self.progress_bar)
         trainer.fit(model)
         return model, best_params
     
