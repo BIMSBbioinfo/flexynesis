@@ -7,30 +7,37 @@ import flexynesis
 import warnings
 
 def main():
-    parser = argparse.ArgumentParser(description="Flexynesis - Your PyTorch model training interface")
+    parser = argparse.ArgumentParser(description="Flexynesis - Your PyTorch model training interface", 
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     
-    parser.add_argument("--data_path", help="Path to the folder with train/test data files", type=str)
-    parser.add_argument("--model_class", help="The kind of model class to instantiate", type=str, choices=["DirectPred", "supervised_vae", "MultiTripletNetwork"])
-    parser.add_argument("--target_variables", help="Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", type = str)
-    parser.add_argument("--batch_variables", help="(Optional) Which variables in 'clin.csv' to use for data integration / batch correction, comma-separated if multiple", type = str)
-    parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"])
-    parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int)
-    parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int)
-    parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float)
-    parser.add_argument("--data_types", help="Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str)
-    parser.add_argument("--outdir", help="Path to the output file to save the model outputs", type=str)
-    parser.add_argument("--prefix", help="Job prefix to use for output files", type=str)
+    parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
+    parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, choices=["DirectPred", "supervised_vae", "MultiTripletNetwork"], required = True)
+    parser.add_argument("--target_variables", help="(Required) Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", type = str, required = True)
+    parser.add_argument("--batch_variables", 
+                        help="(Optional) Which variables in 'clin.csv' to use for data integration / batch correction, comma-separated if multiple", 
+                        type = str, default = None)
+    parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"], default = 'intermediate')
+    parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int, default = 5)
+    parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int, default = 500)
+    parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float, default = 0.2)
+    parser.add_argument("--data_types", help="(Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str, required = True)
+    parser.add_argument("--outdir", help="Path to the output file to save the model outputs", type=str, default = os.getcwd())
+    parser.add_argument("--prefix", help="Job prefix to use for output files", type=str, default = 'job')
+    parser.add_argument("--threads", help="Number of threads to use", type=int, default = 4)
     
-    torch.set_num_threads(4)
     warnings.filterwarnings("ignore", ".*does not have many workers.*")
     warnings.filterwarnings("ignore", "has been removed as a dependency of the")
     warnings.filterwarnings("ignore", "The `srun` command is available on your system but is not used")
 
     args = parser.parse_args()
+    
+    torch.set_num_threads(args.threads)
 
-    # Validate the data path
-    if not os.path.isdir(args.data_path):
-        raise ValueError(f"Invalid data_path: {args.data_path}")
+    # Validate paths
+    if not os.path.exists(args.data_path):
+        raise FileNotFoundError(f"Input --data_path doesn't exist at:",  {args.data_path})
+    if not os.path.exists(args.outdir):
+        raise FileNotFoundError(f"Path to --outdir doesn't exist at:",  {args.outdir})
 
     if args.model_class == "DirectPred":
         model_class = flexynesis.DirectPred
