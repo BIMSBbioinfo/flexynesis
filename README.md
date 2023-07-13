@@ -16,6 +16,10 @@ we develop are drug response modeling in cancer patients or preclinical models (
 patient-derived xenografts), cancer subtype prediction, or any other clinically relevant outcome prediction
 that can be formulated as a regression or classification problem. 
 
+<p align="center">
+  <img alt="workflow" src="img/workflow.svg" width="90%" height="90%">
+</p>
+
 # Benchmarks
 
 For the latest benchmark results see: 
