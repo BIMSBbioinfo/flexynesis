@@ -3,7 +3,8 @@
 ;;
 ;; Optionally, add "--pure" or "--container" for more isolation.
 
-(import (guix packages))
+(import (guix packages)
+        (guix profiles))
 
 (define replace-cpu-torch-with-gpu-torch
   (if (getenv "FLEXYNESIS_USE_CPU")
@@ -15,7 +16,8 @@
 (define %packages
   (map replace-cpu-torch-with-gpu-torch
        (map specification->package
-            (list "python-matplotlib"
+            (list "python-captum"
+                  "python-matplotlib"
                   "python-numpy"
                   "python-pandas"
                   "python-pytorch"
