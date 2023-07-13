@@ -17,7 +17,7 @@ patient-derived xenografts), cancer subtype prediction, or any other clinically 
 that can be formulated as a regression or classification problem. 
 
 <p align="center">
-  <img alt="workflow" src="img/workflow.svg" width="90%" height="90%">
+  <img alt="workflow" src="img/workflow.jpg">
 </p>
 
 # Benchmarks
