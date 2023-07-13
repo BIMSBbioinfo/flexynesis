@@ -23,6 +23,7 @@ def main():
     parser.add_argument("--data_types", help="(Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str, required = True)
     parser.add_argument("--outdir", help="Path to the output folder to save the model outputs", type=str, default = os.getcwd())
     parser.add_argument("--prefix", help="Job prefix to use for output files", type=str, default = 'job')
+    parser.add_argument("--log_transform", help="whether to apply log-transformation to input data matrices", type=str, choices=['True', 'False'], default = 'False')
     parser.add_argument("--threads", help="Number of threads to use", type=int, default = 4)
     
     warnings.filterwarnings("ignore", ".*does not have many workers.*")
@@ -62,6 +63,7 @@ def main():
     data_importer = flexynesis.DataImporter(path = args.data_path, 
                                             data_types = args.data_types.strip().split(','),
                                             concatenate = concatenate, 
+                                            log_transform = bool(args.log_transform),
                                             min_features= args.features_min, 
                                             top_percentile= args.features_top_percentile)
     
