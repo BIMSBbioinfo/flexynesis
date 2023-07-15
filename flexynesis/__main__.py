@@ -63,7 +63,7 @@ def main():
     data_importer = flexynesis.DataImporter(path = args.data_path, 
                                             data_types = args.data_types.strip().split(','),
                                             concatenate = concatenate, 
-                                            log_transform = bool(args.log_transform),
+                                            log_transform = args.log_transform == 'True',
                                             min_features= args.features_min, 
                                             top_percentile= args.features_top_percentile)
     
