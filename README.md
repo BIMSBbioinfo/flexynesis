@@ -104,6 +104,22 @@ This will run all the unit tests in the tests directory.
 # Contributing
 If you would like to contribute to the project, please open an issue or a pull request on the GitHub repository.
 
+# Branches
+
+When working on a feature on a new branch, don't forget to write a branch description:
+```
+git branch --edit-description
+```
+
+
+You can view branch descriptions: 
+```
+git config branch.<branch name>.description 
+```
+
+
+
+
 # Documentation
 
 ```
