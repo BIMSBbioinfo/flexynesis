@@ -125,5 +125,18 @@ def main():
     embeddings_train.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.csv'])), header=True)
     embeddings_test.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.csv'])), header=True)
     
+    # also filter embeddings to remove batch-associated dims and only keep target-variable associated dims 
+    print("Printing filtered embeddings")
+    embeddings_train_filtered = flexynesis.remove_batch_associated_variables(data = embeddings_train, 
+                                                                             batch_dict={x: train_dataset.ann[x] for x in model.batch_variables} if model.batch_variables is not None else None, 
+                                                                             target_dict={x: train_dataset.ann[x] for x in model.target_variables}, 
+                                                                             variable_types=train_dataset.variable_types)
+    # filter test embeddings to keep the same dims as the filtered training embeddings
+    embeddings_test_filtered = embeddings_test[embeddings_train_filtered.columns]
+
+    # save 
+    embeddings_train_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.filtered.csv'])), header=True)    
+    embeddings_test_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.filtered.csv'])), header=True)    
+    
 if __name__ == "__main__":
     main()
