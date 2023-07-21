@@ -112,7 +112,7 @@ def main():
     # compute feature importance values
     print("Computing variable importance scores")
     df_list = []
-    for var in model.variables:
+    for var in model.target_variables:
         df_list.append(model.compute_feature_importance(var, steps = 20))
     df_imp = pd.concat(df_list, ignore_index = True)
     df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
