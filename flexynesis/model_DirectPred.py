@@ -115,13 +115,15 @@ class DirectPred(pl.LightningModule):
         x_list = [dat[x] for x in layers]
         outputs = self.forward(x_list)
         total_loss = 0        
+        losses = {}
         for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
-
             loss = self.compute_loss(var, y, y_hat)
-            self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-            total_loss += loss            
+            losses[var] = loss
+            total_loss += loss
+        losses['train_loss'] = total_loss
+        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
 
     
@@ -141,13 +143,14 @@ class DirectPred(pl.LightningModule):
         x_list = [dat[x] for x in layers]
         outputs = self.forward(x_list)
         total_loss = 0        
+        losses = {}
         for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
-
             loss = self.compute_loss(var, y, y_hat)
-            self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-            total_loss += loss            
+            total_loss += loss  
+        losses['val_loss'] = total_loss
+        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
 
     
@@ -180,7 +183,7 @@ class DirectPred(pl.LightningModule):
         outputs = self.forward(x_list)
 
         predictions = {}
-        for var in self.variables:
+        for var in self.target_variables:
             y_pred = outputs[var].detach().numpy()
             if self.dataset.variable_types[var] == 'categorical':
                 predictions[var] = np.argmax(y_pred, axis=1)
