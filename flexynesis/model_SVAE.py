@@ -67,7 +67,7 @@ class supervised_vae(pl.LightningModule):
         # define supervisor heads
         # using ModuleDict to store multiple MLPs
         self.MLPs = nn.ModuleDict()         
-        for var in self.variables:
+        for var in self.target_variables:
             if self.dataset.variable_types[var] == 'numerical':
                 num_class = 1
             else:
@@ -163,14 +163,7 @@ class supervised_vae(pl.LightningModule):
             if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
                 y_hat = y_hat[valid_indices]
                 y = y[valid_indices]
-
                 loss = F.mse_loss(torch.flatten(y_hat), y.float())
-                if self.batch_variables is not None and var in self.batch_variables:
-                    # compute the difference between prediction error 
-                    # when using actual labels and shuffled labels 
-                    y_shuffled = y[torch.randperm(len(y))]
-                    loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
-                    loss = torch.abs(loss - loss_shuffled)
             else:
                 loss = 0 # if no valid labels, set loss to 0
         else:
@@ -181,13 +174,6 @@ class supervised_vae(pl.LightningModule):
                 y_hat = y_hat[valid_indices]
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
-
-                if self.batch_variables is not None and var in self.batch_variables:
-                    # compute the difference between prediction error 
-                    # when using actual labels and shuffled labels 
-                    y_shuffled = y[torch.randperm(len(y))]
-                    loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
-                    loss = torch.abs(loss - loss_shuffled)
             else: 
                 loss = 0
         return loss
@@ -204,22 +190,20 @@ class supervised_vae(pl.LightningModule):
         mmd_loss = torch.mean(torch.stack(mmd_loss_list))
 
         # compute loss values for the supervisor heads 
-        total_loss = 0
+        total_loss = mmd_loss
         
-        losses = [mmd_loss]
+        losses = {}
+        losses['mmd_loss'] = mmd_loss
         
-        for var in self.variables:
+        for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
-            
             loss = self.compute_loss(var, y, y_hat)
-            self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+            losses[var] = loss
             total_loss += loss  
-            losses.append(loss)
-        #print(self.current_epoch, losses)
-        
-        total_loss = mmd_loss + total_loss
-        
+
+        losses['train_loss'] = total_loss
+        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
     
     def validation_step(self, val_batch, batch_idx):
@@ -234,17 +218,16 @@ class supervised_vae(pl.LightningModule):
         mmd_loss = torch.mean(torch.stack(mmd_loss_list))
 
         # compute loss values for the supervisor heads 
-        total_loss = 0        
-        for var in self.variables:
+        total_loss = mmd_loss 
+        losses = {}
+        for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
-            
             loss = self.compute_loss(var, y, y_hat)
-            self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
             total_loss += loss  
         
-        total_loss = mmd_loss + total_loss
-        
+        losses['val_loss'] = total_loss
+        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
                                        
     def prepare_data(self):
@@ -295,7 +278,7 @@ class supervised_vae(pl.LightningModule):
         X_hat, z, mean, log_var, outputs = self.forward(x_list)
         
         predictions = {}
-        for var in self.variables:
+        for var in self.target_variables:
             y_pred = outputs[var].detach().numpy()
             if self.dataset.variable_types[var] == 'categorical':
                 predictions[var] = np.argmax(y_pred, axis=1)
