@@ -85,14 +85,7 @@ class DirectPred(pl.LightningModule):
             if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
                 y_hat = y_hat[valid_indices]
                 y = y[valid_indices]
-
                 loss = F.mse_loss(torch.flatten(y_hat), y.float())
-                if self.batch_variables is not None and var in self.batch_variables:
-                    y_shuffled = y[torch.randperm(len(y))]
-                    # compute the difference between prediction error 
-                    # when using actual labels and shuffled labels 
-                    loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
-                    loss = torch.abs(loss - loss_shuffled)
             else:
                 loss = 0 # if no valid labels, set loss to 0
         else:
@@ -103,13 +96,6 @@ class DirectPred(pl.LightningModule):
                 y_hat = y_hat[valid_indices]
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
-
-                if self.batch_variables is not None and var in self.batch_variables:
-                    y_shuffled = y[torch.randperm(len(y))]
-                    # compute the difference between prediction error 
-                    # when using actual labels and shuffled labels 
-                    loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
-                    loss = torch.abs(loss - loss_shuffled) 
             else: 
                 loss = 0
         return loss
