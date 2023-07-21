@@ -92,16 +92,16 @@ class MultiTripletNetwork(pl.LightningModule):
         self.dat_train, self.dat_val = self.prepare_data() 
         
         # define embedding network for data matrices 
-        self.multi_embedding_network = MultiEmbeddingNetwork(input_sizes, hidden_sizes, config['embedding_dim'])
+        self.multi_embedding_network = MultiEmbeddingNetwork(input_sizes, hidden_sizes, config['latent_dim'])
 
         # define supervisor heads for both target and batch variables 
         self.MLPs = nn.ModuleDict() # using ModuleDict to store multiple MLPs
-        for var in self.variables:
+        for var in self.target_variables:
             if self.variable_types[var] == 'numerical':
                 num_class = 1
             else:
                 num_class = len(np.unique(self.ann[var]))
-            self.MLPs[var] = MLP(input_dim=self.config['embedding_dim'] * len(layers),
+            self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(layers),
                                  hidden_dim=self.config['supervisor_hidden_dim'],
                                  output_dim=num_class)
                                                                               
@@ -165,12 +165,6 @@ class MultiTripletNetwork(pl.LightningModule):
                 y = y[valid_indices]
 
                 loss = F.mse_loss(torch.flatten(y_hat), y.float())
-                if self.batch_variables is not None and var in self.batch_variables:
-                    y_shuffled = y[torch.randperm(len(y))]
-                    # compute the difference between prediction error 
-                    # when using actual labels and shuffled labels 
-                    loss_shuffled = F.mse_loss(torch.flatten(y_hat), y_shuffled.float())
-                    loss = torch.abs(loss - loss_shuffled)
             else:
                 loss = 0 # if no valid labels, set loss to 0
         else:
@@ -181,13 +175,6 @@ class MultiTripletNetwork(pl.LightningModule):
                 y_hat = y_hat[valid_indices]
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
-
-                if self.batch_variables is not None and var in self.batch_variables:
-                    y_shuffled = y[torch.randperm(len(y))]
-                    # compute the difference between prediction error 
-                    # when using actual labels and shuffled labels 
-                    loss_shuffled = F.cross_entropy(y_hat, y_shuffled.long())
-                    loss = torch.abs(loss - loss_shuffled)
             else: 
                 loss = 0
         return loss
@@ -197,14 +184,16 @@ class MultiTripletNetwork(pl.LightningModule):
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
         
         # compute loss values for the supervisor heads 
-        total_loss = 0        
-        for var in self.variables:
+        total_loss = triplet_loss
+        losses = {}
+        for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
-            self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-            total_loss += loss 
-        total_loss = triplet_loss + total_loss
+            losses[var] = loss
+            total_loss += loss
+        losses['train_loss'] = total_loss
+        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
     
     def validation_step(self, val_batch, batch_idx):
@@ -213,14 +202,15 @@ class MultiTripletNetwork(pl.LightningModule):
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
         
         # compute loss values for the supervisor heads 
-        total_loss = 0        
-        for var in self.variables:
+        total_loss = triplet_loss        
+        losses = {}
+        for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
-            self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
             total_loss += loss 
-        total_loss = triplet_loss + total_loss
+        losses['val_loss'] = total_loss
+        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
     
     def prepare_data(self):
@@ -275,7 +265,7 @@ class MultiTripletNetwork(pl.LightningModule):
         
         # get predictions from the mlp outputs for each var
         predictions = {}
-        for var in self.variables:
+        for var in self.target_variables:
             y_pred = outputs[var].detach().numpy()
             if self.variable_types[var] == 'categorical':
                 predictions[var] = np.argmax(y_pred, axis=1)
