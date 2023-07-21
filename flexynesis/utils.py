@@ -9,6 +9,11 @@ from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score
 from sklearn.metrics import mean_squared_error, r2_score
 from scipy.stats import pearsonr
 
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.feature_selection import SelectFromModel
+from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
+
+
 def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', scatter_kwargs=None, legend_kwargs=None, figsize=(10, 8)):
     """
     Plots the first two dimensions of the transformed input matrix in a 2D scatter plot,
@@ -126,3 +131,66 @@ def evaluate_regressor(y_true, y_pred):
     pearson_corr, _ = pearsonr(y_true, y_pred)
     return {"mse": mse, "r2": r2, "pearson_corr": pearson_corr[0]}
 
+def remove_batch_associated_variables(data, variable_types, target_dict, batch_dict = None, mi_threshold=0.1):
+    """
+    Filter the data matrix to keep only the columns that are predictive of the target variables 
+    and not predictive of the batch variables.
+    
+    Args:
+        data (pd.DataFrame): The data matrix.
+        target_dict (dict): A dictionary of target variables.
+        batch_dict (dict): A dictionary of batch variables.
+        variable_types (dict): A dictionary of variable types (either "numerical" or "categorical").
+        mi_threshold (float, optional): The mutual information threshold for a column to be considered predictive.
+                                        Defaults to 0.1.
+    
+    Returns:
+        pd.DataFrame: The filtered data matrix.
+    """
+    # Convert target and batch tensors to numpy
+    target_dict_np = {k: v.numpy() for k, v in target_dict.items()}
+    batch_dict_np = {k: v.numpy() for k, v in batch_dict.items()}
+
+    important_features = set()
+
+    # Find important features for target variables
+    for var_name, target in target_dict_np.items():
+        # Skip if all values are missing
+        if np.all(np.isnan(target)):
+            continue
+            
+        # Subset data and target where target is not missing
+        not_missing = ~np.isnan(target)
+        data_sub = data[not_missing]
+        target_sub = target[not_missing]
+
+        if variable_types[var_name] == "categorical":
+            clf = RandomForestClassifier()
+        else:  # numerical
+            clf = RandomForestRegressor()
+            
+        clf = clf.fit(data_sub, target_sub)
+        model = SelectFromModel(clf, prefit=True)
+        important_features.update(data.columns[model.get_support()])
+
+    if batch_dict is not None:
+        # Compute mutual information for batch variables
+        for var_name, batch in batch_dict_np.items():
+            # Skip if all values are missing
+            if np.all(np.isnan(batch)):
+                continue
+
+            # Subset data and batch where batch is not missing
+            not_missing = ~np.isnan(batch)
+            data_sub = data[not_missing]
+            batch_sub = batch[not_missing]
+
+            if variable_types[var_name] == "categorical":
+                mi = mutual_info_classif(data_sub, batch_sub)
+            else:  # numerical
+                mi = mutual_info_regression(data_sub, batch_sub)
+
+            # Remove features with high mutual information with batch variables
+            important_features -= set(data.columns[mi > mi_threshold])
+
+    return data[list(important_features)]
