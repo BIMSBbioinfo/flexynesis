@@ -149,7 +149,6 @@ def remove_batch_associated_variables(data, variable_types, target_dict, batch_d
     """
     # Convert target and batch tensors to numpy
     target_dict_np = {k: v.numpy() for k, v in target_dict.items()}
-    batch_dict_np = {k: v.numpy() for k, v in batch_dict.items()}
 
     important_features = set()
 
@@ -174,6 +173,7 @@ def remove_batch_associated_variables(data, variable_types, target_dict, batch_d
         important_features.update(data.columns[model.get_support()])
 
     if batch_dict is not None:
+        batch_dict_np = {k: v.numpy() for k, v in batch_dict.items()}
         # Compute mutual information for batch variables
         for var_name, batch in batch_dict_np.items():
             # Skip if all values are missing
