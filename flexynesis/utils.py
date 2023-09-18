@@ -79,7 +79,7 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
         plt.colorbar(sc, label='Label')
     plt.show()
 
-def plot_true_vs_predicted(true_values, predicted_values):
+def plot_scatter(true_values, predicted_values):
     """
     Plots a scatterplot of true vs predicted values, with a regression line and annotated with the Pearson correlation coefficient.
 
@@ -87,6 +87,15 @@ def plot_true_vs_predicted(true_values, predicted_values):
         true_values (list or np.array): True values
         predicted_values (list or np.array): Predicted values
     """
+    # Convert to numpy arrays (if not already)
+    true_values = np.array(true_values)
+    predicted_values = np.array(predicted_values)
+    
+    # Filter out NaN values
+    not_nan_indices = ~np.isnan(true_values) & ~np.isnan(predicted_values)
+    true_values = true_values[not_nan_indices]
+    predicted_values = predicted_values[not_nan_indices]
+
     # Calculate correlation coefficient
     corr, _ = pearsonr(true_values, predicted_values)
     corr_text = f"Pearson r: {corr:.2f}"
@@ -96,7 +105,7 @@ def plot_true_vs_predicted(true_values, predicted_values):
     
     # Add regression line
     m, b = np.polyfit(true_values, predicted_values, 1)
-    plt.plot(true_values, m*np.array(true_values) + b, color='red')
+    plt.plot(true_values, m*true_values + b, color='red')
     
     # Add correlation text
     plt.text(min(true_values), max(predicted_values), corr_text, fontsize=12, ha='left', va='top')
