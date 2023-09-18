@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import torch
+
 from umap import UMAP
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -130,6 +132,26 @@ def evaluate_regressor(y_true, y_pred):
     r2 = r2_score(y_true, y_pred)
     pearson_corr, _ = pearsonr(y_true, y_pred)
     return {"mse": mse, "r2": r2, "pearson_corr": pearson_corr[0]}
+
+
+def evaluate_wrapper(y_pred_dict, dataset):
+    metrics_list = []
+    for var in y_pred_dict.keys():
+        ind = ~torch.isnan(dataset.ann[var])
+        if dataset.variable_types[var] == 'numerical':
+            metrics = evaluate_regressor(dataset.ann[var][ind], y_pred_dict[var][ind])
+        else:
+            metrics = evaluate_classifier(dataset.ann[var][ind], y_pred_dict[var][ind])
+
+        for metric, value in metrics.items():
+            metrics_list.append({
+                'var': var,
+                'variable_type': dataset.variable_types[var],
+                'metric': metric,
+                'value': value
+            })
+    # Convert the list of metrics to a DataFrame
+    return pd.DataFrame(metrics_list)
 
 def remove_batch_associated_variables(data, variable_types, target_dict, batch_dict = None, mi_threshold=0.1):
     """
