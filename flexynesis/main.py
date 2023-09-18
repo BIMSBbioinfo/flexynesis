@@ -71,6 +71,6 @@ class HyperparameterTuning:
         final_model = self.model_class(best_params_dict, self.dataset, self.target_variables, self.batch_variables)
         trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), log_every_n_steps=5, callbacks = self.progress_bar)
         trainer.fit(final_model)
-        return final_model, best_params
+        return final_model, best_params_dict
     
     
