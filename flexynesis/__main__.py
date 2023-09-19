@@ -13,6 +13,7 @@ def main():
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, choices=["DirectPred", "supervised_vae", "MultiTripletNetwork"], required = True)
     parser.add_argument("--target_variables", help="(Required) Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", type = str, required = True)
+    parser.add_argument('--config_path', type=str, default=None, help='Optional path to an external hyperparameter configuration file in YAML format.')
     parser.add_argument("--batch_variables", 
                         help="(Optional) Which variables in 'clin.csv' to use for data integration / batch correction, comma-separated if multiple", 
                         type = str, default = None)
@@ -76,6 +77,7 @@ def main():
                                             target_variables = args.target_variables,
                                             batch_variables = args.batch_variables,
                                             config_name = config_name, 
+                                            config_path = args.config_path,
                                             n_iter=int(args.hpo_iter))    
     
     # do a hyperparameter search training multiple models and get the best_configuration 
