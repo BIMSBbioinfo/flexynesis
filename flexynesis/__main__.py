@@ -85,36 +85,16 @@ def main():
     y_pred_dict = model.predict(test_dataset)
     
     # evaluate predictions 
-    # Create an empty list to store metrics
-    metrics_list = []
-
-    # Evaluate predictions
     print("Computing model evaluation metrics")
-    for var in y_pred_dict.keys():
-        ind = ~torch.isnan(test_dataset.ann[var])
-        if test_dataset.variable_types[var] == 'numerical':
-            metrics = flexynesis.evaluate_regressor(test_dataset.ann[var][ind], y_pred_dict[var][ind])
-        else:
-            metrics = flexynesis.evaluate_classifier(test_dataset.ann[var][ind], y_pred_dict[var][ind])
-
-        for metric, value in metrics.items():
-            metrics_list.append({
-                'var': var,
-                'variable_type': test_dataset.variable_types[var],
-                'metric': metric,
-                'value': value
-            })
-
-    # Convert the list of metrics to a DataFrame
-    metrics_df = pd.DataFrame(metrics_list)
+    metrics_df = flexynesis.evaluate_wrapper(y_pred_dict, test_dataset)
     metrics_df.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
     
     # compute feature importance values
     print("Computing variable importance scores")
-    df_list = []
     for var in model.target_variables:
-        df_list.append(model.compute_feature_importance(var, steps = 20))
-    df_imp = pd.concat(df_list, ignore_index = True)
+        model.compute_feature_importance(var, steps = 20)
+    df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], 
+                       ignore_index = True)
     df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
 
     # get sample embeddings and save 
