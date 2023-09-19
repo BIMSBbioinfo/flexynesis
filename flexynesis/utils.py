@@ -225,3 +225,22 @@ def remove_batch_associated_variables(data, variable_types, target_dict, batch_d
             important_features -= set(data.columns[mi > mi_threshold])
 
     return data[list(important_features)]
+
+
+def get_important_features(model, var, top=20):
+    # Ensure that the variable exists in the model's feature importances
+    if var not in model.feature_importances:
+        print(f"No feature importances found for variable: {var}")
+        return None
+
+    # Fetch the dataframe for the specified variable
+    df_imp = model.feature_importances[var]
+
+    # Sort by importance in descending order
+    sorted_df = df_imp.sort_values(by="importance", ascending=False)
+
+    # Retrieve the top features
+    top_features = sorted_df.head(top)
+
+    return top_features    
+    
