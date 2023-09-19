@@ -46,7 +46,7 @@ def main():
         config_name = 'DirectPred'
     elif args.model_class == "supervised_vae":
         model_class = flexynesis.supervised_vae
-        config_name = 'SVAE'
+        config_name = 'supervised_vae'
     elif args.model_class == "MultiTripletNetwork":
         model_class = flexynesis.MultiTripletNetwork
         config_name = 'MultiTripletNetwork'

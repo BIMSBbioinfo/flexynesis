@@ -20,7 +20,7 @@ DirectPred:
     name: epochs
     categories: [50, 100, 150]
 
-SVAE:
+supervised_vae:
   - type: Integer
     name: latent_dim
     min: 16
