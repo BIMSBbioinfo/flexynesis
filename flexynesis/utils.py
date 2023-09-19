@@ -117,6 +117,20 @@ def plot_scatter(true_values, predicted_values):
     
     plt.show()
     
+    
+def plot_boxplot(categorical_x, numerical_y, title_x = 'Categories', title_y = 'Values'):
+    df = pd.DataFrame({title_x: categorical_x, title_y: numerical_y})
+    # Create a boxplot
+    plt.figure(figsize=(10,6))
+    sns.boxplot(x=title_x, y=title_y, data=df, palette='Set2')
+    plt.show()
+    
+    
+# given a vector of numerical values which may contain 
+# NAN values, return a binary grouping based on median values 
+def split_by_median(v):
+    return ((v - torch.nanmedian(v)) > 0).float()
+    
 def evaluate_classifier(y_true, y_pred):
     # Balanced accuracy
     balanced_acc = balanced_accuracy_score(y_true, y_pred)
@@ -242,5 +256,24 @@ def get_important_features(model, var, top=20):
     # Retrieve the top features
     top_features = sorted_df.head(top)
 
-    return top_features    
-    
+    return top_features
+
+def subset_assays_by_features(dataset, features_dict):
+    # Find indices of the features in the corresponding 
+    # data matrix for each key in features_dict
+    subset_dat = {}
+    for layer in features_dict.keys():
+        indices = [dataset.features[layer].get_loc(x) for x in features_dict[layer]]
+        subset_dat[layer] = dataset.dat[layer][:, indices]
+    # Convert subset_dat to pandas DataFrame and prepend feature names with layer names
+    df_list = []
+    for layer, data in subset_dat.items():
+        # Convert matrix to DataFrame
+        df_temp = pd.DataFrame(data)
+        
+        # Rename columns to prepend with layer name
+        df_temp.columns = [f"{layer}_{feature}" for feature in features_dict[layer]]
+        df_list.append(df_temp)
+    # Concatenate dataframes horizontally
+    concatenated_df = pd.concat(df_list, axis=1)
+    return concatenated_df    
