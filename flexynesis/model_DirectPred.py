@@ -26,6 +26,7 @@ class DirectPred(pl.LightningModule):
         self.variables = target_variables + batch_variables if batch_variables else target_variables
         self.val_size = val_size
         self.dat_train, self.dat_val = self.prepare_data()
+        self.feature_importances = {} 
         
         layers = list(dataset.dat.keys())
         input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
@@ -278,6 +279,8 @@ class DirectPred(pl.LightningModule):
                 importances = imp[i][j][0].detach().numpy()
                 df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
         df_imp = pd.concat(df_list, ignore_index = True)
-        return df_imp
-
+        
+        # save the computed scores in the model
+        self.feature_importances[target_var] = df_imp
+        
 

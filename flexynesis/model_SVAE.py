@@ -51,6 +51,8 @@ class supervised_vae(pl.LightningModule):
         self.val_size = val_size
 
         self.dat_train, self.dat_val = self.prepare_data()
+        self.feature_importances = {}
+        
         # sometimes the model may have exploding/vanishing gradients leading to NaN values
         self.nan_detected = False 
         
@@ -405,6 +407,8 @@ class supervised_vae(pl.LightningModule):
                 importances = imp[i][j][0].detach().numpy()
                 df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
         df_imp = pd.concat(df_list, ignore_index = True)
-        return df_imp
+        
+        # save scores in model
+        self.feature_importances[target_var] = df_imp
 
     

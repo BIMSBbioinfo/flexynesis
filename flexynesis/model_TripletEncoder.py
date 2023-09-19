@@ -75,6 +75,7 @@ class MultiTripletNetwork(pl.LightningModule):
         self.dataset = dataset
         self.ann = self.dataset.ann
         self.variable_types = self.dataset.variable_types
+        self.feature_importances = {}
         
         layers = list(dataset.dat.keys())
         input_sizes = [len(dataset.features[layers[i]]) for i in range(len(layers))]
@@ -361,4 +362,6 @@ class MultiTripletNetwork(pl.LightningModule):
                 importances = imp_layerwise[j][0].detach().numpy() # 0 => extract importances only for the anchor 
                 df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
         df_imp = pd.concat(df_list, ignore_index = True)
-        return df_imp
+        
+        # save scores in model
+        self.feature_importances[target_var] = df_imp
