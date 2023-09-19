@@ -12,22 +12,65 @@ from .config import search_spaces
 
 import numpy as np
 
+import os, yaml
+from skopt.space import Integer, Categorical, Real
 
+def load_and_convert_config(config_path):
+    # Ensure the config file exists
+    if not os.path.isfile(config_path):
+        raise ValueError(f"Config file '{config_path}' doesn't exist.")
 
+    # Read the config file
+    if config_path.endswith('.yaml') or config_path.endswith('.yml'):
+        with open(config_path, 'r') as file:
+            loaded_config = yaml.safe_load(file)
+    else:
+        raise ValueError("Unsupported file format. Use .yaml or .yml")
+
+    # Convert to skopt space
+    search_space_user = {}
+    for model, space_definition in loaded_config.items():
+        space = []
+        for entry in space_definition:
+            entry_type = entry.pop("type")
+            if entry_type == "Integer":
+                space.append(Integer(**entry))
+            elif entry_type == "Real":
+                space.append(Real(**entry))
+            elif entry_type == "Categorical":
+                space.append(Categorical(**entry))
+            else:
+                raise ValueError(f"Unknown space type: {entry_type}")
+        search_space_user[model] = space
+    return search_space_user
+            
+            
 class HyperparameterTuning:
-    def __init__(self, dataset, model_class, config_name, target_variables, batch_variables = None, n_iter = 10):
+    def __init__(self, dataset, model_class, config_name, target_variables, batch_variables = None, n_iter = 10, config_path = None):
         self.dataset = dataset
         self.model_class = model_class
         self.target_variables = target_variables.strip().split(',')
         self.batch_variables = batch_variables.strip().split(',') if batch_variables is not None else None
         self.config_name = config_name
-        self.space = search_spaces[config_name]
         self.n_iter = n_iter
         self.progress_bar = RichProgressBar(
                                 theme = RichProgressBarTheme(
                                     progress_bar = 'green1',
                                     metrics = 'yellow', time='gray',
                                     progress_bar_finished='red'))
+        
+        # If config_path is provided, use it
+        if config_path:
+            external_config = load_and_convert_config(config_path)
+            if self.config_name in external_config:
+                self.space = external_config[self.config_name]
+            else:
+                raise ValueError(f"'{self.config_name}' not found in the provided config file.")
+        else:
+            if self.config_name in search_spaces:
+                self.space = search_spaces[self.config_name]
+            else:
+                raise ValueError(f"'{self.config_name}' not found in the default config.")
 
     def objective(self, params):
         model = self.model_class(params, self.dataset, self.target_variables, self.batch_variables)
