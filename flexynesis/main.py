@@ -46,13 +46,14 @@ def load_and_convert_config(config_path):
             
             
 class HyperparameterTuning:
-    def __init__(self, dataset, model_class, config_name, target_variables, batch_variables = None, n_iter = 10, config_path = None):
+    def __init__(self, dataset, model_class, config_name, target_variables, batch_variables = None, n_iter = 10, config_path = None, plot_losses = False):
         self.dataset = dataset
         self.model_class = model_class
         self.target_variables = target_variables.strip().split(',')
         self.batch_variables = batch_variables.strip().split(',') if batch_variables is not None else None
         self.config_name = config_name
         self.n_iter = n_iter
+        self.plot_losses = plot_losses # Whether to show live loss plots (useful in interactive mode)
         self.progress_bar = RichProgressBar(
                                 theme = RichProgressBarTheme(
                                     progress_bar = 'green1',
@@ -72,11 +73,17 @@ class HyperparameterTuning:
             else:
                 raise ValueError(f"'{self.config_name}' not found in the default config.")
 
-    def objective(self, params):
+    def objective(self, params, current_step, total_steps):
         model = self.model_class(params, self.dataset, self.target_variables, self.batch_variables)
         print(params)
+        
+        mycallbacks = [self.progress_bar]
+        # for interactive usage, only show loss plots 
+        if self.plot_losses:
+            mycallbacks = [LiveLossPlot(hyperparams=params, current_step=current_step, total_steps=total_steps)]      
+            
         trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=5, 
-                            callbacks = self.progress_bar) 
+                            callbacks = mycallbacks) 
         try:
             # Train the model
             trainer.fit(model)
@@ -97,7 +104,7 @@ class HyperparameterTuning:
             for i in range(self.n_iter):
                 suggested_params_list = opt.ask()
                 suggested_params_dict = {param.name: value for param, value in zip(self.space, suggested_params_list)}
-                loss = self.objective(suggested_params_dict)
+                loss = self.objective(suggested_params_dict, current_step=i+1, total_steps=self.n_iter)
                 opt.tell(suggested_params_list, loss)
 
                 if loss < best_loss:
@@ -112,8 +119,54 @@ class HyperparameterTuning:
         print("Building final model with best params:",best_params_dict)
         # Train the final model with the best hyperparameters
         final_model = self.model_class(best_params_dict, self.dataset, self.target_variables, self.batch_variables)
-        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), log_every_n_steps=5, callbacks = self.progress_bar)
+        
+        mycallbacks = [self.progress_bar]
+        # for interactive usage, only show loss plots 
+        if self.plot_losses:
+            mycallbacks = [LiveLossPlot(hyperparams=best_params_dict, current_step="Final(Best) Step", total_steps=self.n_iter)]      
+            
+        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), log_every_n_steps=5, callbacks = mycallbacks)
         trainer.fit(final_model)
         return final_model, best_params_dict
     
-    
+
+import matplotlib.pyplot as plt
+from IPython.display import clear_output
+from pytorch_lightning import Callback
+
+class LiveLossPlot(Callback):
+    def __init__(self, hyperparams, current_step, total_steps, figsize=(10, 8)):
+        super().__init__()
+        self.hyperparams = hyperparams
+        self.current_step = current_step
+        self.total_steps = total_steps
+        self.figsize = figsize
+
+    def on_train_start(self, trainer, pl_module):
+        self.losses = {}
+
+    def on_train_end(self, trainer, pl_module):
+        plt.ioff()
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        for key, value in trainer.callback_metrics.items():
+            if key not in self.losses:
+                self.losses[key] = []
+            self.losses[key].append(value.item())
+        self.plot_losses()
+
+    def plot_losses(self):
+        clear_output(wait=True)
+        plt.figure(figsize=self.figsize)
+        for key, losses in self.losses.items():
+            plt.plot(losses, label=key)
+        
+        hyperparams_str = ', '.join(f"{key}={value}" for key, value in self.hyperparams.items())
+        title = f"HPO Step={self.current_step} out of {self.total_steps}\n({hyperparams_str})"
+        
+        plt.title(title)
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.legend()
+        plt.tight_layout()  # Adjust layout so everything fits
+        plt.show()
