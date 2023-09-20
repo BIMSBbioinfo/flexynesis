@@ -1,21 +1,21 @@
 DirectPred:
   - type: Integer
     name: latent_dim
-    min: 16
-    max: 128
+    low: 16
+    high: 128
   - type: Integer
     name: hidden_dim
-    min: 64
-    max: 512
+    low: 64
+    high: 512
   - type: Real
     name: lr
-    min: 0.0001
-    max: 0.01
+    low: 0.0001
+    high: 0.01
     prior: log-uniform
   - type: Integer
     name: batch_size
-    min: 32
-    max: 128
+    low: 32
+    high: 128
   - type: Categorical
     name: epochs
     categories: [50, 100, 150]
@@ -23,25 +23,25 @@ DirectPred:
 supervised_vae:
   - type: Integer
     name: latent_dim
-    min: 16
-    max: 128
+    low: 16
+    high: 128
   - type: Integer
     name: hidden_dim
-    min: 64
-    max: 512
+    low: 64
+    high: 512
   - type: Integer
     name: supervisor_hidden_dim
-    min: 8
-    max: 32
+    low: 8
+    high: 32
   - type: Real
     name: lr
-    min: 0.0001
-    max: 0.01
+    low: 0.0001
+    high: 0.01
     prior: log-uniform
   - type: Integer
     name: batch_size
-    min: 32
-    max: 128
+    low: 32
+    high: 128
   - type: Categorical
     name: epochs
     categories: [50, 100, 150]
@@ -49,25 +49,25 @@ supervised_vae:
 MultiTripletNetwork:
   - type: Integer
     name: latent_dim
-    min: 16
-    max: 128
+    low: 16
+    high: 128
   - type: Integer
     name: hidden_dim
-    min: 64
-    max: 512
+    low: 64
+    high: 512
   - type: Integer
     name: supervisor_hidden_dim
-    min: 8
-    max: 32
+    low: 8
+    high: 32
   - type: Real
     name: lr
-    min: 0.0001
-    max: 0.01
+    low: 0.0001
+    high: 0.01
     prior: log-uniform
   - type: Integer
     name: batch_size
-    min: 32
-    max: 128
+    low: 32
+    high: 128
   - type: Categorical
     name: epochs
     categories: [50, 100, 150]
