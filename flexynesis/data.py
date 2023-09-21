@@ -60,13 +60,14 @@ class MultiomicDataset(Dataset):
         A PyTorch dataset that can be used for training or evaluation.
     """
 
-    def __init__(self, dat, ann, variable_types, features, samples):
+    def __init__(self, dat, ann, variable_types, features, samples, label_mappings):
         """Initialize the dataset."""
         self.dat = dat
         self.ann = ann
         self.variable_types = variable_types
         self.features = features
-        self.samples = samples 
+        self.samples = samples
+        self.label_mappings = label_mappings
 
     def __getitem__(self, index):
         """Get a single data sample from the dataset.
@@ -150,14 +151,16 @@ class DataImporter:
     def read_data(self, folder_path):
         data = {}
         required_files = {'clin.csv'} | {f"{dt}.csv" for dt in self.data_types}
+        print("\n[INFO] ----------------- Reading Data -----------------")
         for file in required_files:
             file_path = os.path.join(folder_path, file)
             file_name = os.path.splitext(file)[0]
-            print("importing ",file_path)
+            print(f"[INFO] Importing {file_path}...")
             data[file_name] = pd.read_csv(file_path, index_col=0)
         return data
     
     def cleanup_data(self, df_dict):
+        print("\n[INFO] --------------- Cleaning Up Data ---------------")
         cleaned_dfs = {}
         sample_masks = []
 
@@ -196,8 +199,8 @@ class DataImporter:
             print("Number of NA values: ",np.sum(df.isna().sum()))
                                    
             removed_features_count = original_features_count - df.shape[0]
-            print(f"DataFrame {key} - Removed {removed_features_count} features.")
-
+            print(f"[INFO] DataFrame {key} - Removed {removed_features_count} features.")
+        
             # Step 2: Create masks for informative samples
             # Compute standard deviation of samples (along columns)
             sample_stdevs = df.std(axis=0)
@@ -220,6 +223,7 @@ class DataImporter:
         return cleaned_dfs
 
     def import_data(self):
+        print("\n[INFO] ================= Importing Data =================")
         training_path = os.path.join(self.path, 'train')
         testing_path = os.path.join(self.path, 'test') 
 
@@ -257,10 +261,12 @@ class DataImporter:
             
             testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in testing_dataset.dat.keys()], dim = 1)}
             testing_dataset.features = {'all': list(chain(*testing_dataset.features.values()))}
-            
+        print("[INFO] Data import successful.")
+        
         return training_dataset, testing_dataset
     
     def validate_data_folders(self, training_path, testing_path):
+        print("[INFO] Validating data folders...")
         training_files = set(os.listdir(training_path))
         testing_files = set(os.listdir(testing_path))
 
@@ -276,6 +282,7 @@ class DataImporter:
 
 
     def process_data(self, data, split = 'train'):
+        print(f"\n[INFO] ---------- Processing Data ({split}) ----------")
         # remove uninformative features and samples with no information (from data matrices)
         dat = self.cleanup_data({x: data[x] for x in self.data_types})
         ann = data['clin']
@@ -296,12 +303,18 @@ class DataImporter:
         return dat, ann, samples
 
     def encode_labels(self, df):
+        label_mappings = {}
         def encode_column(series):
+            label_mappings = {}
             # Fill NA values with 'missing' 
             # series = series.fillna('missing')
             if series.name not in self.encoders:
                 self.encoders[series.name] = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
                 encoded_series = self.encoders[series.name].fit_transform(series.to_frame())
+                # also save label mappings 
+                label_mappings[series.name] = {
+                    int(code): label for code, label in enumerate(self.encoders[series.name].categories_[0])
+                }
             else:
                 encoded_series = self.encoders[series.name].transform(series.to_frame())
             return encoded_series.ravel()
@@ -316,20 +329,20 @@ class DataImporter:
         variable_types = {col: 'categorical' for col in df_categorical.columns}
         variable_types.update({col: 'numerical' for col in df.select_dtypes(exclude=['object', 'category']).columns})
 
-        return df_encoded, variable_types
+        return df_encoded, variable_types, label_mappings
 
     def get_torch_dataset(self, dat, ann, samples):
         features = {x: dat[x].index for x in dat.keys()}
         dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
 
-        ann, variable_types = self.encode_labels(ann)
+        ann, variable_types, label_mappings = self.encode_labels(ann)
 
         # Convert DataFrame to tensor
         ann = {col: torch.from_numpy(ann[col].values) for col in ann.columns}
-        return MultiomicDataset(dat, ann, variable_types, features, samples)
+        return MultiomicDataset(dat, ann, variable_types, features, samples, label_mappings)
     
     def normalize_data(self, data, scaler_type="standard", fit=True):
-        print("normalizing data")
+        print("\n[INFO] --------------- Normalizing Data ---------------")
         # notice matrix transpositions during fit and finally after transformation
         # because data matrices have features on rows, 
         # while scaling methods assume features to be on the columns. 
@@ -357,7 +370,7 @@ class DataImporter:
         return dat
 
     def harmonize(self, dat1, dat2):
-        print("Harmonizing features between train and test")
+        print("\n[INFO] ------------ Harmonizing Data Sets ------------")
         # Get common features
         common_features = {x: dat1[x].index.intersection(dat2[x].index) for x in self.data_types}
         # Subset both datasets to only include common features
