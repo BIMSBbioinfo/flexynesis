@@ -137,7 +137,7 @@ def evaluate_classifier(y_true, y_pred):
     print(f"Balanced Accuracy: {balanced_acc:.4f}")
 
     # F1 score (macro)
-    f1 = f1_score(y_true, y_pred, average='macro')
+    f1 = f1_score(y_true, y_pred, average='macro', zero_division=0)
     print(f"F1 Score (Macro): {f1:.4f}")
 
     # Cohen's Kappa
@@ -146,7 +146,7 @@ def evaluate_classifier(y_true, y_pred):
 
     # Full classification report
     print("\nClassification Report:")
-    report = classification_report(y_true, y_pred)
+    report = classification_report(y_true, y_pred, zero_division=0)
     print(report)
     return {"balanced_acc": balanced_acc, "f1_score": f1, "kappa": kappa}
 
