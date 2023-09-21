@@ -147,14 +147,14 @@ class DataImporter:
         # initialize data transformers
         self.transformers = None
         
-    def read_data(self, folder_path, file_ext='.csv'):
+    def read_data(self, folder_path):
         data = {}
-        for file in os.listdir(folder_path):
-            if file.endswith(file_ext):
-                file_path = os.path.join(folder_path, file)
-                file_name = os.path.splitext(file)[0]
-                print("importing ",file_path)
-                data[file_name] = pd.read_csv(file_path, index_col=0)
+        required_files = {'clin.csv'} | {f"{dt}.csv" for dt in self.data_types}
+        for file in required_files:
+            file_path = os.path.join(folder_path, file)
+            file_name = os.path.splitext(file)[0]
+            print("importing ",file_path)
+            data[file_name] = pd.read_csv(file_path, index_col=0)
         return data
     
     def cleanup_data(self, df_dict):
