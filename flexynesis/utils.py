@@ -273,3 +273,24 @@ def subset_assays_by_features(dataset, features_dict):
     # Concatenate dataframes horizontally
     concatenated_df = pd.concat(df_list, axis=1)
     return concatenated_df    
+
+# Accepts as input a MultiomicDataset object and prints summary stats per variable 
+def print_summary_stats(dataset):
+    for var, tensor in dataset.ann.items():
+        print(f"Summary for variable: {var}")
+        
+        if dataset.variable_types[var] == "categorical":
+            # Handle Categorical Variable
+            unique_vals, counts = np.unique(tensor, return_counts=True)
+            print("Categorical Variable Summary:")
+            
+            for uv, cnt in zip(unique_vals, counts):
+                original_label = dataset.label_mappings.get(var, {}).get(uv, uv)  # Fall back to uv if mapping doesn't exist
+                print(f"  Label: {original_label}, Count: {cnt}")
+
+        elif dataset.variable_types[var] == "numerical":
+            # Handle Numerical Variable
+            median_val = np.nanmedian(tensor)
+            mean_val = np.nanmean(tensor)
+            print(f"Numerical Variable Summary: Median = {median_val}, Mean = {mean_val}")
+        print("------")
