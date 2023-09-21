@@ -305,18 +305,19 @@ class DataImporter:
     def encode_labels(self, df):
         label_mappings = {}
         def encode_column(series):
-            label_mappings = {}
+            nonlocal label_mappings  # Declare as nonlocal so that we can modify it
             # Fill NA values with 'missing' 
             # series = series.fillna('missing')
             if series.name not in self.encoders:
                 self.encoders[series.name] = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
                 encoded_series = self.encoders[series.name].fit_transform(series.to_frame())
-                # also save label mappings 
-                label_mappings[series.name] = {
-                    int(code): label for code, label in enumerate(self.encoders[series.name].categories_[0])
-                }
             else:
                 encoded_series = self.encoders[series.name].transform(series.to_frame())
+            
+            # also save label mappings 
+            label_mappings[series.name] = {
+                    int(code): label for code, label in enumerate(self.encoders[series.name].categories_[0])
+                }
             return encoded_series.ravel()
 
         # Select only the categorical columns
