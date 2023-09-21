@@ -250,11 +250,7 @@ def get_important_features(model, var, top=20):
     # Fetch the dataframe for the specified variable
     df_imp = model.feature_importances[var]
 
-    # Sort by importance in descending order
-    sorted_df = df_imp.sort_values(by="importance", ascending=False)
-
-    # Retrieve the top features
-    top_features = sorted_df.head(top)
+    top_features = df_imp.groupby(['target_class']).apply(lambda x: x.nlargest(top, 'importance')).reset_index(drop=True)
 
     return top_features
 
