@@ -366,7 +366,7 @@ class DataImporter:
         return transformed_data    
 
     def filter(self, dat, min_features, top_percentile):
-        counts = {x: max(int(dat[x].shape[0] * top_percentile), min_features) for x in dat.keys()}
+        counts = {x: max(int(dat[x].shape[0] * top_percentile / 100), min_features) for x in dat.keys()}
         dat = {x: filter_by_laplacian(dat[x].T, x, topN=counts[x]).T for x in dat.keys()}
         return dat
 
