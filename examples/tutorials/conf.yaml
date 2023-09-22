@@ -1,0 +1,74 @@
+DirectPred:
+  - type: Integer
+    name: latent_dim
+    low: 16
+    high: 64
+  - type: Integer
+    name: hidden_dim
+    low: 16
+    high: 256
+  - type: Real
+    name: lr
+    low: 0.0001
+    high: 0.01
+    prior: log-uniform
+  - type: Integer
+    name: batch_size
+    low: 32
+    high: 128
+  - type: Categorical
+    name: epochs
+    categories: [30]
+
+supervised_vae:
+  - type: Integer
+    name: latent_dim
+    low: 16
+    high: 128
+  - type: Integer
+    name: hidden_dim
+    low: 64
+    high: 512
+  - type: Integer
+    name: supervisor_hidden_dim
+    low: 8
+    high: 32
+  - type: Real
+    name: lr
+    low: 0.0001
+    high: 0.01
+    prior: log-uniform
+  - type: Integer
+    name: batch_size
+    low: 32
+    high: 128
+  - type: Categorical
+    name: epochs
+    categories: [30,40,50]
+
+MultiTripletNetwork:
+  - type: Integer
+    name: latent_dim
+    low: 16
+    high: 128
+  - type: Integer
+    name: hidden_dim
+    low: 64
+    high: 512
+  - type: Integer
+    name: supervisor_hidden_dim
+    low: 8
+    high: 32
+  - type: Real
+    name: lr
+    low: 0.0001
+    high: 0.01
+    prior: log-uniform
+  - type: Integer
+    name: batch_size
+    low: 32
+    high: 128
+  - type: Categorical
+    name: epochs
+    categories: [50, 100, 150]
+
