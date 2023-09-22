@@ -15,35 +15,6 @@ import numpy as np
 import os, yaml
 from skopt.space import Integer, Categorical, Real
 
-def load_and_convert_config(config_path):
-    # Ensure the config file exists
-    if not os.path.isfile(config_path):
-        raise ValueError(f"Config file '{config_path}' doesn't exist.")
-
-    # Read the config file
-    if config_path.endswith('.yaml') or config_path.endswith('.yml'):
-        with open(config_path, 'r') as file:
-            loaded_config = yaml.safe_load(file)
-    else:
-        raise ValueError("Unsupported file format. Use .yaml or .yml")
-
-    # Convert to skopt space
-    search_space_user = {}
-    for model, space_definition in loaded_config.items():
-        space = []
-        for entry in space_definition:
-            entry_type = entry.pop("type")
-            if entry_type == "Integer":
-                space.append(Integer(**entry))
-            elif entry_type == "Real":
-                space.append(Real(**entry))
-            elif entry_type == "Categorical":
-                space.append(Categorical(**entry))
-            else:
-                raise ValueError(f"Unknown space type: {entry_type}")
-        search_space_user[model] = space
-    return search_space_user
-            
             
 class HyperparameterTuning:
     def __init__(self, dataset, model_class, config_name, target_variables, batch_variables = None, n_iter = 10, config_path = None, plot_losses = False):
@@ -62,7 +33,7 @@ class HyperparameterTuning:
         
         # If config_path is provided, use it
         if config_path:
-            external_config = load_and_convert_config(config_path)
+            external_config = self.load_and_convert_config(config_path)
             if self.config_name in external_config:
                 self.space = external_config[self.config_name]
             else:
@@ -129,6 +100,35 @@ class HyperparameterTuning:
         trainer.fit(final_model)
         return final_model, best_params_dict
     
+    def load_and_convert_config(self, config_path):
+        # Ensure the config file exists
+        if not os.path.isfile(config_path):
+            raise ValueError(f"Config file '{config_path}' doesn't exist.")
+
+        # Read the config file
+        if config_path.endswith('.yaml') or config_path.endswith('.yml'):
+            with open(config_path, 'r') as file:
+                loaded_config = yaml.safe_load(file)
+        else:
+            raise ValueError("Unsupported file format. Use .yaml or .yml")
+
+        # Convert to skopt space
+        search_space_user = {}
+        for model, space_definition in loaded_config.items():
+            space = []
+            for entry in space_definition:
+                entry_type = entry.pop("type")
+                if entry_type == "Integer":
+                    space.append(Integer(**entry))
+                elif entry_type == "Real":
+                    space.append(Real(**entry))
+                elif entry_type == "Categorical":
+                    space.append(Categorical(**entry))
+                else:
+                    raise ValueError(f"Unknown space type: {entry_type}")
+            search_space_user[model] = space
+        return search_space_user
+
 
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
