@@ -147,6 +147,7 @@ class DirectPred(pl.LightningModule):
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
+            losses[var] = loss
         total_loss = sum(losses.values())
         losses['val_loss'] = total_loss
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
