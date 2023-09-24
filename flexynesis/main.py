@@ -4,6 +4,8 @@ from torch.utils.data import DataLoader, random_split
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
+from pytorch_lightning.callbacks import EarlyStopping
+
 from tqdm import tqdm
 
 from skopt import Optimizer
@@ -17,7 +19,9 @@ from skopt.space import Integer, Categorical, Real
 
             
 class HyperparameterTuning:
-    def __init__(self, dataset, model_class, config_name, target_variables, batch_variables = None, n_iter = 10, config_path = None, plot_losses = False):
+    def __init__(self, dataset, model_class, config_name, target_variables, 
+                 batch_variables = None, n_iter = 10, config_path = None, plot_losses = False,
+                early_stop_patience = -1):
         self.dataset = dataset
         self.model_class = model_class
         self.target_variables = target_variables.strip().split(',')
@@ -30,6 +34,7 @@ class HyperparameterTuning:
                                     progress_bar = 'green1',
                                     metrics = 'yellow', time='gray',
                                     progress_bar_finished='red'))
+        self.early_stop_patience = early_stop_patience
         
         # If config_path is provided, use it
         if config_path:
@@ -51,7 +56,10 @@ class HyperparameterTuning:
         mycallbacks = [self.progress_bar]
         # for interactive usage, only show loss plots 
         if self.plot_losses:
-            mycallbacks = [LiveLossPlot(hyperparams=params, current_step=current_step, total_steps=total_steps)]      
+            mycallbacks = [LiveLossPlot(hyperparams=params, current_step=current_step, total_steps=total_steps)]
+        
+        if self.early_stop_patience > 0:
+            mycallbacks.append(self.init_early_stopping())
             
         trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=5, 
                             callbacks = mycallbacks) 
@@ -94,12 +102,23 @@ class HyperparameterTuning:
         mycallbacks = [self.progress_bar]
         # for interactive usage, only show loss plots 
         if self.plot_losses:
-            mycallbacks = [LiveLossPlot(hyperparams=best_params_dict, current_step="Final(Best) Step", total_steps=self.n_iter)]      
-            
+            mycallbacks = [LiveLossPlot(hyperparams=best_params_dict, current_step="Final(Best) Step", total_steps=self.n_iter)] 
+        if self.early_stop_patience > 0:
+            mycallbacks.append(self.init_early_stopping())
+    
         trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), log_every_n_steps=5, callbacks = mycallbacks)
         trainer.fit(final_model)
         return final_model, best_params_dict
     
+    def init_early_stopping(self):
+        """Initialize the early stopping callback."""
+        return EarlyStopping(
+            monitor='val_loss',
+            patience=self.early_stop_patience,
+            verbose=True,
+            mode='min'
+        )
+
     def load_and_convert_config(self, config_path):
         # Ensure the config file exists
         if not os.path.isfile(config_path):

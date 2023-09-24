@@ -26,6 +26,7 @@ def main():
     parser.add_argument("--prefix", help="Job prefix to use for output files", type=str, default = 'job')
     parser.add_argument("--log_transform", help="whether to apply log-transformation to input data matrices", type=str, choices=['True', 'False'], default = 'False')
     parser.add_argument("--threads", help="Number of threads to use", type=int, default = 4)
+    parser.add_argument("--early_stop_patience", help="How many epochs to wait when no improvements in validation loss is observed (default: -1; no early stopping)", type=int, default = -1)
     
     warnings.filterwarnings("ignore", ".*does not have many workers.*")
     warnings.filterwarnings("ignore", "has been removed as a dependency of the")
@@ -78,7 +79,8 @@ def main():
                                             batch_variables = args.batch_variables,
                                             config_name = config_name, 
                                             config_path = args.config_path,
-                                            n_iter=int(args.hpo_iter))    
+                                            n_iter=int(args.hpo_iter),
+                                            early_stop_patience = int(args.early_stop_patience))    
     
     # do a hyperparameter search training multiple models and get the best_configuration 
     model, best_params = tuner.perform_tuning()
@@ -119,6 +121,9 @@ def main():
     # save 
     embeddings_train_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.filtered.csv'])), header=True)    
     embeddings_test_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.filtered.csv'])), header=True)    
+    
+    # save the trained model in file
+    torch.save(model, os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.pth'])))
     
 if __name__ == "__main__":
     main()
