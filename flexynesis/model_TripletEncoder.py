@@ -185,14 +185,14 @@ class MultiTripletNetwork(pl.LightningModule):
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
         
         # compute loss values for the supervisor heads 
-        total_loss = triplet_loss
-        losses = {}
+        losses = {'triplet_loss': triplet_loss}
         for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
             losses[var] = loss
-            total_loss += loss
+
+        total_loss = sum(losses.values())
         losses['train_loss'] = total_loss
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
@@ -203,13 +203,13 @@ class MultiTripletNetwork(pl.LightningModule):
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
         
         # compute loss values for the supervisor heads 
-        total_loss = triplet_loss        
-        losses = {}
+        losses = {'triplet_loss': triplet_loss}
         for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
-            total_loss += loss 
+        
+        total_loss = sum(losses.values())
         losses['val_loss'] = total_loss
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss

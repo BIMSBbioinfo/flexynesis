@@ -115,14 +115,13 @@ class DirectPred(pl.LightningModule):
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         outputs = self.forward(x_list)
-        total_loss = 0        
         losses = {}
         for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
             losses[var] = loss
-            total_loss += loss
+        total_loss = sum(losses.values())
         losses['train_loss'] = total_loss
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
@@ -143,13 +142,12 @@ class DirectPred(pl.LightningModule):
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         outputs = self.forward(x_list)
-        total_loss = 0        
         losses = {}
         for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
-            total_loss += loss  
+        total_loss = sum(losses.values())
         losses['val_loss'] = total_loss
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss

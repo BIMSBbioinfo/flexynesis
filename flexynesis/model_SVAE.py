@@ -192,18 +192,15 @@ class supervised_vae(pl.LightningModule):
         mmd_loss = torch.mean(torch.stack(mmd_loss_list))
 
         # compute loss values for the supervisor heads 
-        total_loss = mmd_loss
-        
-        losses = {}
-        losses['mmd_loss'] = mmd_loss
+        losses = {'mmd_loss': mmd_loss}
         
         for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
+            print(f"{var} loss: {loss.item()}")  # <-- add this
             losses[var] = loss
-            total_loss += loss  
-
+        total_loss = sum(losses.values())
         losses['train_loss'] = total_loss
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
@@ -220,14 +217,13 @@ class supervised_vae(pl.LightningModule):
         mmd_loss = torch.mean(torch.stack(mmd_loss_list))
 
         # compute loss values for the supervisor heads 
-        total_loss = mmd_loss 
-        losses = {}
+        losses = {'mmd_loss': mmd_loss}
         for var in self.target_variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
-            total_loss += loss  
         
+        total_loss = sum(losses.values())
         losses['val_loss'] = total_loss
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
