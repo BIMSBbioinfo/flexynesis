@@ -57,8 +57,8 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
     transformed_df["Label"] = labels
 
     if color_type == 'categorical':
-        unique_labels = sorted(set(labels))
-        colormap = matplotlib.cm.get_cmap("tab20", len(unique_labels))
+        unique_labels = list(set(labels))
+        colormap = matplotlib.colormaps["tab20"]
 
         for i, label in enumerate(unique_labels):
             plt.scatter(
@@ -68,9 +68,13 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
                 label=label,
                 **scatter_kwargs
             )
+        if method.lower() == 'pca':
+            plt.xlabel(f"PC1 (explained variance: {transformer.explained_variance_ratio_[0]*100:.2f}%)", fontsize=14)
+            plt.ylabel(f"PC2 (explained variance: {transformer.explained_variance_ratio_[1]*100:.2f}%)", fontsize=14)
+        else:
+            plt.xlabel(f"{method.upper()} Dimension 1", fontsize=14)
+            plt.ylabel(f"{method.upper()} Dimension 2", fontsize=14)
 
-        plt.xlabel(f"{method.upper()} Dimension 1", fontsize=14)
-        plt.ylabel(f"{method.upper()} Dimension 2", fontsize=14)
         plt.title(f"{method.upper()} Scatter Plot with Colored Labels", fontsize=18)
         plt.legend(title="Labels", **legend_kwargs)
     elif color_type == 'numerical':
@@ -78,6 +82,7 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
                          c=labels, **scatter_kwargs)
         plt.colorbar(sc, label='Label')
     plt.show()
+
 
 def plot_scatter(true_values, predicted_values):
     """
