@@ -1,7 +1,7 @@
 # config.py
 from skopt.space import Integer, Categorical, Real
 
-epochs = [50, 100, 150, 200]
+epochs = [200] 
 
 search_spaces = {
     'DirectPred': [
