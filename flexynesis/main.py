@@ -62,7 +62,7 @@ class HyperparameterTuning:
             mycallbacks.append(self.init_early_stopping())
             
         trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=5, 
-                            callbacks = mycallbacks) 
+                            callbacks = mycallbacks, default_root_dir="./", logger=False, enable_checkpointing=False) 
         try:
             # Train the model
             trainer.fit(model)
@@ -106,7 +106,7 @@ class HyperparameterTuning:
         if self.early_stop_patience > 0:
             mycallbacks.append(self.init_early_stopping())
     
-        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), log_every_n_steps=5, callbacks = mycallbacks)
+        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), log_every_n_steps=5, callbacks = mycallbacks, default_root_dir="./", logger=False, enable_checkpointing=False)
         trainer.fit(final_model)
         return final_model, best_params_dict
     
