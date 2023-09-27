@@ -5,8 +5,8 @@ DirectPred:
     high: 64
   - type: Integer
     name: hidden_dim
-    low: 16
-    high: 256
+    low: 64
+    high: 512
   - type: Real
     name: lr
     low: 0.0001
@@ -18,7 +18,7 @@ DirectPred:
     high: 128
   - type: Categorical
     name: epochs
-    categories: [30]
+    categories: [200]
 
 supervised_vae:
   - type: Integer
@@ -44,7 +44,7 @@ supervised_vae:
     high: 128
   - type: Categorical
     name: epochs
-    categories: [30,40,50]
+    categories: [200]
 
 MultiTripletNetwork:
   - type: Integer
@@ -70,5 +70,5 @@ MultiTripletNetwork:
     high: 128
   - type: Categorical
     name: epochs
-    categories: [50, 100, 150]
+    categories: [200]
 
