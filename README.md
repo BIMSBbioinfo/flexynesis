@@ -4,6 +4,7 @@
 </p>
 
 [![Tests](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tests.yml/badge.svg)](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tests.yml)
+[![Examples](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/examples.yml/badge.svg)](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/examples.yml)
 ![benchmarks](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/benchmarks.yml/badge.svg)
 
 # flexynesis

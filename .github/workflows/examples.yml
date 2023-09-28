@@ -1,0 +1,64 @@
+name: Examples
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "flexynesis/examples/**"
+      - "pyproject.toml"
+      - ".github/workflows/examples.yml"
+
+  pull_request:
+    paths:
+      - "flexynesis/examples/**"
+      - "pyproject.toml"
+      - ".github/workflows/examples.yml"
+
+jobs:
+  examples:
+    name: Run Examples from Tutorials Folder
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.9"
+
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        auto-update-conda: true
+        python-version: "3.9"
+
+    - name: Cache Conda environment
+      uses: actions/cache@v2
+      with:
+        path: ~/miniconda/envs
+        key: ${{ runner.os }}-conda-${{ hashFiles('spec-file.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-conda-
+
+    - name: Create environment with dependencies
+      shell: bash -l {0}
+      run: |
+        conda create --name flexynesis --file spec-file.txt
+        conda activate flexynesis
+        python -m ipykernel install --user --name flexynesis --display-name "flexynesis"
+
+    - name: Install package
+      shell: bash -l {0}
+      run: |
+        conda activate flexynesis
+        pip install -e .
+
+    - name: Run BRCA Subtypes Example
+      shell: bash -l {0}
+      working-directory: ./examples/tutorials
+      run: |
+        conda activate flexynesis
+        jupyter nbconvert --execute --to notebook --inplace brca_subtypes.ipynb
