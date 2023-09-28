@@ -1,5 +1,5 @@
-from ..model_DirectPred import DirectPred
-from ..model_SVAE import supervised_vae as SupervisedVAE
-from ..model_TripletEncoder import MultiTripletNetwork
+from .direct_pred import DirectPred
+from .supervised_vae import SupervisedVAE
+from .triplet_encoder import MultiTripletNetwork
 
 __all__ = ["DirectPred", "SupervisedVAE", "MultiTripletNetwork"]
