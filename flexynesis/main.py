@@ -71,44 +71,33 @@ class HyperparameterTuning:
         except ValueError as e:
             print(str(e))
             val_loss = float('inf')  # or some other value indicating failure
-        return val_loss    
+        return val_loss, model    
     
     def perform_tuning(self):
         opt = Optimizer(dimensions=self.space, n_initial_points=10, acq_func="gp_hedge", acq_optimizer="auto")
 
         best_loss = np.inf
         best_params = None
+        best_model = None 
 
         with tqdm(total=self.n_iter, desc='Tuning Progress') as pbar:
             for i in range(self.n_iter):
                 suggested_params_list = opt.ask()
                 suggested_params_dict = {param.name: value for param, value in zip(self.space, suggested_params_list)}
-                loss = self.objective(suggested_params_dict, current_step=i+1, total_steps=self.n_iter)
+                loss, model = self.objective(suggested_params_dict, current_step=i+1, total_steps=self.n_iter)
                 opt.tell(suggested_params_list, loss)
 
                 if loss < best_loss:
                     best_loss = loss
                     best_params = suggested_params_list
+                    best_model = model
 
                 # Print result of each iteration
                 pbar.set_postfix({'Iteration': i+1, 'Best Loss': best_loss})
                 pbar.update(1)
-        # Update the model-specific configuration with the best hyperparameters
+        # convert best params to dict 
         best_params_dict = {param.name: value for param, value in zip(self.space, best_params)}
-        print("Building final model with best params:",best_params_dict)
-        # Train the final model with the best hyperparameters
-        final_model = self.model_class(best_params_dict, self.dataset, self.target_variables, self.batch_variables)
-        
-        mycallbacks = [self.progress_bar]
-        # for interactive usage, only show loss plots 
-        if self.plot_losses:
-            mycallbacks = [LiveLossPlot(hyperparams=best_params_dict, current_step="Final(Best) Step", total_steps=self.n_iter)] 
-        if self.early_stop_patience > 0:
-            mycallbacks.append(self.init_early_stopping())
-    
-        trainer = pl.Trainer(max_epochs=int(best_params_dict['epochs']), log_every_n_steps=5, callbacks = mycallbacks, default_root_dir="./", logger=False, enable_checkpointing=False)
-        trainer.fit(final_model)
-        return final_model, best_params_dict
+        return best_model, best_params_dict
     
     def init_early_stopping(self):
         """Initialize the early stopping callback."""
