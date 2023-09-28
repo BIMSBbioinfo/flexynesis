@@ -57,9 +57,9 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
     transformed_df["Label"] = labels
 
     if color_type == 'categorical':
-        unique_labels = list(set(labels))
-        colormap = matplotlib.colormaps["tab20"]
-
+        unique_labels = sorted(set(labels))
+        colormap = matplotlib.cm.get_cmap("tab20", len(unique_labels))
+        
         for i, label in enumerate(unique_labels):
             plt.scatter(
                 transformed_df[transformed_df["Label"] == label][f"{method.upper()}1"],
