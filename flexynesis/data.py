@@ -126,6 +126,11 @@ class MultiomicDataset(Dataset):
         result.index = self.samples
 
         return result
+    
+    def get_dataset_stats(self):
+        stats = {': '.join(['feature_count in', x]): self.dat[x].shape[1] for x in self.dat.keys()}
+        stats['sample_count'] = len(self.samples)
+        return(stats)
 
 
     
@@ -261,7 +266,13 @@ class DataImporter:
             
             testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in testing_dataset.dat.keys()], dim = 1)}
             testing_dataset.features = {'all': list(chain(*testing_dataset.features.values()))}
+        
+        print("[INFO] Training Data Stats:\n", training_dataset.get_dataset_stats())
+        print("[INFO] Test Data Stats:\n", testing_dataset.get_dataset_stats())
+        
         print("[INFO] Data import successful.")
+        
+        
         
         return training_dataset, testing_dataset
     
