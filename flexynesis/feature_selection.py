@@ -54,7 +54,7 @@ def laplacian_score(X, k=5, t=None):
     return np.array(scores)
 
 
-def remove_redundant_features(X, laplacian_scores, threshold=0.8):
+def remove_redundant_features(X, laplacian_scores, threshold=0.8, topN=None):
     """
     Efficiently selects features based on Laplacian scores while avoiding highly correlated features.
 
@@ -67,7 +67,10 @@ def remove_redundant_features(X, laplacian_scores, threshold=0.8):
     threshold : float, optional, default: 0.8
         The Pearson correlation coefficient threshold for removing highly correlated features.
         Features with correlation coefficients greater than the threshold will be removed.
-
+    topN : int, optional, default: None
+            The desired number of features to be returned. If specified, the function will always return 
+            at least this number of features, even if they are redundant. If not specified, the function 
+            will remove all redundant features based on the threshold.
     Returns
     -------
     selected_features : list of int
@@ -76,13 +79,14 @@ def remove_redundant_features(X, laplacian_scores, threshold=0.8):
 
     # Precompute the correlation matrix once
     correlation_matrix = np.corrcoef(X, rowvar=False)
-    
-    # Rank the features by Laplacian scores
-    ranked_indices = np.argsort(laplacian_scores)
+
+    # Rank the features by Laplacian scores in descending order (from highest to lowest)
+    ranked_indices = np.argsort(laplacian_scores)[::-1]
 
     selected_features = []
+    redundant_features = []
 
-    for idx in tqdm(ranked_indices, desc='Removing redundant features among top scoring ones'):
+    for idx in tqdm(ranked_indices, desc='Filtering redundant features'):
         correlated = False
 
         for selected_idx in selected_features:
@@ -93,8 +97,15 @@ def remove_redundant_features(X, laplacian_scores, threshold=0.8):
                 correlated = True
                 break
 
-        if not correlated:
+        if correlated:
+            redundant_features.append(idx)
+        else:
             selected_features.append(idx)
+
+    # If fewer than topN features are selected, top up from the redundant list
+    if topN and len(selected_features) < topN:
+        shortfall = topN - len(selected_features)
+        selected_features.extend(redundant_features[:shortfall])
 
     return selected_features
 
@@ -136,7 +147,8 @@ def filter_by_laplacian(X, layer, k=5, t=None, topN=100, remove_redundant=True, 
 
     if remove_redundant:
         # Remove redundancy from topN + 10% features
-        selected_features = remove_redundant_features(X[X.columns[selected_features]].values, scores[selected_features], threshold)
+        selected_features = remove_redundant_features(X[X.columns[selected_features]].values, 
+                                                      scores[selected_features], threshold, topN)
         # Prune down to topN features
         selected_features = selected_features[:topN]
 
