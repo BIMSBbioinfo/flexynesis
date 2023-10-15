@@ -11,7 +11,7 @@ def main():
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
-    parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, choices=["DirectPred", "supervised_vae", "MultiTripletNetwork"], required = True)
+    parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, choices=["DirectPred", "DirectPredCNN", "supervised_vae", "MultiTripletNetwork"], required = True)
     parser.add_argument("--target_variables", help="(Required) Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", type = str, required = True)
     parser.add_argument('--config_path', type=str, default=None, help='Optional path to an external hyperparameter configuration file in YAML format.')
     parser.add_argument("--batch_variables", 
@@ -51,6 +51,9 @@ def main():
     elif args.model_class == "MultiTripletNetwork":
         model_class = flexynesis.MultiTripletNetwork
         config_name = 'MultiTripletNetwork'
+    elif args.model_class == "DirectPredCNN":
+        model_class = flexynesis.models.DirectPredCNN
+        config_name = 'DirectPredCNN'
     else:
         raise ValueError(f"Invalid model_class: {args.model_class}")
 
