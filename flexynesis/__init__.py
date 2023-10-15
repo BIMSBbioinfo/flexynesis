@@ -60,3 +60,4 @@ from .feature_selection import *
 from .data_augmentation import *
 from .utils import *
 from .config import *
+from . import models

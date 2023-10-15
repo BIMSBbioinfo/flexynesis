@@ -10,6 +10,7 @@ __all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "MultiEmbeddingNetwo
 class CNN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
+
         self.layer_1 = nn.Conv1d(input_dim, hidden_dim, kernel_size=1)
         self.batchnorm = nn.BatchNorm1d(hidden_dim)
         self.relu = nn.ReLU()
@@ -22,6 +23,7 @@ class CNN(nn.Module):
         x = x.unsqueeze(-1)
 
         x = self.layer_1(x)
+        # TODO: for 1 at train
         x = self.batchnorm(x)
         x = self.relu(x)
         x = self.dropout(x)
