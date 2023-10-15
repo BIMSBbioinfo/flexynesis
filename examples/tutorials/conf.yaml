@@ -20,6 +20,28 @@ DirectPred:
     name: epochs
     categories: [200]
 
+DirectPredCNN:
+  - type: Integer
+    name: latent_dim
+    low: 16
+    high: 64
+  - type: Integer
+    name: hidden_dim
+    low: 64
+    high: 512
+  - type: Real
+    name: lr
+    low: 0.0001
+    high: 0.01
+    prior: log-uniform
+  - type: Integer
+    name: batch_size
+    low: 32
+    high: 128
+  - type: Categorical
+    name: epochs
+    categories: [200]
+
 supervised_vae:
   - type: Integer
     name: latent_dim
