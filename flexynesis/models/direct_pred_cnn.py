@@ -1,18 +1,20 @@
 import numpy as np
 from torch import nn
 
-from .direct_pred import DirectPred
 from ..modules import CNN
+from .base_direct_pred import BaseDirectPred
 
 
-class DirectPredCNN(DirectPred):
+class DirectPredCNN(BaseDirectPred):
     def _init_encoders(self):
         layers = list(self.dataset.dat.keys())
         input_dims = [len(self.dataset.features[layers[i]]) for i in range(len(layers))]
-        self.encoders = nn.ModuleList([
-            CNN(input_dim=input_dims[i], hidden_dim=self.config["hidden_dim"], output_dim=self.config["latent_dim"])
-            for i in range(len(layers))
-        ])
+        self.encoders = nn.ModuleList(
+            [
+                CNN(input_dim=input_dims[i], hidden_dim=self.config["hidden_dim"], output_dim=self.config["latent_dim"])
+                for i in range(len(layers))
+            ]
+        )
 
     def _init_output_layers(self):
         layers = list(self.dataset.dat.keys())
