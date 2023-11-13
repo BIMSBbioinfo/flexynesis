@@ -12,7 +12,7 @@ from functools import reduce
 
 from captum.attr import IntegratedGradients
 
-from .models_shared import *
+from ..modules import *
 
 
 

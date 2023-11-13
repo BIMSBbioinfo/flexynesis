@@ -9,8 +9,8 @@ import numpy as np
 
 import pytorch_lightning as pl
 
-from .models_shared import *
-from .data import TripletMultiOmicDataset
+from ..modules import *
+from ..data import TripletMultiOmicDataset
 
 from captum.attr import IntegratedGradients
 

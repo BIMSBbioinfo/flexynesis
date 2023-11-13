@@ -12,7 +12,7 @@ from scipy import stats
 
 from captum.attr import IntegratedGradients
 
-from .models_shared import *
+from ..modules import *
 
 # Supervised Variational Auto-encoder that can train one or more layers of omics datasets 
 # num_layers: number of omics layers in the input
