@@ -50,14 +50,11 @@ This package is currently private and is not meant to be used outside of Arcas.a
 Bora Uyar, bora.uyar@mdc-berlin.de
 """
 
-from .models_shared import *
+from .modules import *
 from .data import *
 from .main import *
-from .model_DirectPred import *
-from .model_SVAE import *
-from .model_TripletEncoder import *
+from .models import *
 from .feature_selection import *
 from .data_augmentation import *
 from .utils import *
 from .config import *
-from . import models

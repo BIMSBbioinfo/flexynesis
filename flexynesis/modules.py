@@ -3,6 +3,8 @@
 import torch
 from torch import nn
 
+__all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "Classifier", "CNN"]
+
 
 class Encoder(nn.Module):
     """
@@ -220,4 +222,31 @@ class Classifier(nn.Module):
         for layer in self.layers[:-1]:
             x = torch.relu(layer(x))
         x = self.layers[-1](x)
+        return x
+
+
+class CNN(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super().__init__()
+
+        self.layer_1 = nn.Conv1d(input_dim, hidden_dim, kernel_size=1)
+        self.batchnorm = nn.BatchNorm1d(hidden_dim)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(p=0.1)
+        self.layer_out = nn.Conv1d(hidden_dim, output_dim, kernel_size=1)
+
+    def forward(self, x):
+        """(N, C) -> (N, C, L) -> (N, C).
+        """
+        x = x.unsqueeze(-1)
+
+        x = self.layer_1(x)
+        # TODO: for 1 at train
+        x = self.batchnorm(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+
+        x = self.layer_out(x)
+
+        x = x.squeeze(-1)
         return x
