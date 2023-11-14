@@ -26,32 +26,25 @@ class DirectPred(pl.LightningModule):
         self.variables = target_variables + batch_variables if batch_variables else target_variables
         self.val_size = val_size
         self.dat_train, self.dat_val = self.prepare_data()
-        self.feature_importances = {} 
-        # Instantiate layers.
-        self._init_encoders()
-        self._init_output_layers()
+        self.feature_importances = {}
 
-    def _init_encoders(self):
-        layers = list(self.dataset.dat.keys())
-        input_dims = [len(self.dataset.features[layers[i]]) for i in range(len(layers))]
+        layers = list(dataset.dat.keys())
+        input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
+
         self.encoders = nn.ModuleList([
-            MLP(input_dim=input_dims[i], hidden_dim=self.config["hidden_dim"], output_dim=self.config["latent_dim"])
-            for i in range(len(layers))
-        ])
+            MLP(input_dim=input_dims[i],
+                hidden_dim=self.config['hidden_dim'],
+                output_dim=self.config['latent_dim']) for i in range(len(layers))])
 
-    def _init_output_layers(self):
-        layers = list(self.dataset.dat.keys())
         self.MLPs = nn.ModuleDict()  # using ModuleDict to store multiple MLPs
         for var in self.target_variables:
-            if self.dataset.variable_types[var] == "numerical":
+            if self.dataset.variable_types[var] == 'numerical':
                 num_class = 1
             else:
                 num_class = len(np.unique(self.dataset.ann[var]))
-            self.MLPs[var] = MLP(
-                input_dim=self.config["latent_dim"] * len(layers),
-                hidden_dim=self.config["hidden_dim"],
-                output_dim=num_class,
-            )
+            self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(layers),
+                                 hidden_dim=self.config['hidden_dim'],
+                                 output_dim=num_class)
 
     def forward(self, x_list):
         """
