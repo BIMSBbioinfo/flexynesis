@@ -69,7 +69,7 @@ class supervised_vae(pl.LightningModule):
         # define supervisor heads
         # using ModuleDict to store multiple MLPs
         self.MLPs = nn.ModuleDict()         
-        for var in self.target_variables:
+        for var in self.variables:
             if self.dataset.variable_types[var] == 'numerical':
                 num_class = 1
             else:

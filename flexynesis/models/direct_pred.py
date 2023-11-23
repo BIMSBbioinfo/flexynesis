@@ -37,7 +37,7 @@ class DirectPred(pl.LightningModule):
                 output_dim=self.config['latent_dim']) for i in range(len(layers))])
 
         self.MLPs = nn.ModuleDict()  # using ModuleDict to store multiple MLPs
-        for var in self.target_variables:
+        for var in self.variables:
             if self.dataset.variable_types[var] == 'numerical':
                 num_class = 1
             else:

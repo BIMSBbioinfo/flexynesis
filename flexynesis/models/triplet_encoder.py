@@ -97,7 +97,7 @@ class MultiTripletNetwork(pl.LightningModule):
 
         # define supervisor heads for both target and batch variables 
         self.MLPs = nn.ModuleDict() # using ModuleDict to store multiple MLPs
-        for var in self.target_variables:
+        for var in self.variables:
             if self.variable_types[var] == 'numerical':
                 num_class = 1
             else:
