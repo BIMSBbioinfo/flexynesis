@@ -21,7 +21,7 @@ from skopt.space import Integer, Categorical, Real
 class HyperparameterTuning:
     def __init__(self, dataset, model_class, config_name, target_variables, 
                  batch_variables = None, n_iter = 10, config_path = None, plot_losses = False,
-                early_stop_patience = -1):
+                 val_size = 0.2, use_loss_weighting = True, early_stop_patience = -1):
         self.dataset = dataset
         self.model_class = model_class
         self.target_variables = target_variables.strip().split(',')
@@ -29,12 +29,14 @@ class HyperparameterTuning:
         self.config_name = config_name
         self.n_iter = n_iter
         self.plot_losses = plot_losses # Whether to show live loss plots (useful in interactive mode)
+        self.val_size = val_size
         self.progress_bar = RichProgressBar(
                                 theme = RichProgressBarTheme(
                                     progress_bar = 'green1',
                                     metrics = 'yellow', time='gray',
                                     progress_bar_finished='red'))
         self.early_stop_patience = early_stop_patience
+        self.use_loss_weighting = use_loss_weighting
         
         # If config_path is provided, use it
         if config_path:
@@ -50,7 +52,8 @@ class HyperparameterTuning:
                 raise ValueError(f"'{self.config_name}' not found in the default config.")
 
     def objective(self, params, current_step, total_steps):
-        model = self.model_class(params, self.dataset, self.target_variables, self.batch_variables)
+        model = self.model_class(params, self.dataset, self.target_variables, 
+                                 self.batch_variables, self.val_size, self.use_loss_weighting)
         print(params)
         
         mycallbacks = [self.progress_bar]
