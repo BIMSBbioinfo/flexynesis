@@ -65,17 +65,16 @@ jobs:
       shell: bash -l {0}
       run: |
         conda activate my_env
-        flexynesis --data_path dataset1 --model_class DirectPred --target_variables Erlotinib --batch_variables Crizotinib --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 20 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_direct 
+        flexynesis --data_path dataset1 --model_class DirectPred --target_variables Erlotinib --batch_variables Crizotinib --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 20 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_direct --early_stop_patience 10 --use_loss_weighting 
         
     - name: Run supervised_vae
       shell: bash -l {0}
       run: |
         conda activate my_env
-        flexynesis --data_path dataset1 --model_class supervised_vae --target_variables Erlotinib --batch_variables Crizotinib --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 20 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_svae
+        flexynesis --data_path dataset1 --model_class supervised_vae --target_variables Erlotinib,Crizotinib --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 20 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_svae --early_stop_patience 10 --use_loss_weighting
 
     - name: Run MultiTripletNetwork
       shell: bash -l {0}
       run: |
         conda activate my_env
         flexynesis --data_path dataset2 --model_class MultiTripletNetwork --target_variables y --fusion_type early --hpo_iter 1 --features_min 500 --features_top_percentile 20 --log_transform False --data_types gex,meth --outdir . --prefix msi_triplet 
-
