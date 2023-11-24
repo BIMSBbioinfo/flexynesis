@@ -28,6 +28,11 @@ class DirectPred(pl.LightningModule):
         self.dat_train, self.dat_val = self.prepare_data()
         self.feature_importances = {}
 
+        # Initialize log variance parameters for uncertainty weighting
+        self.log_vars = nn.ParameterDict()
+        for var in self.variables:
+            self.log_vars[var] = nn.Parameter(torch.zeros(1))
+
         layers = list(dataset.dat.keys())
         input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
 
@@ -100,6 +105,11 @@ class DirectPred(pl.LightningModule):
             else: 
                 loss = 0
         return loss
+    
+    def compute_weighted_loss(self, loss_name, loss):
+        precision = torch.exp(-self.log_vars[loss_name])
+        weighted_loss = precision * loss + self.log_vars[loss_name]
+        return weighted_loss
 
     def training_step(self, train_batch, batch_idx):
         """
@@ -116,16 +126,15 @@ class DirectPred(pl.LightningModule):
         x_list = [dat[x] for x in layers]
         outputs = self.forward(x_list)
         losses = {}
-        for var in self.target_variables:
+        for var in self.variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
             losses[var] = loss
-        total_loss = sum(losses.values())
+        total_loss = sum(self.compute_weighted_loss(name, loss) for name, loss in losses.items())
         losses['train_loss'] = total_loss
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
-
     
     def validation_step(self, val_batch, batch_idx):
         """
