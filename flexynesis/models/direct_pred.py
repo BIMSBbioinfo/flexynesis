@@ -17,7 +17,7 @@ from ..modules import *
 
 
 class DirectPred(pl.LightningModule):
-    def __init__(self, config, dataset, target_variables, batch_variables = None, val_size = 0.2):
+    def __init__(self, config, dataset, target_variables, batch_variables = None, val_size = 0.2, use_loss_weighting = True):
         super(DirectPred, self).__init__()
         self.config = config
         self.dataset = dataset
@@ -27,11 +27,13 @@ class DirectPred(pl.LightningModule):
         self.val_size = val_size
         self.dat_train, self.dat_val = self.prepare_data()
         self.feature_importances = {}
+        self.use_loss_weighting = use_loss_weighting
 
-        # Initialize log variance parameters for uncertainty weighting
-        self.log_vars = nn.ParameterDict()
-        for var in self.variables:
-            self.log_vars[var] = nn.Parameter(torch.zeros(1))
+        if self.use_loss_weighting:
+            # Initialize log variance parameters for uncertainty weighting
+            self.log_vars = nn.ParameterDict()
+            for var in self.variables:
+                self.log_vars[var] = nn.Parameter(torch.zeros(1))
 
         layers = list(dataset.dat.keys())
         input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
@@ -106,10 +108,15 @@ class DirectPred(pl.LightningModule):
                 loss = 0
         return loss
     
-    def compute_weighted_loss(self, loss_name, loss):
-        precision = torch.exp(-self.log_vars[loss_name])
-        weighted_loss = precision * loss + self.log_vars[loss_name]
-        return weighted_loss
+    def compute_total_loss(self, losses):
+        if self.use_loss_weighting and len(losses) > 1:
+            # Compute weighted loss for each loss 
+            # Weighted loss = precision * loss + log-variance
+            total_loss = sum(torch.exp(-self.log_vars[name]) * loss + self.log_vars[name] for name, loss in losses.items())
+        else:
+            # Compute unweighted total loss
+            total_loss = sum(losses.values())
+        return total_loss
 
     def training_step(self, train_batch, batch_idx):
         """
@@ -131,7 +138,9 @@ class DirectPred(pl.LightningModule):
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
             losses[var] = loss
-        total_loss = sum(self.compute_weighted_loss(name, loss) for name, loss in losses.items())
+            
+        total_loss = self.compute_total_loss(losses)
+        # add train loss for logging
         losses['train_loss'] = total_loss
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
