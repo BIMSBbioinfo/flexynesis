@@ -27,7 +27,9 @@ def main():
     parser.add_argument("--log_transform", help="whether to apply log-transformation to input data matrices", type=str, choices=['True', 'False'], default = 'False')
     parser.add_argument("--threads", help="Number of threads to use", type=int, default = 4)
     parser.add_argument("--early_stop_patience", help="How many epochs to wait when no improvements in validation loss is observed (default: -1; no early stopping)", type=int, default = -1)
-    
+    parser.add_argument("--use_loss_weighting", action="store_true", 
+                    help="Include this flag to use adaptive weighting of loss values using uncertainty weighting method. Omit the flag to not use it.")
+
     warnings.filterwarnings("ignore", ".*does not have many workers.*")
     warnings.filterwarnings("ignore", "has been removed as a dependency of the")
     warnings.filterwarnings("ignore", "The `srun` command is available on your system but is not used")
@@ -83,6 +85,7 @@ def main():
                                             config_name = config_name, 
                                             config_path = args.config_path,
                                             n_iter=int(args.hpo_iter),
+                                            use_loss_weighting = args.use_loss_weighting,
                                             early_stop_patience = int(args.early_stop_patience))    
     
     # do a hyperparameter search training multiple models and get the best_configuration 
