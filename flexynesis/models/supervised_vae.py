@@ -214,7 +214,7 @@ class supervised_vae(pl.LightningModule):
         # compute loss values for the supervisor heads 
         losses = {'mmd_loss': mmd_loss}
         
-        for var in self.target_variables:
+        for var in self.variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
@@ -239,7 +239,7 @@ class supervised_vae(pl.LightningModule):
 
         # compute loss values for the supervisor heads 
         losses = {'mmd_loss': mmd_loss}
-        for var in self.target_variables:
+        for var in self.variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
@@ -298,7 +298,7 @@ class supervised_vae(pl.LightningModule):
         X_hat, z, mean, log_var, outputs = self.forward(x_list)
         
         predictions = {}
-        for var in self.target_variables:
+        for var in self.variables:
             y_pred = outputs[var].detach().numpy()
             if self.dataset.variable_types[var] == 'categorical':
                 predictions[var] = np.argmax(y_pred, axis=1)
