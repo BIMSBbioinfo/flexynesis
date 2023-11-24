@@ -4,6 +4,8 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import Dataset, DataLoader, random_split
 
+import itertools
+
 import pandas as pd
 import numpy as np
 
@@ -58,7 +60,7 @@ class MultiEmbeddingNetwork(nn.Module):
 class MultiTripletNetwork(pl.LightningModule):
     """
     """
-    def __init__(self, config, dataset, target_variables, batch_variables = None, val_size = 0.2):
+    def __init__(self, config, dataset, target_variables, batch_variables = None, val_size = 0.2, use_loss_weighting = True):
         """
         Initialize the MultiTripletNetwork with the given parameters.
 
@@ -87,7 +89,16 @@ class MultiTripletNetwork(pl.LightningModule):
         main_var = self.target_variables[0] 
         if self.dataset.variable_types[main_var] == 'numerical':
             raise ValueError("The first target variable",main_var," must be a categorical variable")
-            
+        
+        self.use_loss_weighting = use_loss_weighting
+        
+        if self.use_loss_weighting:
+            # Initialize log variance parameters for uncertainty weighting
+            self.log_vars = nn.ParameterDict()
+            for loss_type in itertools.chain(self.variables, ['triplet_loss']):
+                self.log_vars[loss_type] = nn.Parameter(torch.zeros(1))
+        
+        
         # create train/validation splits and convert TripletMultiOmicDataset format
         self.dataset = TripletMultiOmicDataset(self.dataset, main_var)
         self.dat_train, self.dat_val = self.prepare_data() 
@@ -179,6 +190,17 @@ class MultiTripletNetwork(pl.LightningModule):
             else: 
                 loss = 0
         return loss
+    
+    def compute_total_loss(self, losses):
+        if self.use_loss_weighting and len(losses) > 1:
+            # Compute weighted loss for each loss 
+            # Weighted loss = precision * loss + log-variance
+            total_loss = sum(torch.exp(-self.log_vars[name]) * loss + self.log_vars[name] for name, loss in losses.items())
+        else:
+            # Compute unweighted total loss
+            total_loss = sum(losses.values())
+        return total_loss
+
     def training_step(self, train_batch, batch_idx):
         anchor, positive, negative, y_dict = train_batch[0], train_batch[1], train_batch[2], train_batch[3]
         anchor_embedding, positive_embedding, negative_embedding, outputs = self.forward(anchor, positive, negative)
@@ -186,13 +208,14 @@ class MultiTripletNetwork(pl.LightningModule):
         
         # compute loss values for the supervisor heads 
         losses = {'triplet_loss': triplet_loss}
-        for var in self.target_variables:
+        for var in self.variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
             losses[var] = loss
 
-        total_loss = sum(losses.values())
+        total_loss = self.compute_total_loss(losses)
+        # add total loss for logging 
         losses['train_loss'] = total_loss
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
@@ -204,7 +227,7 @@ class MultiTripletNetwork(pl.LightningModule):
         
         # compute loss values for the supervisor heads 
         losses = {'triplet_loss': triplet_loss}
-        for var in self.target_variables:
+        for var in self.variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
@@ -267,7 +290,7 @@ class MultiTripletNetwork(pl.LightningModule):
         
         # get predictions from the mlp outputs for each var
         predictions = {}
-        for var in self.target_variables:
+        for var in self.variables:
             y_pred = outputs[var].detach().numpy()
             if self.variable_types[var] == 'categorical':
                 predictions[var] = np.argmax(y_pred, axis=1)
