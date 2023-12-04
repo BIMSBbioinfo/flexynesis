@@ -12,8 +12,10 @@ from sklearn.metrics import mean_squared_error, r2_score
 from scipy.stats import pearsonr
 
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.svm import SVC, SVR
 from sklearn.feature_selection import SelectFromModel
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
+from sklearn.model_selection import KFold, cross_val_score
 
 
 def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', scatter_kwargs=None, legend_kwargs=None, figsize=(10, 8)):
@@ -136,23 +138,18 @@ def plot_boxplot(categorical_x, numerical_y, title_x = 'Categories', title_y = '
 def split_by_median(v):
     return ((v - torch.nanmedian(v)) > 0).float()
     
-def evaluate_classifier(y_true, y_pred):
+def evaluate_classifier(y_true, y_pred, print_report = False):
     # Balanced accuracy
     balanced_acc = balanced_accuracy_score(y_true, y_pred)
-    print(f"Balanced Accuracy: {balanced_acc:.4f}")
-
     # F1 score (macro)
     f1 = f1_score(y_true, y_pred, average='macro', zero_division=0)
-    print(f"F1 Score (Macro): {f1:.4f}")
-
     # Cohen's Kappa
     kappa = cohen_kappa_score(y_true, y_pred)
-    print(f"Cohen's Kappa: {kappa:.4f}")
-
     # Full classification report
-    print("\nClassification Report:")
-    report = classification_report(y_true, y_pred, zero_division=0)
-    print(report)
+    if print_report:
+        print("\nClassification Report:")
+        report = classification_report(y_true, y_pred, zero_division=0)
+        print(report)
     return {"balanced_acc": balanced_acc, "f1_score": f1, "kappa": kappa}
 
 def evaluate_regressor(y_true, y_pred):
@@ -160,7 +157,6 @@ def evaluate_regressor(y_true, y_pred):
     r2 = r2_score(y_true, y_pred)
     pearson_corr, _ = pearsonr(y_true, y_pred)
     return {"mse": mse, "r2": r2, "pearson_corr": pearson_corr[0]}
-
 
 def evaluate_wrapper(y_pred_dict, dataset):
     metrics_list = []
@@ -175,6 +171,63 @@ def evaluate_wrapper(y_pred_dict, dataset):
             metrics_list.append({
                 'var': var,
                 'variable_type': dataset.variable_types[var],
+                'metric': metric,
+                'value': value
+            })
+    # Convert the list of metrics to a DataFrame
+    return pd.DataFrame(metrics_list)
+
+
+def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_folds=5):
+    def prepare_data(data_object):
+        # Concatenate Data Matrices
+        X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=0)
+
+        # Prepare Labels
+        y = np.array(data_object.ann[variable_name])
+
+        # Filter out samples without a valid label
+        valid_indices = ~np.isnan(y)
+        X = X[valid_indices]
+        y = y[valid_indices]
+        return X, y
+
+    # Determine variable type
+    variable_type = train_dataset.variable_types[variable_name]
+
+    # Initialize models
+    if variable_type == 'categorical':
+        models = {'RandomForestClassifier': RandomForestClassifier(), 
+                  'SVC': SVC()}
+    elif variable_type == 'numerical':
+        models = {'RandomForestRegressor': RandomForestRegressor(), 
+                  'SVR': SVR()}
+
+    # Cross-Validation and Training
+    kf = KFold(n_splits=n_folds)
+    X_train, y_train = prepare_data(train_dataset)
+    X_test, y_test = prepare_data(test_dataset)
+
+    metrics_list = []
+    for model_name, model in models.items():
+        # Cross-validation
+        cv_scores = cross_val_score(model, X_train, y_train, cv=kf)
+        # Train on full training data
+        model.fit(X_train, y_train)
+
+        # Predict on test data
+        y_pred = model.predict(X_test)
+
+        # Evaluate predictions
+        if variable_type == 'categorical':
+            metrics = evaluate_classifier(y_test, y_pred)
+        elif variable_type == 'numerical':
+            metrics = evaluate_regressor(y_test, y_pred)
+        for metric, value in metrics.items():
+            metrics_list.append({
+                'method': model_name, 
+                'var': variable_name,
+                'variable_type': variable_type,
                 'metric': metric,
                 'value': value
             })
