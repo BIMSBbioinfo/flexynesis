@@ -15,8 +15,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.svm import SVC, SVR
 from sklearn.feature_selection import SelectFromModel
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
-from sklearn.model_selection import KFold, cross_val_score
-
+from sklearn.model_selection import KFold, cross_val_score, GridSearchCV
 
 def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', scatter_kwargs=None, legend_kwargs=None, figsize=(10, 8)):
     """
@@ -178,7 +177,7 @@ def evaluate_wrapper(y_pred_dict, dataset):
     return pd.DataFrame(metrics_list)
 
 
-def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_folds=5):
+def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_folds=5, n_jobs = 4):
     def prepare_data(data_object):
         # Concatenate Data Matrices
         X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=0)
@@ -195,44 +194,74 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_
     # Determine variable type
     variable_type = train_dataset.variable_types[variable_name]
 
-    # Initialize models
+    # Initialize models and parameter grids
     if variable_type == 'categorical':
-        models = {'RandomForestClassifier': RandomForestClassifier(), 
-                  'SVC': SVC()}
+        model_params = {
+            'RandomForestClassifier': {
+                'model': RandomForestClassifier(random_state=42),
+                'params': {
+                    'n_estimators': [100, 200, 300],
+                    'max_depth': [10, 20, None]
+                }
+            },
+            'SVC': {
+                'model': SVC(),
+                'params': {
+                    'C': [0.1, 1, 10],
+                    'kernel': ['rbf', 'poly']
+                }
+            }
+        }
     elif variable_type == 'numerical':
-        models = {'RandomForestRegressor': RandomForestRegressor(), 
-                  'SVR': SVR()}
+        model_params = {
+            'RandomForestRegressor': {
+                'model': RandomForestRegressor(random_state=42),
+                'params': {
+                    'n_estimators': [100, 200, 300],
+                    'max_depth': [10, 20, None]
+                }
+            },
+            'SVR': {
+                'model': SVR(),
+                'params': {
+                    'C': [0.1, 1, 10],
+                    'kernel': ['rbf', 'poly']
+                }
+            }
+        }
 
     # Cross-Validation and Training
-    kf = KFold(n_splits=n_folds)
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
     X_train, y_train = prepare_data(train_dataset)
     X_test, y_test = prepare_data(test_dataset)
 
     metrics_list = []
-    for model_name, model in models.items():
-        # Cross-validation
-        cv_scores = cross_val_score(model, X_train, y_train, cv=kf)
-        # Train on full training data
-        model.fit(X_train, y_train)
+    for model_name, mp in model_params.items():
+        grid_search = GridSearchCV(mp['model'], mp['params'], cv=kf, n_jobs=n_jobs)
+        grid_search.fit(X_train, y_train)
+        best_model = grid_search.best_estimator_
 
         # Predict on test data
-        y_pred = model.predict(X_test)
+        y_pred = best_model.predict(X_test)
 
         # Evaluate predictions
         if variable_type == 'categorical':
             metrics = evaluate_classifier(y_test, y_pred)
         elif variable_type == 'numerical':
             metrics = evaluate_regressor(y_test, y_pred)
+
         for metric, value in metrics.items():
             metrics_list.append({
-                'method': model_name, 
+                'method': model_name,
                 'var': variable_name,
                 'variable_type': variable_type,
                 'metric': metric,
                 'value': value
             })
+
     # Convert the list of metrics to a DataFrame
     return pd.DataFrame(metrics_list)
+
 
 def remove_batch_associated_variables(data, variable_types, target_dict, batch_dict = None, mi_threshold=0.1):
     """

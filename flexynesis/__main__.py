@@ -127,6 +127,13 @@ def main():
     embeddings_train_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.filtered.csv'])), header=True)    
     embeddings_test_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.filtered.csv'])), header=True)    
     
+    # evaluate off-the-shelf methods on the main target variable 
+    metrics_baseline = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, 
+                                                                variable_name= model.target_variables[0], 
+                                                                n_folds=5)
+    print("Computing off-the-shelf method performance on first target variable:",model.target_variables[0])
+    metrics_baseline.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'baseline.stats.csv'])), header=True, index=False) 
+    
     # save the trained model in file
     torch.save(model, os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.pth'])))
     
