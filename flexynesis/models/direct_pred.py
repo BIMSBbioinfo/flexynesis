@@ -95,7 +95,7 @@ class DirectPred(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.mse_loss(torch.flatten(y_hat), y.float())
             else:
-                return None
+                loss = torch.tensor(0) # if no valid labels, set loss to 0
         else:
             # Ignore instances with missing labels for categorical variables
             # Assuming that missing values were encoded as -1
@@ -105,46 +105,44 @@ class DirectPred(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
             else: 
-                return None
+                loss = torch.tensor(0)
         return loss
     
     def compute_total_loss(self, losses):
-        valid_loss_count = sum(1 for loss in losses.values() if loss is not None)
-
-        if valid_loss_count == 0:
-            return None  # Return None if there are no valid losses
-
-        if self.use_loss_weighting and valid_loss_count > 1:
-            # Compute weighted loss for each valid loss 
+        if self.use_loss_weighting and len(losses) > 1:
+            # Compute weighted loss for each loss 
             # Weighted loss = precision * loss + log-variance
-            total_loss = sum(torch.exp(-self.log_vars[name]) * loss + self.log_vars[name] for name, loss in losses.items() if loss is not None)
+            total_loss = sum(torch.exp(-self.log_vars[name]) * loss + self.log_vars[name] for name, loss in losses.items())
         else:
-            # Compute unweighted total loss for valid losses only
-            total_loss = sum(loss for loss in losses.values() if loss is not None)
-
-        normalized_total_loss = total_loss / valid_loss_count  # Normalize the total loss
-        # print('Normalized total loss:', normalized_total_loss)
-        return normalized_total_loss
+            # Compute unweighted total loss
+            total_loss = sum(losses.values())
+        return total_loss
 
     def training_step(self, train_batch, batch_idx):
+        """
+        Perform a single training step.
+        Args:
+            train_batch (tuple): A tuple containing the input data and labels for the current batch.
+            batch_idx (int): The index of the current batch.
+        Returns:
+            torch.Tensor: The total loss for the current training step.
+        """
+        
         dat, y_dict = train_batch       
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         outputs = self.forward(x_list)
-
         losses = {}
         for var in self.variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
             losses[var] = loss
-
+            
         total_loss = self.compute_total_loss(losses)
-        if total_loss is None:
-            return None  # Skip the entire batch if no valid losses
-
         # add train loss for logging
-        self.log_dict({'train_loss': total_loss}, on_step=False, on_epoch=True, prog_bar=True)
+        losses['train_loss'] = total_loss
+        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
     
     def validation_step(self, val_batch, batch_idx):
@@ -156,30 +154,22 @@ class DirectPred(pl.LightningModule):
             batch_idx (int): The index of the current batch.
 
         Returns:
-            torch.Tensor or None: The total loss for the current validation step, or None to skip the batch.
+            torch.Tensor: The total loss for the current validation step.
         """
         dat, y_dict = val_batch       
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         outputs = self.forward(x_list)
-
         losses = {}
         for var in self.variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
             losses[var] = loss
-
-        valid_loss_count = sum(1 for loss in losses.values() if loss is not None)
-        if valid_loss_count == 0:
-            return None  # Skip the batch if no valid losses
-
-        total_loss = sum(loss for loss in losses.values() if loss is not None)
-        normalized_total_loss = total_loss / valid_loss_count  # Normalize the total loss
-
-        losses['val_loss'] = normalized_total_loss
+        total_loss = sum(losses.values())
+        losses['val_loss'] = total_loss
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
-        return normalized_total_loss
+        return total_loss
 
     
     def prepare_data(self):

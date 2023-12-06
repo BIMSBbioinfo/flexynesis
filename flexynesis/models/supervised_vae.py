@@ -176,7 +176,7 @@ class supervised_vae(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.mse_loss(torch.flatten(y_hat), y.float())
             else:
-                loss = 0 # if no valid labels, set loss to 0
+                loss = torch.tensor(0) # if no valid labels, set loss to 0
         else:
             # Ignore instances with missing labels for categorical variables
             # Assuming that missing values were encoded as -1
@@ -186,7 +186,7 @@ class supervised_vae(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
             else: 
-                loss = 0
+                loss = torch.tensor(0)
         return loss
     
     def compute_total_loss(self, losses):
