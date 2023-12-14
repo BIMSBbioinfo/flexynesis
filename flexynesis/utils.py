@@ -180,7 +180,7 @@ def evaluate_wrapper(y_pred_dict, dataset):
 def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_folds=5, n_jobs = 4):
     def prepare_data(data_object):
         # Concatenate Data Matrices
-        X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=0)
+        X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=1)
 
         # Prepare Labels
         y = np.array(data_object.ann[variable_name])
