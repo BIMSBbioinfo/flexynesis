@@ -155,14 +155,14 @@ def evaluate_regressor(y_true, y_pred):
     mse = mean_squared_error(y_true, y_pred)
     r2 = r2_score(y_true, y_pred)
     pearson_corr, _ = pearsonr(y_true, y_pred)
-    return {"mse": mse, "r2": r2, "pearson_corr": pearson_corr[0]}
+    return {"mse": mse, "r2": r2, "pearson_corr": pearson_corr}
 
 def evaluate_wrapper(y_pred_dict, dataset):
     metrics_list = []
     for var in y_pred_dict.keys():
         ind = ~torch.isnan(dataset.ann[var])
         if dataset.variable_types[var] == 'numerical':
-            metrics = evaluate_regressor(dataset.ann[var][ind], y_pred_dict[var][ind])
+            metrics = evaluate_regressor(dataset.ann[var][ind], y_pred_dict[var][ind].flatten())
         else:
             metrics = evaluate_classifier(dataset.ann[var][ind], y_pred_dict[var][ind])
 
