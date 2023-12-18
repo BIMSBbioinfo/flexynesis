@@ -2,10 +2,10 @@
 
 import torch
 from torch import nn
-from torch_geometric.nn import GraphConv, global_add_pool
+import torch_geometric.nn as gnn
 
 
-__all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "Classifier", "CNN"]
+__all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "Classifier", "CNN", "GCNN"]
 
 
 class Encoder(nn.Module):
@@ -254,19 +254,16 @@ class CNN(nn.Module):
         return x
 
 
-class GCN(nn.Module):
+class GCNN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
-        self.layer_1 = GraphConv(input_dim, hidden_dim)
-        self.relu = nn.ReLU()
-        self.layer_2 = GraphConv(hidden_dim, output_dim)
-        self.aggregation = global_add_pool
+
+        self.layer_1 = nn.Sequential(gnn.GraphConv(input_dim, hidden_dim), nn.ReLU())
+        self.layer_2 = nn.Sequential(gnn.GraphConv(hidden_dim, output_dim), nn.ReLU())
+        self.aggregation = gnn.aggr.SumAggregation()
 
     def forward(self, x, edge_index, batch):
         x = self.layer_1(x, edge_index)
-        x = self.relu(x)
-
         x = self.layer_2(x, edge_index)
-
         x = self.aggregation(x, batch)
         return x
