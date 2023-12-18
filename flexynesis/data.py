@@ -1,4 +1,7 @@
 from torch.utils.data import Dataset, DataLoader
+from torch_geometric.data import Data
+from torch_geometric.data import Dataset as PYGDataset
+
 import numpy as np
 import pandas as pd
 from functools import reduce
@@ -60,7 +63,7 @@ class MultiomicDataset(Dataset):
         A PyTorch dataset that can be used for training or evaluation.
     """
 
-    def __init__(self, dat, ann, variable_types, features, samples, label_mappings):
+    def __init__(self, dat, ann, variable_types, features, samples, label_mappings, feature_ann=None):
         """Initialize the dataset."""
         self.dat = dat
         self.ann = ann
@@ -68,6 +71,7 @@ class MultiomicDataset(Dataset):
         self.features = features
         self.samples = samples
         self.label_mappings = label_mappings
+        self.feature_ann = feature_ann or {}
 
     def __getitem__(self, index):
         """Get a single data sample from the dataset.
@@ -133,11 +137,103 @@ class MultiomicDataset(Dataset):
         return(stats)
 
 
+class MultiomicPYGDataset(MultiomicDataset, PYGDataset):
+    """Multiomic pyg dataset.
+    """
+    def __init__(
+        self,
+        dat,
+        ann,
+        variable_types,
+        features,
+        samples,
+        label_mappings,
+        feature_ann=None,
+        root=None,
+        transform=None,
+        pre_transform=None,
+        pre_filter=None,
+        log=True,
+    ):
+        """Initialize dataset.
+        """
+        super(MultiomicPYGDataset, self).__init__(dat, ann, variable_types, features, samples, label_mappings, feature_ann)
+        super(MultiomicDataset, self).__init__(root, transform, pre_transform, pre_filter, log)
+        self._transform = transform
+        self.transform = None
+
+    def __getitem__(self, idx):
+        return super(MultiomicDataset, self).__getitem__(idx)
+
+    def get(self, idx: int):
+        subset_dat = {
+            k: Data(x=self.dat[k][idx], edge_index=self.feature_ann[k]["edge_index"]) if self._transform is None else self._transform(Data(x=self.dat[k][idx], edge_index=self.feature_ann[k]["edge_index"]))
+                for k in self.dat.keys()
+        }
+        subset_ann = {k: self.ann[k][idx] for k in self.ann.keys()}
+        return subset_dat, subset_ann
+
+    def __len__ (self):
+        return super(MultiomicPYGDataset, self).__len__()
+
+    def len(self):
+        return self.__len__()
+
+
+def read_stringdb_links(fname):
+    df = pd.read_csv(fname, header=0, sep=" ")
+    df = df[df.combined_score > 400]
+    df = df[df.combined_score > df.combined_score.quantile(0.9)]
+    df[["protein1", "protein2"]] = df[["protein1", "protein2"]].applymap(lambda a: a.split(".")[-1])
+    return df
+
+
+def stringdb_links_to_list(df):
+    lst = df[["protein1", "protein2"]].to_numpy().tolist()
+    return lst
+
+
+def read_stringdb_aliases(fname: str, node_name: str):
+    protein_id_to_gene_id = {}
+    with open(fname, "r") as f:
+        next(f)
+        for line in f:
+            data = line.split()
+            if node_name == "gene_id":
+                if data[-1].endswith("Ensembl_HGNC_ensembl_gene_id"):
+                    protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
+                elif data[-1].endswith("Ensembl_gene"):
+                    # TODO: Check here if the values are the same
+                    if protein_id_to_gene_id.get(data[0].split(".")[1], None) is None:
+                        protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
+                    else:
+                        continue
+                else:
+                    continue
+            elif node_name == "gene_name":
+                if data[-1].endswith("Ensembl_EntrezGene"):
+                    protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
+                elif data[-1].endswith("Ensembl_HGNC_symbol"):
+                    # TODO: Check here if the values are the same
+                    if protein_id_to_gene_id.get(data[0].split(".")[1], None) is None:
+                        protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
+                    else:
+                        continue    
+                else:
+                    continue
+            else:
+                raise NotImplementedError
+    return protein_id_to_gene_id
+
     
 # convert_to_labels: if true, given a numeric list, convert to binary labels by median value 
 class DataImporter:
+
+    protein_links = "9606.protein.links.v12.0.txt"
+    protein_aliases = "9606.protein.aliases.v12.0.txt"
+
     def __init__(self, path, data_types, log_transform = False, concatenate = False, min_features=None, 
-                 top_percentile=None, variance_threshold=1e-5, na_threshold=0.1):
+                 top_percentile=None, variance_threshold=1e-5, na_threshold=0.1, use_graph=False, node_name="gene_symbol", transform=None):
         self.path = path
         self.data_types = data_types
         self.concatenate = concatenate
@@ -152,6 +248,10 @@ class DataImporter:
         self.scalers = None
         # initialize data transformers
         self.transformers = None
+
+        self.use_graph = use_graph
+        self.node_name = node_name  # "gene_symbol" | "gene_id"
+        self.transform = transform
         
     def read_data(self, folder_path):
         data = {}
@@ -163,7 +263,13 @@ class DataImporter:
             print(f"[INFO] Importing {file_path}...")
             data[file_name] = pd.read_csv(file_path, index_col=0)
         return data
-    
+
+    def read_graph(self, fname=None):
+        # NOTE: read stringdb for now
+        # fname = fname or os.path.join(self.path, "9606.protein.links.v12.0.txt")
+        df = read_stringdb_links(fname)
+        return df
+
     def cleanup_data(self, df_dict):
         print("\n[INFO] --------------- Cleaning Up Data ---------------")
         cleaned_dfs = {}
@@ -230,12 +336,63 @@ class DataImporter:
     def import_data(self):
         print("\n[INFO] ================= Importing Data =================")
         training_path = os.path.join(self.path, 'train')
-        testing_path = os.path.join(self.path, 'test') 
+        testing_path = os.path.join(self.path, 'test')
+        # NOTE: stringdb file hardcoded for now
+        edges_data_path = os.path.join(self.path, self.protein_links)
+        node_data_path = os.path.join(self.path, self.protein_aliases)
 
         self.validate_data_folders(training_path, testing_path)
         
         training_data = self.read_data(training_path)
         testing_data = self.read_data(testing_path)
+
+        # Import graph here:
+        if self.use_graph:
+            # Read graph from the file
+            graph_df = self.read_graph(edges_data_path)
+            # Convert graph nodes names accordingly
+            if self.node_name == "gene_name":
+                node_name_mapping = read_stringdb_aliases(node_data_path, self.node_name)
+            elif self.node_name == "gene_id":
+                node_name_mapping = read_stringdb_aliases(node_data_path, self.node_name)
+            else:
+                raise NotImplementedError
+            
+            def fn(a):
+                try:
+                    # lambda a: node_name_mapping[a]
+                    out = node_name_mapping[a]
+                except KeyError:
+                    # print(f"MISSING: [{a}]")
+                    out = ""
+                return out
+
+            graph_df[["protein1", "protein2"]] = graph_df[["protein1", "protein2"]].applymap(fn)
+
+            available_genes: list[str] = np.unique(graph_df[["protein1", "protein2"]].to_numpy()).tolist()
+
+            # If use graph, filter genes that are not in provided data
+            provided_genes = []
+            # Iterate over data modalities to collect all available genes
+            for _df in training_data.values():
+                for g in _df.index:
+                    if g in available_genes:
+                        if g not in provided_genes:
+                            provided_genes.append(g)
+            # Same for testing data
+            for _df in testing_data.values():
+                for g in _df.index:
+                    if g in available_genes:
+                        if g not in provided_genes:
+                            provided_genes.append(g)
+
+            initial_edge_list = stringdb_links_to_list(graph_df)
+            # Now filter the graph edges based on provided_genes
+            edge_list = []
+            for edge in initial_edge_list:
+                src, dst = edge
+                if (src in provided_genes) and (dst in provided_genes):
+                    edge_list.append(edge)
 
         # cleanup uninformative features/samples, subset annotation data, do feature selection on training data
         train_dat, train_ann, train_samples, train_features = self.process_data(training_data, split = 'train')
@@ -243,7 +400,32 @@ class DataImporter:
         
         # harmonize feature sets in train/test
         train_dat, test_dat = self.harmonize(train_dat, test_dat)
-        
+
+        train_feature_ann = {}
+        test_feature_ann = {}
+        if self.use_graph:
+            # Now filter the graph edges based on provided_genes
+            # But this time separately for each modality
+            for k, v in train_dat.items():
+                mod_gene_list = v.index.to_list()
+                node_to_idx = {node: i for i, node in enumerate(mod_gene_list)}
+                mod_edge_list = []
+                for edge in edge_list:
+                    src, dst = edge
+                    if (src in mod_gene_list) and (dst in mod_gene_list):
+                        mod_edge_list.append([node_to_idx[src], node_to_idx[dst]])
+                train_feature_ann[k] = {"edge_index": torch.tensor(mod_edge_list).T}
+            # Repeat the same for test data
+            for k, v in train_dat.items():
+                mod_gene_list = v.index.to_list()
+                node_to_idx = {node: i for i, node in enumerate(mod_gene_list)}
+                mod_edge_list = []
+                for edge in edge_list:
+                    src, dst = edge
+                    if (src in mod_gene_list) and (dst in mod_gene_list):
+                        mod_edge_list.append([node_to_idx[src], node_to_idx[dst]])
+                test_feature_ann[k] = {"edge_index": torch.tensor(mod_edge_list).T}
+
         # log_transform 
         if self.log_transform:
             print("transforming data to log scale")
@@ -256,8 +438,8 @@ class DataImporter:
         test_dat = self.normalize_data(test_dat, scaler_type="standard", fit=False)
         
         # encode the variable annotations, convert data matrices and annotations pytorch datasets 
-        training_dataset = self.get_torch_dataset(train_dat, train_ann, train_samples)
-        testing_dataset = self.get_torch_dataset(test_dat, test_ann, test_samples)
+        training_dataset = self.get_torch_dataset(train_dat, train_ann, train_samples, train_feature_ann)
+        testing_dataset = self.get_torch_dataset(test_dat, test_ann, test_samples, test_feature_ann)
        
         # for early fusion, concatenate all data matrices and feature lists 
         if self.concatenate:
@@ -343,7 +525,7 @@ class DataImporter:
 
         return df_encoded, variable_types, label_mappings
 
-    def get_torch_dataset(self, dat, ann, samples):
+    def get_torch_dataset(self, dat, ann, samples, feature_ann):
         features = {x: dat[x].index for x in dat.keys()}
         dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
 
@@ -351,7 +533,10 @@ class DataImporter:
 
         # Convert DataFrame to tensor
         ann = {col: torch.from_numpy(ann[col].values) for col in ann.columns}
-        return MultiomicDataset(dat, ann, variable_types, features, samples, label_mappings)
+        if not self.use_graph:
+            return MultiomicDataset(dat, ann, variable_types, features, samples, label_mappings)
+        else:
+            return MultiomicPYGDataset(dat, ann, variable_types, features, samples, label_mappings, feature_ann, transform=self.transform)
     
     def normalize_data(self, data, scaler_type="standard", fit=True):
         print("\n[INFO] --------------- Normalizing Data ---------------")
