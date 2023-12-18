@@ -14,8 +14,8 @@ from captum.attr import IntegratedGradients
 from ..modules import GCNN, MLP
 
 
-class DirectPredGNN(pl.LightningModule):
-    def __init__(self, config, dataset, target_variables, batch_variables=None, val_size=0.2):
+class DirectPredGCNN(pl.LightningModule):
+    def __init__(self, config, dataset, target_variables, batch_variables=None, val_size=0.2, use_loss_weighting=True):
         super().__init__()
         self.config = config
         self.dataset = dataset
@@ -25,10 +25,19 @@ class DirectPredGNN(pl.LightningModule):
         self.val_size = val_size
         self.dat_train, self.dat_val = self.prepare_data()
         self.feature_importances = {}
+        self.use_loss_weighting = use_loss_weighting
+
+        if self.use_loss_weighting:
+            # Initialize log variance parameters for uncertainty weighting
+            self.log_vars = nn.ParameterDict()
+            for var in self.variables:
+                self.log_vars[var] = nn.Parameter(torch.zeros(1))
+
         # Init modality encoders
         layers = list(self.dataset.dat.keys())
         # NOTE: For now we use matrices, so number of node input features is 1.
         input_dims = [1 for i in range(len(layers))]
+
         self.encoders = nn.ModuleList([
             GCNN(
                 input_dim=input_dims[i],
@@ -37,6 +46,7 @@ class DirectPredGNN(pl.LightningModule):
             )
             for i in range(len(layers))
         ])
+
         # Init output layers
         self.MLPs = nn.ModuleDict()
         for var in self.target_variables:
@@ -52,19 +62,15 @@ class DirectPredGNN(pl.LightningModule):
 
     def forward(self, x_list):
         embeddings_list = []
-        for i, data in enumerate(x_list):
-            if data.x.ndim > 1:
-                x = data.x
-            else:
-                x = data.x.unsqueeze(-1)
-
-            embeddings_list.append(self.encoders[i](x, data.edge_index, data.batch))
+        # Process each input matrix with its corresponding Encoder
+        for i, x in enumerate(x_list):
+            embeddings_list.append(self.encoders[i](x.x if x.x.ndim > 1 else x.x.unsqueeze(-1), x.edge_index, x.batch))
         embeddings_concat = torch.cat(embeddings_list, dim=1)
 
         outputs = {}
         for var, mlp in self.MLPs.items():
             outputs[var] = mlp(embeddings_concat)
-        return outputs
+        return outputs  
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
@@ -79,7 +85,7 @@ class DirectPredGNN(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.mse_loss(torch.flatten(y_hat), y.float())
             else:
-                loss = 0.0  # if no valid labels, set loss to 0
+                loss = torch.tensor(0.0, device=y_hat.device, requires_grad=True) # if no valid labels, set loss to 0
         else:
             # Ignore instances with missing labels for categorical variables
             # Assuming that missing values were encoded as -1
@@ -89,8 +95,18 @@ class DirectPredGNN(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
             else:
-                loss = 0.0
+                loss = torch.tensor(0.0, device=y_hat.device, requires_grad=True)
         return loss
+
+    def compute_total_loss(self, losses):
+        if self.use_loss_weighting and len(losses) > 1:
+            # Compute weighted loss for each loss 
+            # Weighted loss = precision * loss + log-variance
+            total_loss = sum(torch.exp(-self.log_vars[name]) * loss + self.log_vars[name] for name, loss in losses.items())
+        else:
+            # Compute unweighted total loss
+            total_loss = sum(losses.values())
+        return total_loss
 
     def training_step(self, train_batch, batch_idx):
         dat, y_dict = train_batch
@@ -98,17 +114,17 @@ class DirectPredGNN(pl.LightningModule):
         x_list = [dat[x] for x in layers]
 
         outputs = self.forward(x_list)
-        
+
         losses = {}
-        for var in self.target_variables:
+        for var in self.variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
             losses[var] = loss
 
-        total_loss = sum(losses.values())
+        total_loss = self.compute_total_loss(losses)
         losses["train_loss"] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)# batch_size=x_list[0].batch_size)
+        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True, batch_size=int(x_list[0].batch_size))
         return total_loss
 
     def validation_step(self, val_batch, batch_idx):
@@ -119,7 +135,7 @@ class DirectPredGNN(pl.LightningModule):
         outputs = self.forward(x_list)
 
         losses = {}
-        for var in self.target_variables:
+        for var in self.variables:
             y_hat = outputs[var]
             y = y_dict[var]
             loss = self.compute_loss(var, y, y_hat)
@@ -127,7 +143,7 @@ class DirectPredGNN(pl.LightningModule):
 
         total_loss = sum(losses.values())
         losses["val_loss"] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)# batch_size=x_list[0].batch_size)
+        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True, batch_size=int(x_list[0].batch_size))
         return total_loss
 
     def prepare_data(self):
@@ -137,12 +153,10 @@ class DirectPredGNN(pl.LightningModule):
         return dat_train, dat_val
 
     def train_dataloader(self):
-        batch_size = int(self.config["batch_size"])
-        return DataLoader(self.dat_train, batch_size=batch_size, num_workers=0, pin_memory=True, shuffle=True)
+        return DataLoader(self.dat_train, batch_size=int(self.config["batch_size"]), num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
 
     def val_dataloader(self):
-        batch_size = int(self.config["batch_size"])
-        return DataLoader(self.dat_val, batch_size=batch_size, num_workers=0, pin_memory=True, shuffle=False)
+        return DataLoader(self.dat_val, batch_size=int(self.config["batch_size"]), num_workers=0, pin_memory=True, shuffle=False)
 
     def predict(self, dataset):
         self.eval()
