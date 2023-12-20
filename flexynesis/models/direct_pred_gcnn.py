@@ -64,7 +64,7 @@ class DirectPredGCNN(pl.LightningModule):
         embeddings_list = []
         # Process each input matrix with its corresponding Encoder
         for i, x in enumerate(x_list):
-            embeddings_list.append(self.encoders[i](x.x if x.x.ndim > 1 else x.x.unsqueeze(-1), x.edge_index, x.batch))
+            embeddings_list.append(self.encoders[i](x.x, x.edge_index, x.batch))
         embeddings_concat = torch.cat(embeddings_list, dim=1)
 
         outputs = {}
