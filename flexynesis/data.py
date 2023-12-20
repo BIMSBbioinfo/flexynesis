@@ -166,11 +166,24 @@ class MultiomicPYGDataset(MultiomicDataset, PYGDataset):
         return super(MultiomicDataset, self).__getitem__(idx)
 
     def get(self, idx: int):
-        subset_dat = {
-            k: Data(x=self.dat[k][idx], edge_index=self.feature_ann[k]["edge_index"]) if self._transform is None else self._transform(Data(x=self.dat[k][idx], edge_index=self.feature_ann[k]["edge_index"]))
-                for k in self.dat.keys()
-        }
-        subset_ann = {k: self.ann[k][idx] for k in self.ann.keys()}
+        subset_dat = {}
+        for k, v in self.dat.items():
+            x = v[idx]
+            edge_index = self.feature_ann[k]["edge_index"]
+
+            # If number of node features is 1, insert a new dim:
+            if v[idx].ndim == 1:
+                x = x.unsqueeze(1)
+
+            data = Data(x=x, edge_index=edge_index)
+
+            # Apply pyg transforms here:
+            if self._transform is not None:
+                data = self._transform(data)
+
+            subset_dat[k] = data
+
+        subset_ann = {k: v[idx] for k, v in self.ann.items()}
         return subset_dat, subset_ann
 
     def __len__ (self):
