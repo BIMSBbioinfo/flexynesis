@@ -136,8 +136,7 @@ class MLP(nn.Module):
             x (torch.Tensor): The output tensor after passing through the MLP network.
         """
         x = self.layer_1(x)
-        if (x.size(0) != 1) and self.training:  # Skip BatchNorm if batch size is 1
-            x = self.batchnorm(x)
+        x = self.batchnorm(x)
         x = self.relu(x)
         x = self.dropout(x)
         x = self.layer_out(x)
