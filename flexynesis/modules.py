@@ -5,7 +5,7 @@ from torch import nn
 import torch_geometric.nn as gnn
 
 
-__all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "Classifier", "CNN", "GCNN"]
+__all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "CNN", "GCNN"]
 
 
 class Encoder(nn.Module):
