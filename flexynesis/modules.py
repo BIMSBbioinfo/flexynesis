@@ -229,7 +229,17 @@ class CNN(nn.Module):
 class GCNN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
+        """
+        Initialize the GCNN model.
 
+        This model consists of two Graph Convolutional layers, each followed by a ReLU activation.
+        After the second convolutional layer, the features of nodes are aggregated.
+
+        Args:
+            input_dim (int): The number of input dimensions or features.
+            hidden_dim (int): The number of hidden dimensions or features after the first graph convolutional layer.
+            output_dim (int): The number of output dimensions or features after the second graph convolutional layer.
+        """
         self.layer_1 = gnn.GraphConv(input_dim, hidden_dim)
         self.relu_1 = nn.ReLU()
         self.layer_2 = gnn.GraphConv(hidden_dim, output_dim)
@@ -237,6 +247,20 @@ class GCNN(nn.Module):
         self.aggregation = gnn.aggr.SumAggregation()
 
     def forward(self, x, edge_index, batch):
+        """
+        Define the forward pass of the GCNN.
+
+        The input graph data is processed through two graph convolutional layers with ReLU activation.
+        Finally, the node features are aggregated.
+
+        Args:
+            x (Tensor): Node feature matrix with shape [num_nodes, input_dim].
+            edge_index (LongTensor): The edge indices in COO format with shape [2, num_edges].
+            batch (LongTensor): The batch vector which assigns each node to a specific example in the batch.
+
+        Returns:
+            Tensor: The output tensor after processing through the GCNN, with shape [num_nodes, output_dim].
+        """
         x = self.layer_1(x, edge_index)
         x = self.relu_1(x)
         x = self.layer_2(x, edge_index)
