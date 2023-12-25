@@ -19,6 +19,30 @@ from skopt.space import Integer, Categorical, Real
 
             
 class HyperparameterTuning:
+    """
+    Hyperparameter Tuning class for optimizing model parameters.
+
+    This class provides functionalities to perform hyperparameter tuning using Bayesian optimization.
+    It supports various features like live loss plotting, early stopping, and custom configuration loading.
+
+    Attributes:
+        dataset: Dataset used for training and validation.
+        model_class: The class of the model to be tuned.
+        target_variables: List of target variables for the model.
+        batch_variables: List of batch variables, if applicable.
+        config_name: Name of the configuration for tuning parameters.
+        n_iter: Number of iterations for the tuning process.
+        plot_losses: Boolean flag to plot losses during training.
+        val_size: Validation set size as a fraction of the dataset.
+        use_loss_weighting: Flag to use loss weighting during training.
+        early_stop_patience: Number of epochs to wait for improvement before stopping.
+    
+    Methods:
+        objective(params, current_step, total_steps): Evaluates a set of parameters.
+        perform_tuning(): Executes the hyperparameter tuning process.
+        init_early_stopping(): Initializes early stopping mechanism.
+        load_and_convert_config(config_path): Loads and converts a configuration file.
+    """
     def __init__(self, dataset, model_class, config_name, target_variables, 
                  batch_variables = None, n_iter = 10, config_path = None, plot_losses = False,
                  val_size = 0.2, use_loss_weighting = True, early_stop_patience = -1):
@@ -146,6 +170,24 @@ from IPython.display import clear_output
 from pytorch_lightning import Callback
 
 class LiveLossPlot(Callback):
+    """
+    A callback for visualizing training loss in real-time during hyperparameter optimization.
+
+    This class is a PyTorch Lightning callback that plots training loss and other metrics live as the model trains.
+    It is especially useful for tracking the progress of hyperparameter optimization (HPO) steps.
+
+    Attributes:
+        hyperparams (dict): Hyperparameters being used in the current HPO step.
+        current_step (int): The current step number in the HPO process.
+        total_steps (int): The total number of steps in the HPO process.
+        figsize (tuple): Size of the figure used for plotting.
+
+    Methods:
+        on_train_start(trainer, pl_module): Initializes the loss tracking at the start of training.
+        on_train_end(trainer, pl_module): Actions to perform at the end of training.
+        on_train_epoch_end(trainer, pl_module): Updates and plots the loss after each training epoch.
+        plot_losses(): Renders the loss plot with the current training metrics.
+    """
     def __init__(self, hyperparams, current_step, total_steps, figsize=(10, 8)):
         super().__init__()
         self.hyperparams = hyperparams
