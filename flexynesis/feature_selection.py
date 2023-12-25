@@ -56,27 +56,25 @@ def laplacian_score(X, k=5, t=None):
 
 def remove_redundant_features(X, laplacian_scores, threshold=0.8, topN=None):
     """
-    Efficiently selects features based on Laplacian scores while avoiding highly correlated features.
+    Selects features based on Laplacian scores while avoiding highly correlated features. 
 
     Parameters
     ----------
     X : numpy array, shape (n_samples, n_features)
-        The input data matrix with samples in rows and features in columns.
+        Input data matrix with samples in rows and features in columns.
     laplacian_scores : numpy array, shape (n_features,)
-        The Laplacian scores for each feature in the input data matrix X.
-    threshold : float, optional, default: 0.8
-        The Pearson correlation coefficient threshold for removing highly correlated features.
-        Features with correlation coefficients greater than the threshold will be removed.
-    topN : int, optional, default: None
-            The desired number of features to be returned. If specified, the function will always return 
-            at least this number of features, even if they are redundant. If not specified, the function 
-            will remove all redundant features based on the threshold.
+        Laplacian scores for each feature in X.
+    threshold : float, optional (default=0.8)
+        Pearson correlation coefficient threshold for removing correlated features.
+    topN : int, optional (default=None)
+        Number of features to return, up to this number, prioritizing non-redundant ones.
+
     Returns
     -------
     selected_features : list of int
-        The list of selected feature indices in the input data matrix X.
+        Indices of selected features in X.
     """
-
+    
     # Precompute the correlation matrix once
     correlation_matrix = np.corrcoef(X, rowvar=False)
 
