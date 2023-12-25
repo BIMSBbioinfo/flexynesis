@@ -1,5 +1,6 @@
 """
 # Flexynesis
+
 Flexynesis is a versatile Python package for various machine learning tasks, with a focus on deep learning-based model architectures, feature selection, and utility functions. Flexynesis provides a collection of pre-built models, data management tools, and utility functions that enable users to create, train, and evaluate machine learning models with ease.
 
 # Package Contents
@@ -7,13 +8,18 @@ models_shared: Common components for model architecture and training
 
 - data: Pytorch Dataset classes and functions to import, process multiomics data. 
 - main: High-level functions for training, evaluating, and using models
-- model_DirectPred: Direct prediction model architecture
-- model_SVAE: Supervised Variational Autoencoder model architecture
-- model_TripletEncoder: Triplet Encoder model architecture
-- feature_selection: Feature selection and dimensionality reduction methods
+- models: 
+  - direct_pred: A multi-task fully connected neural network for direct prediction of one ore more target variables 
+  - direct_pred_cnn: A multi-task one-dimensional convolutional neural network
+  - direct_pred_gcnn: A multi-task graph-convolutional neural network
+  - supervised_vae: A multi-task Supervised Variational Autoencoder model architecture
+  - triplet_encoder: A fully connected neural network implemented with a triplet loss-based contrastive learning 
+- feature_selection: Feature selection methods including Laplacian scoring and redundancy filtering
 - utils: General utility functions for data manipulation and visualization
+- config: Default hyperparameter optimisation spaces  
 
 # Main Features
+
 - Various multi-modal data fusion methods using different kinds of deep learning architectures.
 - Data management tools for loading, preprocessing, and augmenting data.
 - Feature selection methods for effective dimensionality reduction.
@@ -21,33 +27,98 @@ models_shared: Common components for model architecture and training
 - High-level functions for training, evaluating, and using models.
 
 
+# Benchmarks
+
+For the latest benchmark results see:
+https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dashboard.html
+
+The code for the benchmarking pipeline is at: https://github.com/BIMSBbioinfo/flexynesis-benchmarks
+
+# Environment
+
+To create a clone of the development environment, use the `spec-file.txt`:
+```
+conda create --name flexynesis --file spec-file.txt
+conda activate flexynesis
+```
+
+To export existing spec-file.txt:
+```
+conda list --explicit > spec-file.txt
+```
+
+# Guix
+
+You can also create a reproducible development environment with [GNU Guix](https://guix.gnu.org).  You will need [this Guix commit](https://git.savannah.gnu.org/cgit/guix.git/commit/?id=e3e011a08141058598cc7631aeb52d620a3ccb8c) or later.
+
+```
+guix shell
+```
+
+or
+
+```
+guix shell -m manifest.scm
+```
+
+You can build a Guix package from the current committed state of your git checkout like this:
+
+```
+guix pack -f guix.scm
+```
+
+Do this to build a Docker image containing this package together with a matching Python installation:
+
+```
+guix pack -C none \
+  -e '(load "guix.scm")' \
+  -f docker \
+  -S /bin=bin -S /lib=lib -S /share=share \
+  glibc-locales coreutils bash python
+```
+
 # Installation
 
 To install the project using setuptools, you can follow these steps:
 
-    1. Clone the project from the Git repository:
-    ```
-    git clone git@github.com:BIMSBbioinfo/flexynesis.git
-    ```
-    2. Navigate to the project directory:
-    ```
-    cd flexynesis
-    ```
-    3. Create a clone of the development environment, use the `spec-file.txt`:
-    ```
-    conda create --name flexynesis --file spec-file.txt
-    conda activate flexynesis
-    ```
-    4. Install the project using setuptools:
-    ```
-    python setup.py install
-    ```
+1. Clone the project from the Git repository:
+```
+git clone git@github.com:BIMSBbioinfo/flexynesis.git
+```
+2. Navigate to the project directory:
+```
+cd flexynesis
+```
+3. Create a clone of the development environment, use the `spec-file.txt`:
+```
+conda create --name flexynesis --file spec-file.txt
+conda activate flexynesis
+```
+4. Install the project:
+```
+pip install -e .
+```
+
+# Testing
+
+Run unit tests
+```python
+pytest -vvv tests/unit
+```
+
+This will run all the unit tests in the tests directory.
+
+# Contributing
+If you would like to contribute to the project, please open an issue or a pull request on the GitHub repository.
 
 # License
 This package is currently private and is not meant to be used outside of Arcas.ai
 
 # Authors
 Bora Uyar, bora.uyar@mdc-berlin.de
+Taras Savchyn, Taras.Savchyn@mdc-berlin.de
+Ricardo Wurmus, Ricardo.Wurmus@mdc-berlin.de
+Altuna Akalin, Altuna.Akalin@mdc-berlin.de
 """
 
 from .modules import *
