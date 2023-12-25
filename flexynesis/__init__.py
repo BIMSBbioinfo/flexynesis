@@ -1,19 +1,30 @@
 """
 # Flexynesis
 
-Flexynesis is a versatile Python package for various machine learning tasks, with a focus on deep learning-based model architectures, feature selection, and utility functions. Flexynesis provides a collection of pre-built models, data management tools, and utility functions that enable users to create, train, and evaluate machine learning models with ease.
+Flexynesis is a deep-learning based multi-omics bulk sequencing data
+integration suite with a focus on (pre-)clinical endpoint prediction. The
+package includes multiple types of deep learning architectures such as simple
+fully connected networks, supervised variational autoencoders; different
+options of data layer fusion, and automates feature selection and
+hyperparameter optimisation. The tools are continuosly benchmarked on publicly
+available datasets mostly related to the study of cancer. Some of the
+applications of the methods we develop are drug response modeling in cancer
+patients or preclinical models (such as cell lines and patient-derived
+xenografts), cancer subtype prediction, or any other clinically relevant
+outcome prediction that can be formulated as a regression or classification
+problem.
+
 
 # Package Contents
-models_shared: Common components for model architecture and training
-
 - data: Pytorch Dataset classes and functions to import, process multiomics data. 
 - main: High-level functions for training, evaluating, and using models
 - models: 
-  - direct_pred: A multi-task fully connected neural network for direct prediction of one ore more target variables 
-  - direct_pred_cnn: A multi-task one-dimensional convolutional neural network
-  - direct_pred_gcnn: A multi-task graph-convolutional neural network
-  - supervised_vae: A multi-task Supervised Variational Autoencoder model architecture
-  - triplet_encoder: A fully connected neural network implemented with a triplet loss-based contrastive learning 
+    - direct_pred: A multi-task fully connected neural network for direct prediction of one ore more target variables 
+    - direct_pred_cnn: A multi-task one-dimensional convolutional neural network
+    - direct_pred_gcnn: A multi-task graph-convolutional neural network
+    - supervised_vae: A multi-task Supervised Variational Autoencoder model architecture
+    - triplet_encoder: A fully connected neural network implemented with a triplet loss-based contrastive learning 
+- modules: Reusable components for model architecture and training
 - feature_selection: Feature selection methods including Laplacian scoring and redundancy filtering
 - utils: General utility functions for data manipulation and visualization
 - config: Default hyperparameter optimisation spaces  
@@ -115,10 +126,11 @@ If you would like to contribute to the project, please open an issue or a pull r
 This package is currently private and is not meant to be used outside of Arcas.ai
 
 # Authors
-Bora Uyar, bora.uyar@mdc-berlin.de
-Taras Savchyn, Taras.Savchyn@mdc-berlin.de
-Ricardo Wurmus, Ricardo.Wurmus@mdc-berlin.de
-Altuna Akalin, Altuna.Akalin@mdc-berlin.de
+
+- Bora Uyar, bora.uyar@mdc-berlin.de
+- Taras Savchyn, Taras.Savchyn@mdc-berlin.de
+- Ricardo Wurmus, Ricardo.Wurmus@mdc-berlin.de
+- Altuna Akalin, Altuna.Akalin@mdc-berlin.de
 """
 
 from .modules import *
