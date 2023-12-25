@@ -20,6 +20,10 @@ that can be formulated as a regression or classification problem.
   <img alt="workflow" src="img/workflow.jpg">
 </p>
 
+# Documentation
+
+A detailed documentation of classes and functions in this repository can be found [here](https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/docs/flexynesis/index.html).
+
 # Benchmarks
 
 For the latest benchmark results see: 
