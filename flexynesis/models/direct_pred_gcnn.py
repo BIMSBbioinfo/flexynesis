@@ -53,7 +53,7 @@ class DirectPredGCNN(pl.LightningModule):
 
         # Init output layers
         self.MLPs = nn.ModuleDict()
-        for var in self.target_variables:
+        for var in self.variables:
             if self.dataset.variable_types[var] == "numerical":
                 num_class = 1
             else:
