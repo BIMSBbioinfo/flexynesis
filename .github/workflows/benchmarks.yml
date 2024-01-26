@@ -66,9 +66,9 @@ jobs:
     - name: Download stringdb data
       run: |
         wget https://stringdb-downloads.org/download/protein.links.v12.0/9606.protein.links.v12.0.txt.gz
-        gzip -cd dataset1/9606.protein.links.v12.0.txt
+        gzip -cd 9606.protein.links.v12.0.txt.gz > dataset1/9606.protein.links.v12.0.txt
         wget https://stringdb-downloads.org/download/protein.aliases.v12.0/9606.protein.aliases.v12.0.txt.gz
-        gzip -cd dataset1/9606.protein.aliases.v12.0.txt
+        gzip -cd 9606.protein.aliases.v12.0.txt.gz > dataset1/9606.protein.aliases.v12.0.txt
 
     - name: Download dataset2
       run: |
