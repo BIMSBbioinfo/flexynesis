@@ -196,7 +196,6 @@ class DirectPredGCNN(pl.LightningModule):
         return predictions
 
     def transform(self, dataset):
-        # FIXME: embedings?
         self.eval()
 
         xs = [x for x in dataset.dat.values()]
