@@ -61,6 +61,9 @@ def main():
     else:
         raise ValueError(f"Invalid model_class: {args.model_class}")
 
+    # Set use_graph var
+    use_graph = True if config_name == "DirectPredGCNN" else False
+
     # import assays and labels
     inputDir = args.data_path
     
@@ -74,7 +77,9 @@ def main():
                                             concatenate = concatenate, 
                                             log_transform = args.log_transform == 'True',
                                             min_features= args.features_min, 
-                                            top_percentile= args.features_top_percentile)
+                                            top_percentile= args.features_top_percentile,
+                                            use_graph=use_graph,
+    )
     
     train_dataset, test_dataset = data_importer.import_data()
     
