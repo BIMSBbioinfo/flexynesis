@@ -198,10 +198,21 @@ class DirectPredGCNN(pl.LightningModule):
     def transform(self, dataset):
         # FIXME: embedings?
         self.eval()
+
+        xs = [x for x in dataset.dat.values()]
+        edge_indices = [dataset.feature_ann[k]["edge_index"] for k in self.dataset.dat.keys()]
+        inputs = []
+        for x, edge_idx in zip(xs, edge_indices):
+            inputs.append(
+                Batch.from_data_list(
+                    [Data(x=sample.unsqueeze(1) if sample.ndim == 1 else sample, edge_index=edge_idx) for sample in x]
+                )
+            )
+
         embeddings_list = []
         # Process each input matrix with its corresponding Encoder
-        for i, x in enumerate(dataset.dat.values()):
-            embeddings_list.append(self.encoders[i](x))
+        for i, x in enumerate(inputs):
+            embeddings_list.append(self.encoders[i](x.x, x.edge_index, x.batch))
         embeddings_concat = torch.cat(embeddings_list, dim=1)
 
         # Converting tensor to numpy array and then to DataFrame
