@@ -55,6 +55,9 @@ def main():
     elif args.model_class == "DirectPredCNN":
         model_class = flexynesis.models.DirectPredCNN
         config_name = 'DirectPredCNN'
+    elif args.model_class == "DirectPredGCNN":
+        model_class = flexynesis.models.DirectPredGCNN
+        config_name = "DirectPredGCNN"
     else:
         raise ValueError(f"Invalid model_class: {args.model_class}")
 

@@ -1,14 +1,16 @@
-import torch
-
-from torch import nn
-from torch.nn import functional as F
-from torch.utils.data import random_split
-import pytorch_lightning as pl
-
 import numpy as np
 import pandas as pd
 
+import torch
+from torch import nn
+from torch.nn import functional as F
+from torch.utils.data import random_split
+
+import pytorch_lightning as pl
+
+from torch_geometric.data import Data, Batch
 from torch_geometric.loader import DataLoader
+
 from captum.attr import IntegratedGradients
 
 from ..modules import GCNN, MLP
@@ -36,16 +38,18 @@ class DirectPredGCNN(pl.LightningModule):
         # Init modality encoders
         layers = list(self.dataset.dat.keys())
         # NOTE: For now we use matrices, so number of node input features is 1.
-        input_dims = [1 for i in range(len(layers))]
+        input_dims = [1 for _ in range(len(layers))]
 
-        self.encoders = nn.ModuleList([
-            GCNN(
-                input_dim=input_dims[i],
-                hidden_dim=int(self.config["hidden_dim"]),  # int because of pyg
-                output_dim=self.config["latent_dim"],
-            )
-            for i in range(len(layers))
-        ])
+        self.encoders = nn.ModuleList(
+            [
+                GCNN(
+                    input_dim=input_dims[i],
+                    hidden_dim=int(self.config["hidden_dim"]),  # int because of pyg
+                    output_dim=self.config["latent_dim"],
+                )
+                for i in range(len(layers))
+            ]
+        )
 
         # Init output layers
         self.MLPs = nn.ModuleDict()
@@ -70,7 +74,7 @@ class DirectPredGCNN(pl.LightningModule):
         outputs = {}
         for var, mlp in self.MLPs.items():
             outputs[var] = mlp(embeddings_concat)
-        return outputs  
+        return outputs
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
@@ -85,7 +89,7 @@ class DirectPredGCNN(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.mse_loss(torch.flatten(y_hat), y.float())
             else:
-                loss = torch.tensor(0.0, device=y_hat.device, requires_grad=True) # if no valid labels, set loss to 0
+                loss = torch.tensor(0.0, device=y_hat.device, requires_grad=True)  # if no valid labels, set loss to 0
         else:
             # Ignore instances with missing labels for categorical variables
             # Assuming that missing values were encoded as -1
@@ -100,9 +104,11 @@ class DirectPredGCNN(pl.LightningModule):
 
     def compute_total_loss(self, losses):
         if self.use_loss_weighting and len(losses) > 1:
-            # Compute weighted loss for each loss 
+            # Compute weighted loss for each loss
             # Weighted loss = precision * loss + log-variance
-            total_loss = sum(torch.exp(-self.log_vars[name]) * loss + self.log_vars[name] for name, loss in losses.items())
+            total_loss = sum(
+                torch.exp(-self.log_vars[name]) * loss + self.log_vars[name] for name, loss in losses.items()
+            )
         else:
             # Compute unweighted total loss
             total_loss = sum(losses.values())
@@ -149,14 +155,23 @@ class DirectPredGCNN(pl.LightningModule):
     def prepare_data(self):
         lt = int(len(self.dataset) * (1 - self.val_size))
         lv = len(self.dataset) - lt
-        dat_train, dat_val = random_split(self.dataset, [lt, lv], generator=torch.Generator().manual_seed(42))
+        dat_train, dat_val = random_split(self.dataset, [lt, lv], torch.Generator().manual_seed(42))
         return dat_train, dat_val
 
     def train_dataloader(self):
-        return DataLoader(self.dat_train, batch_size=int(self.config["batch_size"]), num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+        return DataLoader(
+            self.dat_train,
+            batch_size=int(self.config["batch_size"]),
+            num_workers=0,
+            pin_memory=True,
+            shuffle=True,
+            drop_last=True,
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.dat_val, batch_size=int(self.config["batch_size"]), num_workers=0, pin_memory=True, shuffle=False)
+        return DataLoader(
+            self.dat_val, batch_size=int(self.config["batch_size"]), num_workers=0, pin_memory=True, shuffle=False
+        )
 
     def predict(self, dataset):
         self.eval()
@@ -174,6 +189,7 @@ class DirectPredGCNN(pl.LightningModule):
         return predictions
 
     def transform(self, dataset):
+        # FIXME: embedings?
         self.eval()
         embeddings_list = []
         # Process each input matrix with its corresponding Encoder
@@ -189,10 +205,89 @@ class DirectPredGCNN(pl.LightningModule):
         )
         return embeddings_df
 
-    def forward_target(self, *args):
-        """Adaptor forward function for captum integrated gradients.
-        """
-        raise NotImplementedError
+    def model_forward(self, *args):
+        xs = list(args[:-2])
+        edge_index_arg = args[-2]
+        target_var = args[-1]
+        inputs = []
+        for x, edge_idx in zip(xs, edge_index_arg):
+            inputs.append(
+                Batch.from_data_list(
+                    [Data(x=sample.unsqueeze(1) if sample.ndim == 1 else sample, edge_index=edge_idx) for sample in x]
+                )
+            )
+        return self.forward(inputs)[target_var]
 
     def compute_feature_importance(self, target_var, steps=5):
-        raise NotImplementedError
+        xs = [x for x in self.dataset.dat.values()]
+        edge_indices = [self.dataset.feature_ann[k]["edge_index"] for k in self.dataset.dat.keys()]
+
+        inputs = tuple(xs)
+        baselines = tuple([torch.zeros_like(x) for x in inputs])
+
+        edge_index_arg = tuple(edge_indices)
+        additional_forward_args = (edge_index_arg, target_var)
+
+        internal_batch_size = inputs[0].shape[0]
+
+        ig = IntegratedGradients(self.model_forward)
+
+        # Get the number of classes for the target variable
+        if self.dataset.variable_types[target_var] == "numerical":
+            num_class = 1
+        else:
+            num_class = len(np.unique(self.dataset.ann[target_var]))
+
+        # Compute the feature importance for each class
+        attributions = []
+        if num_class > 1:
+            for target_class in range(num_class):
+                attributions.append(
+                    ig.attribute(
+                        inputs,
+                        baselines,
+                        additional_forward_args=additional_forward_args,
+                        target=target_class,
+                        n_steps=steps,
+                        internal_batch_size=internal_batch_size,
+                    )
+                )
+        else:
+            attributions.append(
+                ig.attribute(
+                    inputs,
+                    baselines,
+                    additional_forward_args=additional_forward_args,
+                    n_steps=steps,
+                    internal_batch_size=internal_batch_size,
+                )
+            )
+
+        # Summarize feature importances
+        # Compute absolute attributions
+        abs_attr = [[torch.abs(a) for a in attr_class] for attr_class in attributions]
+        # average over samples
+        imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
+
+        # combine into a single data frame
+        df_list = []
+        layers = list(self.dataset.dat.keys())
+        for i in range(num_class):
+            for j in range(len(layers)):
+                features = self.dataset.features[layers[j]]
+                importances = imp[i][j][0].detach().numpy()
+                df_list.append(
+                    pd.DataFrame(
+                        {
+                            "target_variable": target_var,
+                            "target_class": i,
+                            "layer": layers[j],
+                            "name": features,
+                            "importance": importances,
+                        }
+                    )
+                )
+        df_imp = pd.concat(df_list, ignore_index=True)
+
+        # save the computed scores in the model
+        self.feature_importances[target_var] = df_imp
