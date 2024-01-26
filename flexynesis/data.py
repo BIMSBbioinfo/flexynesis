@@ -246,7 +246,7 @@ class DataImporter:
     protein_aliases = "9606.protein.aliases.v12.0.txt"
 
     def __init__(self, path, data_types, log_transform = False, concatenate = False, min_features=None, 
-                 top_percentile=None, variance_threshold=1e-5, na_threshold=0.1, use_graph=False, node_name="gene_symbol", transform=None):
+                 top_percentile=None, variance_threshold=1e-5, na_threshold=0.1, use_graph=False, node_name="gene_name", transform=None):
         self.path = path
         self.data_types = data_types
         self.concatenate = concatenate
@@ -263,7 +263,7 @@ class DataImporter:
         self.transformers = None
 
         self.use_graph = use_graph
-        self.node_name = node_name  # "gene_symbol" | "gene_id"
+        self.node_name = node_name  # "gene_name" | "gene_id"
         self.transform = transform
         
     def read_data(self, folder_path):
