@@ -175,12 +175,19 @@ class DirectPredGCNN(pl.LightningModule):
 
     def predict(self, dataset):
         self.eval()
-        layers = dataset.dat.keys()
-        x_list = [dataset.dat[x] for x in layers]
-        outputs = self.forward(x_list)
+        xs = [x for x in dataset.dat.values()]
+        edge_indices = [dataset.feature_ann[k]["edge_index"] for k in self.dataset.dat.keys()]
+        inputs = []
+        for x, edge_idx in zip(xs, edge_indices):
+            inputs.append(
+                Batch.from_data_list(
+                    [Data(x=sample.unsqueeze(1) if sample.ndim == 1 else sample, edge_index=edge_idx) for sample in x]
+                )
+            )
+        outputs = self.forward(inputs)
 
         predictions = {}
-        for var in self.target_variables:
+        for var in self.variables:
             y_pred = outputs[var].detach().numpy()
             if self.dataset.variable_types[var] == "categorical":
                 predictions[var] = np.argmax(y_pred, axis=1)
