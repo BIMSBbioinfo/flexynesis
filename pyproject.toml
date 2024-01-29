@@ -32,7 +32,10 @@ dependencies = [
     "tqdm",
     "umap-learn",
     "rich",
-    "captum"
+    "captum",
+    "ipywidgets",
+    "torch_geometric",
+    "ipykernel"
 ]
 
 [project.scripts]
