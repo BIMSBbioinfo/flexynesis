@@ -96,6 +96,17 @@ conda activate flexynesis
 pip install -e .
 ```
 
+# Defining Kernel for Jupyter Notebook
+
+For interactively using flexynesis on Jupyter notebooks, one can define the kernel to make
+flexynesis and its dependencies available on the jupyter session. 
+
+Assuming you have already defined an environment and installed the package: 
+```
+conda activate flexynesis
+python -m ipykernel install --user --name "flexynesis" --display-name "flexynesis"
+```
+
 # Testing
 
 Run unit tests
