@@ -28,6 +28,7 @@ def main():
     parser.add_argument("--threads", help="Number of threads to use", type=int, default = 4)
     parser.add_argument("--early_stop_patience", help="How many epochs to wait when no improvements in validation loss is observed (default: -1; no early stopping)", type=int, default = -1)
     parser.add_argument("--use_loss_weighting", help="whether to apply loss-balancing using uncertainty weights method", type=str, choices=['True', 'False'], default = 'True')
+    parser.add_argument("--evaluate_baseline_performance", help="whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset", type=str, choices=['True', 'False'], default = 'True')
 
     warnings.filterwarnings("ignore", ".*does not have many workers.*")
     warnings.filterwarnings("ignore", "has been removed as a dependency of the")
@@ -136,11 +137,12 @@ def main():
     embeddings_test_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.filtered.csv'])), header=True)    
     
     # evaluate off-the-shelf methods on the main target variable 
-    metrics_baseline = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, 
-                                                                variable_name= model.target_variables[0], 
-                                                                n_folds=5)
-    print("Computing off-the-shelf method performance on first target variable:",model.target_variables[0])
-    metrics_baseline.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'baseline.stats.csv'])), header=True, index=False) 
+    if args.evaluate_baseline_performance == 'True':
+        print("Computing off-the-shelf method performance on first target variable:",model.target_variables[0])
+        metrics_baseline = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, 
+                                                                    variable_name= model.target_variables[0], 
+                                                                    n_folds=5)
+        metrics_baseline.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'baseline.stats.csv'])), header=True, index=False) 
     
     # save the trained model in file
     torch.save(model, os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.pth'])))
