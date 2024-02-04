@@ -75,7 +75,7 @@ class HyperparameterTuning:
             else:
                 raise ValueError(f"'{self.config_name}' not found in the default config.")
 
-    def objective(self, params, current_step, total_steps):
+    def objective(self, params, current_step, total_steps, accelerator):
         model = self.model_class(params, self.dataset, self.target_variables, 
                                  self.batch_variables, self.val_size, self.use_loss_weighting)
         print(params)
@@ -87,10 +87,17 @@ class HyperparameterTuning:
         
         if self.early_stop_patience > 0:
             mycallbacks.append(self.init_early_stopping())
-            
-        trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=5, 
-                            callbacks = mycallbacks, default_root_dir="./", logger=False, enable_checkpointing=False) 
+
         try:
+            trainer = pl.Trainer(
+                accelerator=accelerator,
+                logger=False,
+                callbacks=mycallbacks,
+                max_epochs=int(params["epochs"]),
+                log_every_n_steps=5,
+                enable_checkpointing=False,
+                default_root_dir="./",
+            )
             # Train the model
             trainer.fit(model)
             # Validate the model
@@ -100,7 +107,7 @@ class HyperparameterTuning:
             val_loss = float('inf')  # or some other value indicating failure
         return val_loss, model    
     
-    def perform_tuning(self):
+    def perform_tuning(self, accelerator="auto"):
         opt = Optimizer(dimensions=self.space, n_initial_points=10, acq_func="gp_hedge", acq_optimizer="auto")
 
         best_loss = np.inf
@@ -111,7 +118,7 @@ class HyperparameterTuning:
             for i in range(self.n_iter):
                 suggested_params_list = opt.ask()
                 suggested_params_dict = {param.name: value for param, value in zip(self.space, suggested_params_list)}
-                loss, model = self.objective(suggested_params_dict, current_step=i+1, total_steps=self.n_iter)
+                loss, model = self.objective(suggested_params_dict, current_step=i+1, total_steps=self.n_iter, accelerator=accelerator)
                 opt.tell(suggested_params_list, loss)
 
                 if loss < best_loss:
