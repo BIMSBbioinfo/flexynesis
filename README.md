@@ -31,12 +31,21 @@ https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/das
 
 The code for the benchmarking pipeline is at: https://github.com/BIMSBbioinfo/flexynesis-benchmarks
 
-# Environment
+# Quick Start
 
-To create a clone of the development environment, use the `spec-file.txt`:
 ```
+# install 
+git clone https://github.com/BIMSBbioinfo/flexynesis.git
+cd flexynesis
 conda create --name flexynesis --file spec-file.txt
 conda activate flexynesis
+pip install -e .
+
+# test the installation
+curl -L -o dataset1.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz
+tar -xzvf dataset1.tgz
+
+flexynesis --data_path dataset1 --model_class DirectPred --target_variables Erlotinib --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False --evaluate_baseline_performance False
 ```
 
 To export existing spec-file.txt:
@@ -72,28 +81,6 @@ guix pack -C none \
   -f docker \
   -S /bin=bin -S /lib=lib -S /share=share \
   glibc-locales coreutils bash python
-```
-
-# Installation
-
-To install the project using setuptools, you can follow these steps:
-
-1. Clone the project from the Git repository:
-```
-git clone git@github.com:BIMSBbioinfo/flexynesis.git
-```
-2. Navigate to the project directory:
-```
-cd flexynesis
-```
-3. Create a clone of the development environment, use the `spec-file.txt`:
-```
-conda create --name flexynesis --file spec-file.txt
-conda activate flexynesis
-```
-4. Install the project:
-```
-pip install -e .
 ```
 
 # Defining Kernel for Jupyter Notebook
