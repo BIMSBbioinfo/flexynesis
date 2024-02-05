@@ -47,7 +47,7 @@ def main():
         raise FileNotFoundError(f"Path to --outdir doesn't exist at:",  {args.outdir})
 
     class AvailableModels(NamedTuple):
-        # type AvailableModel = ModelClass: str, ModelConfig: str
+        # type AvailableModel = ModelClass: Type, ModelConfig: str
         DirectPred: tuple[DirectPred, str] = DirectPred, "DirectPred"
         supervised_vae: tuple[supervised_vae, str] = supervised_vae, "supervised_vae"
         MultiTripletNetwork: tuple[MultiTripletNetwork, str] = MultiTripletNetwork, "MultiTripletNetwork"
