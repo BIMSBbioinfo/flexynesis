@@ -1,9 +1,11 @@
 import argparse
+from typing import NamedTuple
 import os
 import yaml
 import torch
 import pandas as pd
 import flexynesis
+from flexynesis.models import *
 import warnings
 
 def main():
@@ -44,23 +46,20 @@ def main():
     if not os.path.exists(args.outdir):
         raise FileNotFoundError(f"Path to --outdir doesn't exist at:",  {args.outdir})
 
-    if args.model_class == "DirectPred":
-        model_class = flexynesis.DirectPred
-        config_name = 'DirectPred'
-    elif args.model_class == "supervised_vae":
-        model_class = flexynesis.supervised_vae
-        config_name = 'supervised_vae'
-    elif args.model_class == "MultiTripletNetwork":
-        model_class = flexynesis.MultiTripletNetwork
-        config_name = 'MultiTripletNetwork'
-    elif args.model_class == "DirectPredCNN":
-        model_class = flexynesis.models.DirectPredCNN
-        config_name = 'DirectPredCNN'
-    elif args.model_class == "DirectPredGCNN":
-        model_class = flexynesis.models.DirectPredGCNN
-        config_name = "DirectPredGCNN"
-    else:
+    class AvailableModels(NamedTuple):
+        # type AvailableModel = ModelClass: str, ModelConfig: str
+        DirectPred: tuple[DirectPred, str] = DirectPred, "DirectPred"
+        supervised_vae: tuple[supervised_vae, str] = supervised_vae, "supervised_vae"
+        MultiTripletNetwork: tuple[MultiTripletNetwork, str] = MultiTripletNetwork, "MultiTripletNetwork"
+        DirectPredCNN: tuple[DirectPredCNN, str] = DirectPredCNN, "DirectPredCNN"
+        DirectPredGCNN: tuple[DirectPredGCNN, str] = DirectPredGCNN, "DirectPredGCNN"
+
+    available_models = AvailableModels()
+    model_class = getattr(available_models, args.model_class, None)
+    if model_class is None:
         raise ValueError(f"Invalid model_class: {args.model_class}")
+    else:
+        model_class, config_name = model_class
 
     # Set use_graph var
     use_graph = True if config_name == "DirectPredGCNN" else False
