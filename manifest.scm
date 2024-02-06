@@ -17,11 +17,13 @@
   (map replace-cpu-torch-with-gpu-torch
        (map specification->package
             (list "python-captum"
+                  "python-ipywidgets"
                   "python-matplotlib"
                   "python-numpy"
                   "python-pandas"
                   "python-pytorch"
                   "python-pytorch-lightning"
+                  "python-pytorch-geometric"
                   "python-pyyaml"
                   "python-rich"
                   "python-scikit-optimize"
