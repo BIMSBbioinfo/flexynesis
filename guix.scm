@@ -6,6 +6,7 @@
 
 (use-modules (guix build-system pyproject)
              (guix git)
+             (guix gexp)
              (guix packages)
              (guix licenses)
              (gnu packages))
@@ -20,10 +21,15 @@
   (arguments
    (list
     #:phases
-    '(modify-phases %standard-phases
-       (add-before 'check 'set-numba-cache-dir
-         (lambda _
-           (setenv "NUMBA_CACHE_DIR" "/tmp"))))))
+    #~(modify-phases %standard-phases
+        (add-before 'check 'set-numba-cache-dir
+          (lambda _
+            (setenv "NUMBA_CACHE_DIR" "/tmp")))
+        (add-after 'wrap 'isolate-python
+          (lambda _
+            (substitute* (list (string-append #$output "/bin/.flexynesis-real")
+                                (string-append #$output "/bin/.flexynesis-cli-real"))
+              (("/bin/python") "/bin/python -I")))))))
   (propagated-inputs %packages)
   (native-inputs %dev-packages)
   (home-page "https://github.com/BIMSBbioinfo/flexynesis")
