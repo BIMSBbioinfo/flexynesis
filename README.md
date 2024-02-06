@@ -55,28 +55,34 @@ conda list --explicit > spec-file.txt
 
 # Guix
 
-You can also create a reproducible development environment with [GNU Guix](https://guix.gnu.org).  You will need at least the Guix channels listed in `channels.scm`.
+You can also create a reproducible development environment or build a reproducible package of Flexynesis with [GNU Guix](https://guix.gnu.org).  You will need at least the Guix channels listed in `channels.scm`.  It also helps to have authorized the Inria substitute server to get binaries for CUDA-enabled packages.  See [this page](https://hpc.guix.info/channels/non-free/) for instructions on how to configure fetching binary substitutes from the build servers.
 
-```
-guix shell
-```
+You can build a Guix package from the current committed state of your git checkout and using the specified state of Guix like this:
 
-or
-
-```
-guix shell -m manifest.scm
+```sh
+guix time-machine -C channels.scm -- \
+    build --no-grafts -f guix.scm
 ```
 
-You can build a Guix package from the current committed state of your git checkout like this:
+To enter an environment containing just Flexynesis:
 
+```sh
+guix time-machine -C channels.scm -- \
+    shell --no-grafts -f guix.scm
 ```
-guix pack -f guix.scm
+
+To enter a development environment to hack on Flexynesis:
+
+```sh
+guix time-machine -C channels.scm -- \
+    shell --no-grafts -Df guix.scm
 ```
 
 Do this to build a Docker image containing this package together with a matching Python installation:
 
-```
-guix pack -C none \
+```sh
+guix time-machine -C channels.scm -- \
+  pack -C none \
   -e '(load "guix.scm")' \
   -f docker \
   -S /bin=bin -S /lib=lib -S /share=share \
