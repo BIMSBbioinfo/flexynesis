@@ -50,8 +50,8 @@ test = [
     "pytest"
 ]
 
-[tool.setuptools]
-packages = ["flexynesis"]
+[tool.setuptools.packages.find]
+include = ["flexynesis.*"]
 
 [tool.pytest.ini_options]
 norecursedirs = [
