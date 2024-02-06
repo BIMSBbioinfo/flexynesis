@@ -40,6 +40,7 @@ dependencies = [
 
 [project.scripts]
 flexynesis = "flexynesis.__main__:main"
+flexynesis-cli = "flexynesis.cli:main"
 
 [project.urls]
 homepage = "https://github.com/BIMSBbioinfo/flexynesis"
