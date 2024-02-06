@@ -55,7 +55,7 @@ conda list --explicit > spec-file.txt
 
 # Guix
 
-You can also create a reproducible development environment with [GNU Guix](https://guix.gnu.org).  You will need [this Guix commit](https://git.savannah.gnu.org/cgit/guix.git/commit/?id=e3e011a08141058598cc7631aeb52d620a3ccb8c) or later.
+You can also create a reproducible development environment with [GNU Guix](https://guix.gnu.org).  You will need at least the Guix channels listed in `channels.scm`.
 
 ```
 guix shell
