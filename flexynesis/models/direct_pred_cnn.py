@@ -1,3 +1,6 @@
+from pytorch_lightning import seed_everything
+# Set the seed for all the possible random number generators.
+seed_everything(42, workers=True)
 import torch
 
 from torch import nn

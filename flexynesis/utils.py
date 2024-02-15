@@ -233,7 +233,9 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_
     # Cross-Validation and Training
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
     X_train, y_train = prepare_data(train_dataset)
+    print("Train:",X_train.shape)
     X_test, y_test = prepare_data(test_dataset)
+    print("Test:",X_test.shape)
 
     metrics_list = []
     for model_name, mp in model_params.items():
