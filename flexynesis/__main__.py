@@ -100,15 +100,17 @@ def main():
     
     # do a hyperparameter search training multiple models and get the best_configuration 
     model, best_params = tuner.perform_tuning()
-    
-    # make predictions on the test dataset
-    y_pred_dict = model.predict(test_dataset)
-    
+        
     # evaluate predictions 
     print("Computing model evaluation metrics")
-    metrics_df = flexynesis.evaluate_wrapper(y_pred_dict, test_dataset)
+    metrics_df = flexynesis.evaluate_wrapper(model.predict(test_dataset), test_dataset)
     metrics_df.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
     
+    # print known/predicted labels 
+    predicted_labels = pd.concat([flexynesis.get_predicted_labels(model.predict(train_dataset), train_dataset, 'train'),
+                                  flexynesis.get_predicted_labels(model.predict(test_dataset), test_dataset, 'test')], 
+                                ignore_index=True)
+    predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
     # compute feature importance values
     print("Computing variable importance scores")
     for var in model.target_variables:

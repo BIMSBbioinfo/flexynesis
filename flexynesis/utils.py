@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
+import math
 
 from umap import UMAP
 import seaborn as sns
@@ -175,6 +176,26 @@ def evaluate_wrapper(y_pred_dict, dataset):
             })
     # Convert the list of metrics to a DataFrame
     return pd.DataFrame(metrics_list)
+
+def get_predicted_labels(y_pred_dict, dataset, split):
+    dfs = []
+    for var in y_pred_dict.keys():
+        y = [x.item() for x in dataset.ann[var]]
+        y_hat = [x.item() for x in y_pred_dict[var]]
+        # map to labels if available (works for categorical variables)
+        if var in dataset.label_mappings.keys():
+            # Handle y_label with NaN checks correctly
+            y = [dataset.label_mappings[var][int(x.item())] if not math.isnan(x.item()) else np.nan for x in dataset.ann[var]]
+            y_hat = [dataset.label_mappings[var][int(x.item())] if not math.isnan(x.item()) else np.nan for x in y_pred_dict[var]]
+        df = pd.DataFrame({
+            'sample_id': dataset.samples,
+            'var': var,
+            'y': y,
+            'y_hat': y_hat,
+            'split': split
+        })
+        dfs.append(df)
+    return pd.concat(dfs, ignore_index=True)
 
 
 def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_folds=5, n_jobs = 4):
