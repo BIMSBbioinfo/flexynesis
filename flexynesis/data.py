@@ -241,7 +241,74 @@ def read_stringdb_aliases(fname: str, node_name: str):
     
 # convert_to_labels: if true, given a numeric list, convert to binary labels by median value 
 class DataImporter:
+    """
+    A class for importing, cleaning, and preprocessing multi-omic data for downstream analysis,
+    including support for incorporating graph-based features from protein-protein interaction networks.
 
+    Attributes:
+        path (str): The base directory path where data is stored.
+        data_types (list[str]): A list of data modalities to import (e.g., 'rna', 'methylation').
+        log_transform (bool): If True, apply log transformation to the data.
+        concatenate (bool): If True, concatenate features from different modalities.
+        min_features (int): The minimum number of features to retain after filtering.
+        top_percentile (float): The top percentile of features to retain based on variance.
+        variance_threshold (float): The variance threshold for removing low-variance features.
+        na_threshold (float): The threshold for removing features with too many NA values.
+        use_graph (bool): If True, incorporate graph-based features from protein interaction data.
+        node_name (str): The type of node names used in the graph ('gene_name' or 'gene_id').
+        transform (callable): An optional data transformation function to be applied.
+
+    Methods:
+        import_data():
+            The primary method to orchestrate the data import and preprocessing workflow. It follows these steps:
+                1. Validates the presence of required data files in training and testing directories.
+                2. Imports data using `read_data` for both training and testing sets.
+                3. If `use_graph` is True, imports graph data using `read_graph` and processes it.
+                4. Cleans and preprocesses the data through `cleanup_data`.
+                5. Processes data to align features and samples across modalities using `process_data`.
+                6. Harmonizes training and testing datasets to have the same features using `harmonize`.
+                7. Optionally applies log transformation.
+                8. Normalizes the data.
+                9. Encodes labels and prepares PyTorch datasets.
+                10. Returns PyTorch datasets for training and testing.
+
+        read_data(folder_path):
+            Reads and imports data files for a given modality from a specified folder.
+
+        read_graph(fname=None):
+            Imports graph data from a specified file, defaulting to protein interaction data.
+
+        cleanup_data(df_dict):
+            Cleans dataframes by removing low-variance features, imputing missing values, and applying sample masks.
+
+        validate_data_folders(training_path, testing_path):
+            Checks for the presence of required data files in specified directories.
+
+        process_data(data, split='train'):
+            Prepares the data for model input by cleaning, filtering, and selecting features and samples.
+
+        get_labels(dat, ann):
+            Aligns and subsets annotations to match the samples present in the data matrices.
+
+        encode_labels(df):
+            Encodes categorical labels in the annotation dataframe.
+
+        get_torch_dataset(dat, ann, samples, feature_ann):
+            Prepares and returns PyTorch datasets for the imported and processed data.
+
+        normalize_data(data, scaler_type="standard", fit=True):
+            Applies normalization to the data matrices.
+
+        transform_data(data):
+            Applies log transformation to the data matrices.
+
+        filter(dat, min_features, top_percentile):
+            Filters features based on variance and the number of features to retain.
+
+        harmonize(dat1, dat2):
+            Aligns the feature sets of two datasets (e.g., training and testing) to have the same features.
+    """
+    
     protein_links = "9606.protein.links.v12.0.txt"
     protein_aliases = "9606.protein.aliases.v12.0.txt"
 
