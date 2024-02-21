@@ -272,6 +272,9 @@ class DataImporter:
                 9. Encodes labels and prepares PyTorch datasets.
                 10. Returns PyTorch datasets for training and testing.
 
+        validate_data_folders(training_path, testing_path):
+            Checks for the presence of required data files in specified directories.
+
         read_data(folder_path):
             Reads and imports data files for a given modality from a specified folder.
 
@@ -281,32 +284,30 @@ class DataImporter:
         cleanup_data(df_dict):
             Cleans dataframes by removing low-variance features, imputing missing values, and applying sample masks.
 
-        validate_data_folders(training_path, testing_path):
-            Checks for the presence of required data files in specified directories.
-
         process_data(data, split='train'):
             Prepares the data for model input by cleaning, filtering, and selecting features and samples.
-
-        get_labels(dat, ann):
-            Aligns and subsets annotations to match the samples present in the data matrices.
-
-        encode_labels(df):
-            Encodes categorical labels in the annotation dataframe.
-
-        get_torch_dataset(dat, ann, samples, feature_ann):
-            Prepares and returns PyTorch datasets for the imported and processed data.
-
-        normalize_data(data, scaler_type="standard", fit=True):
-            Applies normalization to the data matrices.
-
-        transform_data(data):
-            Applies log transformation to the data matrices.
 
         filter(dat, min_features, top_percentile):
             Filters features based on variance and the number of features to retain.
 
         harmonize(dat1, dat2):
             Aligns the feature sets of two datasets (e.g., training and testing) to have the same features.
+
+        transform_data(data):
+            Applies log transformation to the data matrices.
+
+        normalize_data(data, scaler_type="standard", fit=True):
+            Applies normalization to the data matrices.
+
+        get_labels(dat, ann):
+            Aligns and subsets annotations to match the samples present in the data matrices.
+
+
+        get_torch_dataset(dat, ann, samples, feature_ann):
+            Prepares and returns PyTorch datasets for the imported and processed data.
+
+        encode_labels(df):
+            Encodes categorical labels in the annotation dataframe.
     """
     
     protein_links = "9606.protein.links.v12.0.txt"
@@ -332,87 +333,7 @@ class DataImporter:
         self.use_graph = use_graph
         self.node_name = node_name  # "gene_name" | "gene_id"
         self.transform = transform
-        
-    def read_data(self, folder_path):
-        data = {}
-        required_files = {'clin.csv'} | {f"{dt}.csv" for dt in self.data_types}
-        print("\n[INFO] ----------------- Reading Data -----------------")
-        for file in required_files:
-            file_path = os.path.join(folder_path, file)
-            file_name = os.path.splitext(file)[0]
-            print(f"[INFO] Importing {file_path}...")
-            data[file_name] = pd.read_csv(file_path, index_col=0)
-        return data
-
-    def read_graph(self, fname=None):
-        # NOTE: read stringdb for now
-        # fname = fname or os.path.join(self.path, "9606.protein.links.v12.0.txt")
-        df = read_stringdb_links(fname)
-        return df
-
-    def cleanup_data(self, df_dict):
-        print("\n[INFO] --------------- Cleaning Up Data ---------------")
-        cleaned_dfs = {}
-        sample_masks = []
-
-        # First pass: remove near-zero-variation features and create masks for informative samples
-        for key, df in df_dict.items():
-            original_features_count = df.shape[0]
-
-            # Step 1: Remove near-zero-variation features
-            # Compute variances of features (along rows)
-            feature_variances = df.var(axis=1)
-            # Keep only features with variance above the threshold
-            df = df.loc[feature_variances > self.variance_threshold, :]
-            
-            # Step 2: Remove features with too many NA values
-            # Compute percentage of NA values for each feature
-            na_percentages = df.isna().mean(axis=1)
-            # Keep only features with percentage of NA values below the threshold
-            df = df.loc[na_percentages < self.na_threshold, :]
-            
-            # Step 3: Fill NA values with the median of the feature
-            # Check if there are any NA values in the DataFrame
-            
-            if np.sum(df.isna().sum()) > 0:
-                # Identify rows that contain missing values
-                missing_rows = df.isna().any(axis=1)
-                print("Imputing NA values to median of features, affected # of features ", np.sum(df.isna().sum()), " # of rows:",sum(missing_rows))
-
-                # Only calculate the median for rows with missing values
-                medians = df[missing_rows].median(axis=1)
-
-                # Iterate over the index using tqdm to display a progress bar
-                for i in tqdm(medians.index):
-                    # Replace missing values in the row with the corresponding median
-                    df.loc[i] = df.loc[i].fillna(medians[i])
-                    
-            print("Number of NA values: ",np.sum(df.isna().sum()))
-                                   
-            removed_features_count = original_features_count - df.shape[0]
-            print(f"[INFO] DataFrame {key} - Removed {removed_features_count} features.")
-        
-            # Step 2: Create masks for informative samples
-            # Compute standard deviation of samples (along columns)
-            sample_stdevs = df.std(axis=0)
-            # Create mask for samples that do not have std dev of 0 or NaN
-            mask = np.logical_and(sample_stdevs != 0, np.logical_not(np.isnan(sample_stdevs)))
-            sample_masks.append(mask)
-
-            cleaned_dfs[key] = df
-
-        # Find samples that are informative in all dataframes
-        common_mask = pd.DataFrame(sample_masks).all()
-
-        # Second pass: apply common mask to all dataframes
-        for key in cleaned_dfs.keys():
-            original_samples_count = cleaned_dfs[key].shape[1]
-            cleaned_dfs[key] = cleaned_dfs[key].loc[:, common_mask]
-            removed_samples_count = original_samples_count - cleaned_dfs[key].shape[1]
-            print(f"DataFrame {key} - Removed {removed_samples_count} samples ({removed_samples_count / original_samples_count * 100:.2f}%).")
-
-        return cleaned_dfs
-
+    
     def import_data(self):
         print("\n[INFO] ================= Importing Data =================")
         training_path = os.path.join(self.path, 'train')
@@ -534,10 +455,8 @@ class DataImporter:
         
         print("[INFO] Data import successful.")
         
-        
-        
         return training_dataset, testing_dataset
-    
+            
     def validate_data_folders(self, training_path, testing_path):
         print("[INFO] Validating data folders...")
         training_files = set(os.listdir(training_path))
@@ -553,6 +472,22 @@ class DataImporter:
             missing_files = required_files - testing_files
             raise ValueError(f"Missing files in testing folder: {', '.join(missing_files)}")
 
+    def read_data(self, folder_path):
+        data = {}
+        required_files = {'clin.csv'} | {f"{dt}.csv" for dt in self.data_types}
+        print("\n[INFO] ----------------- Reading Data -----------------")
+        for file in required_files:
+            file_path = os.path.join(folder_path, file)
+            file_name = os.path.splitext(file)[0]
+            print(f"[INFO] Importing {file_path}...")
+            data[file_name] = pd.read_csv(file_path, index_col=0)
+        return data
+
+    def read_graph(self, fname=None):
+        # NOTE: read stringdb for now
+        # fname = fname or os.path.join(self.path, "9606.protein.links.v12.0.txt")
+        df = read_stringdb_links(fname)
+        return df
 
     def process_data(self, data, split = 'train'):
         print(f"\n[INFO] ---------- Processing Data ({split}) ----------")
@@ -567,6 +502,69 @@ class DataImporter:
         features = {x: dat[x].index for x in dat.keys()}
         return dat, ann, samples, features
 
+    def cleanup_data(self, df_dict):
+        print("\n[INFO] --------------- Cleaning Up Data ---------------")
+        cleaned_dfs = {}
+        sample_masks = []
+
+        # First pass: remove near-zero-variation features and create masks for informative samples
+        for key, df in df_dict.items():
+            original_features_count = df.shape[0]
+
+            # Step 1: Remove near-zero-variation features
+            # Compute variances of features (along rows)
+            feature_variances = df.var(axis=1)
+            # Keep only features with variance above the threshold
+            df = df.loc[feature_variances > self.variance_threshold, :]
+            
+            # Step 2: Remove features with too many NA values
+            # Compute percentage of NA values for each feature
+            na_percentages = df.isna().mean(axis=1)
+            # Keep only features with percentage of NA values below the threshold
+            df = df.loc[na_percentages < self.na_threshold, :]
+            
+            # Step 3: Fill NA values with the median of the feature
+            # Check if there are any NA values in the DataFrame
+            
+            if np.sum(df.isna().sum()) > 0:
+                # Identify rows that contain missing values
+                missing_rows = df.isna().any(axis=1)
+                print("Imputing NA values to median of features, affected # of features ", np.sum(df.isna().sum()), " # of rows:",sum(missing_rows))
+
+                # Only calculate the median for rows with missing values
+                medians = df[missing_rows].median(axis=1)
+
+                # Iterate over the index using tqdm to display a progress bar
+                for i in tqdm(medians.index):
+                    # Replace missing values in the row with the corresponding median
+                    df.loc[i] = df.loc[i].fillna(medians[i])
+                    
+            print("Number of NA values: ",np.sum(df.isna().sum()))
+                                   
+            removed_features_count = original_features_count - df.shape[0]
+            print(f"[INFO] DataFrame {key} - Removed {removed_features_count} features.")
+        
+            # Step 2: Create masks for informative samples
+            # Compute standard deviation of samples (along columns)
+            sample_stdevs = df.std(axis=0)
+            # Create mask for samples that do not have std dev of 0 or NaN
+            mask = np.logical_and(sample_stdevs != 0, np.logical_not(np.isnan(sample_stdevs)))
+            sample_masks.append(mask)
+
+            cleaned_dfs[key] = df
+
+        # Find samples that are informative in all dataframes
+        common_mask = pd.DataFrame(sample_masks).all()
+
+        # Second pass: apply common mask to all dataframes
+        for key in cleaned_dfs.keys():
+            original_samples_count = cleaned_dfs[key].shape[1]
+            cleaned_dfs[key] = cleaned_dfs[key].loc[:, common_mask]
+            removed_samples_count = original_samples_count - cleaned_dfs[key].shape[1]
+            print(f"DataFrame {key} - Removed {removed_samples_count} samples ({removed_samples_count / original_samples_count * 100:.2f}%).")
+
+        return cleaned_dfs
+
     def get_labels(self, dat, ann):
         # subset samples and reorder annotations for the samples 
         samples = list(reduce(set.intersection, [set(item) for item in [dat[x].columns for x in dat.keys()]]))
@@ -575,6 +573,56 @@ class DataImporter:
         ann = ann.loc[samples]
         return dat, ann, samples
 
+    def filter(self, dat, min_features, top_percentile):
+        counts = {x: max(int(dat[x].shape[0] * top_percentile / 100), min_features) for x in dat.keys()}
+        dat = {x: filter_by_laplacian(dat[x].T, x, topN=counts[x]).T for x in dat.keys()}
+        return dat
+
+    def harmonize(self, dat1, dat2):
+        print("\n[INFO] ------------ Harmonizing Data Sets ------------")
+        # Get common features
+        common_features = {x: dat1[x].index.intersection(dat2[x].index) for x in self.data_types}
+        # Subset both datasets to only include common features
+        dat1 = {x: dat1[x].loc[common_features[x]] for x in dat1.keys()}
+        dat2 = {x: dat2[x].loc[common_features[x]] for x in dat2.keys()}
+        return dat1, dat2
+    
+    def transform_data(self, data):
+        transformed_data = {x: np.log1p(data[x].T).T for x in data.keys()}
+        return transformed_data    
+
+    def normalize_data(self, data, scaler_type="standard", fit=True):
+        print("\n[INFO] --------------- Normalizing Data ---------------")
+        # notice matrix transpositions during fit and finally after transformation
+        # because data matrices have features on rows, 
+        # while scaling methods assume features to be on the columns. 
+        if fit:
+            if scaler_type == "standard":
+                self.scalers = {x: StandardScaler().fit(data[x].T) for x in data.keys()}
+            elif scaler_type == "min_max":
+                self.scalers = {x: MinMaxScaler().fit(data[x].T) for x in data.keys()}
+            else:
+                raise ValueError("Invalid scaler_type. Choose 'standard' or 'min_max'.")
+        
+        normalized_data = {x: pd.DataFrame(self.scalers[x].transform(data[x].T), 
+                                           index=data[x].columns, 
+                                           columns=data[x].index).T 
+                           for x in data.keys()}
+        return normalized_data
+    
+    def get_torch_dataset(self, dat, ann, samples, feature_ann):
+        features = {x: dat[x].index for x in dat.keys()}
+        dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
+
+        ann, variable_types, label_mappings = self.encode_labels(ann)
+
+        # Convert DataFrame to tensor
+        ann = {col: torch.from_numpy(ann[col].values) for col in ann.columns}
+        if not self.use_graph:
+            return MultiomicDataset(dat, ann, variable_types, features, samples, label_mappings)
+        else:
+            return MultiomicPYGDataset(dat, ann, variable_types, features, samples, label_mappings, feature_ann, transform=self.transform)
+   
     def encode_labels(self, df):
         label_mappings = {}
         def encode_column(series):
@@ -605,56 +653,7 @@ class DataImporter:
 
         return df_encoded, variable_types, label_mappings
 
-    def get_torch_dataset(self, dat, ann, samples, feature_ann):
-        features = {x: dat[x].index for x in dat.keys()}
-        dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
 
-        ann, variable_types, label_mappings = self.encode_labels(ann)
-
-        # Convert DataFrame to tensor
-        ann = {col: torch.from_numpy(ann[col].values) for col in ann.columns}
-        if not self.use_graph:
-            return MultiomicDataset(dat, ann, variable_types, features, samples, label_mappings)
-        else:
-            return MultiomicPYGDataset(dat, ann, variable_types, features, samples, label_mappings, feature_ann, transform=self.transform)
-    
-    def normalize_data(self, data, scaler_type="standard", fit=True):
-        print("\n[INFO] --------------- Normalizing Data ---------------")
-        # notice matrix transpositions during fit and finally after transformation
-        # because data matrices have features on rows, 
-        # while scaling methods assume features to be on the columns. 
-        if fit:
-            if scaler_type == "standard":
-                self.scalers = {x: StandardScaler().fit(data[x].T) for x in data.keys()}
-            elif scaler_type == "min_max":
-                self.scalers = {x: MinMaxScaler().fit(data[x].T) for x in data.keys()}
-            else:
-                raise ValueError("Invalid scaler_type. Choose 'standard' or 'min_max'.")
-        
-        normalized_data = {x: pd.DataFrame(self.scalers[x].transform(data[x].T), 
-                                           index=data[x].columns, 
-                                           columns=data[x].index).T 
-                           for x in data.keys()}
-        return normalized_data
-    
-    def transform_data(self, data):
-        transformed_data = {x: np.log1p(data[x].T).T for x in data.keys()}
-        return transformed_data    
-
-    def filter(self, dat, min_features, top_percentile):
-        counts = {x: max(int(dat[x].shape[0] * top_percentile / 100), min_features) for x in dat.keys()}
-        dat = {x: filter_by_laplacian(dat[x].T, x, topN=counts[x]).T for x in dat.keys()}
-        return dat
-
-    def harmonize(self, dat1, dat2):
-        print("\n[INFO] ------------ Harmonizing Data Sets ------------")
-        # Get common features
-        common_features = {x: dat1[x].index.intersection(dat2[x].index) for x in self.data_types}
-        # Subset both datasets to only include common features
-        dat1 = {x: dat1[x].loc[common_features[x]] for x in dat1.keys()}
-        dat2 = {x: dat2[x].loc[common_features[x]] for x in dat2.keys()}
-        return dat1, dat2
-    
 
 def split_by_median(tensor_dict):
     new_dict = {}
