@@ -338,63 +338,15 @@ class DataImporter:
         print("\n[INFO] ================= Importing Data =================")
         training_path = os.path.join(self.path, 'train')
         testing_path = os.path.join(self.path, 'test')
-        # NOTE: stringdb file hardcoded for now
-        edges_data_path = os.path.join(self.path, self.protein_links)
-        node_data_path = os.path.join(self.path, self.protein_aliases)
 
         self.validate_data_folders(training_path, testing_path)
         
         training_data = self.read_data(training_path)
         testing_data = self.read_data(testing_path)
 
-        # Import graph here:
         if self.use_graph:
-            # Read graph from the file
-            graph_df = self.read_graph(edges_data_path)
-            # Convert graph nodes names accordingly
-            if self.node_name == "gene_name":
-                node_name_mapping = read_stringdb_aliases(node_data_path, self.node_name)
-            elif self.node_name == "gene_id":
-                node_name_mapping = read_stringdb_aliases(node_data_path, self.node_name)
-            else:
-                raise NotImplementedError
+            edge_list = self.read_graph(training_data, testing_data)
             
-            def fn(a):
-                try:
-                    # lambda a: node_name_mapping[a]
-                    out = node_name_mapping[a]
-                except KeyError:
-                    # print(f"MISSING: [{a}]")
-                    out = ""
-                return out
-
-            graph_df[["protein1", "protein2"]] = graph_df[["protein1", "protein2"]].applymap(fn)
-
-            available_genes: list[str] = np.unique(graph_df[["protein1", "protein2"]].to_numpy()).tolist()
-
-            # If use graph, filter genes that are not in provided data
-            provided_genes = []
-            # Iterate over data modalities to collect all available genes
-            for _df in training_data.values():
-                for g in _df.index:
-                    if g in available_genes:
-                        if g not in provided_genes:
-                            provided_genes.append(g)
-            # Same for testing data
-            for _df in testing_data.values():
-                for g in _df.index:
-                    if g in available_genes:
-                        if g not in provided_genes:
-                            provided_genes.append(g)
-
-            initial_edge_list = stringdb_links_to_list(graph_df)
-            # Now filter the graph edges based on provided_genes
-            edge_list = []
-            for edge in initial_edge_list:
-                src, dst = edge
-                if (src in provided_genes) and (dst in provided_genes):
-                    edge_list.append(edge)
-
         # cleanup uninformative features/samples, subset annotation data, do feature selection on training data
         train_dat, train_ann, train_samples, train_features = self.process_data(training_data, split = 'train')
         test_dat, test_ann, test_samples, test_features = self.process_data(testing_data, split = 'test')
@@ -483,12 +435,61 @@ class DataImporter:
             data[file_name] = pd.read_csv(file_path, index_col=0)
         return data
 
-    def read_graph(self, fname=None):
-        # NOTE: read stringdb for now
-        # fname = fname or os.path.join(self.path, "9606.protein.links.v12.0.txt")
-        df = read_stringdb_links(fname)
-        return df
+    def read_graph(self, training_data, testing_data):
+        print("\n[INFO] ================= Importing Graph Edges =================")
+        # NOTE: stringdb file hardcoded for now
+        edges_data_path = os.path.join(self.path, self.protein_links)
+        node_data_path = os.path.join(self.path, self.protein_aliases)
 
+        # Read graph from the file
+        graph_df = read_stringdb_links(edges_data_path)
+        # Convert graph nodes names accordingly
+        if self.node_name == "gene_name":
+            node_name_mapping = read_stringdb_aliases(node_data_path, self.node_name)
+        elif self.node_name == "gene_id":
+            node_name_mapping = read_stringdb_aliases(node_data_path, self.node_name)
+        else:
+            raise NotImplementedError
+
+        def fn(a):
+            try:
+                # lambda a: node_name_mapping[a]
+                out = node_name_mapping[a]
+            except KeyError:
+                # print(f"MISSING: [{a}]")
+                out = ""
+            return out
+
+        graph_df[["protein1", "protein2"]] = graph_df[["protein1", "protein2"]].applymap(fn)
+
+        # features available in the graph
+        available_genes: list[str] = np.unique(graph_df[["protein1", "protein2"]].to_numpy()).tolist()
+
+        # If use graph, filter genes that are not in provided data
+        print("\n[INFO] Removing nodes/edges which for features which don't exist in omics data matrices")
+        provided_genes = []
+        # Iterate over data modalities to collect all available genes
+        for _df in training_data.values():
+            for g in _df.index:
+                if g in available_genes:
+                    if g not in provided_genes:
+                        provided_genes.append(g)
+        # Same for testing data
+        for _df in testing_data.values():
+            for g in _df.index:
+                if g in available_genes:
+                    if g not in provided_genes:
+                        provided_genes.append(g)
+
+        initial_edge_list = stringdb_links_to_list(graph_df)
+        # Now filter the graph edges based on provided_genes
+        edge_list = []
+        for edge in initial_edge_list:
+            src, dst = edge
+            if (src in provided_genes) and (dst in provided_genes):
+                edge_list.append(edge)
+        return edge_list
+    
     def process_data(self, data, split = 'train'):
         print(f"\n[INFO] ---------- Processing Data ({split}) ----------")
         # remove uninformative features and samples with no information (from data matrices)
