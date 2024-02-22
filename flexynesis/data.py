@@ -16,229 +16,7 @@ from .feature_selection import filter_by_laplacian
 
 from itertools import chain
 
-# given a MultiOmicDataset object, convert to Triplets (anchor,positive,negative)
-class TripletMultiOmicDataset(Dataset):
-    """
-    For each sample (anchor) randomly chooses a positive and negative samples
-    """
 
-    def __init__(self, mydataset, main_var):
-        self.dataset = mydataset
-        self.main_var = main_var
-        self.labels_set, self.label_to_indices = self.get_label_indices(self.dataset.ann[self.main_var])
-    def __getitem__(self, index):
-        # get anchor sample and its label
-        anchor, y_dict = self.dataset[index][0], self.dataset[index][1] 
-        # choose another sample with same label
-        label = y_dict[self.main_var].item()
-        positive_index = index
-        while positive_index == index:
-            positive_index = np.random.choice(self.label_to_indices[label])
-        # choose another sample with a different label 
-        negative_label = np.random.choice(list(self.labels_set - set([label])))
-        negative_index = np.random.choice(self.label_to_indices[negative_label])
-        pos = self.dataset[positive_index][0] # positive example
-        neg = self.dataset[negative_index][0] # negative example
-        return anchor, pos, neg, y_dict
-
-    def __len__(self):
-        return len(self.dataset)
-    
-    def get_label_indices(self, labels):
-        labels_set = set(labels.numpy())
-        label_to_indices = {label: np.where(labels.numpy() == label)[0]
-                             for label in labels_set}
-        return labels_set, label_to_indices   
-
-class MultiomicDataset(Dataset):
-    """A PyTorch dataset for multiomic data.
-
-    Args:
-        dat (dict): A dictionary with keys corresponding to different types of data and values corresponding to matrices of the same shape. All matrices must have the same number of samples (rows).
-        ann (data.frame): Data frame with samples on the rows, sample annotations on the columns 
-        features (list or np.array): A 1D array of feature names with length equal to the number of columns in each matrix.
-        samples (list or np.array): A 1D array of sample names with length equal to the number of rows in each matrix.
-
-    Returns:
-        A PyTorch dataset that can be used for training or evaluation.
-    """
-
-    def __init__(self, dat, ann, variable_types, features, samples, label_mappings, feature_ann=None):
-        """Initialize the dataset."""
-        self.dat = dat
-        self.ann = ann
-        self.variable_types = variable_types
-        self.features = features
-        self.samples = samples
-        self.label_mappings = label_mappings
-        self.feature_ann = feature_ann or {}
-
-    def __getitem__(self, index):
-        """Get a single data sample from the dataset.
-
-        Args:
-            index (int): The index of the sample to retrieve.
-
-        Returns:
-            A tuple of two elements: 
-                1. A dictionary with keys corresponding to the different types of data in the input dictionary `dat`, and values corresponding to the data for the given sample.
-                2. The label for the given sample.
-        """
-        subset_dat = {x: self.dat[x][index] for x in self.dat.keys()}
-        subset_ann = {x: self.ann[x][index] for x in self.ann.keys()}
-        return subset_dat, subset_ann
-    
-    def __len__ (self):
-        """Get the total number of samples in the dataset.
-
-        Returns:
-            An integer representing the number of samples in the dataset.
-        """
-        return len(self.samples)
-    
-    def get_feature_subset(self, feature_df):
-        """Get a subset of data matrices corresponding to specified features and concatenate them into a pandas DataFrame.
-
-        Args:
-            feature_df (pandas.DataFrame): A DataFrame which contains at least two columns: 'layer' and 'name'. 
-
-        Returns:
-            A pandas DataFrame that concatenates the data matrices for the specified features from all layers. 
-        """
-        # Convert the DataFrame to a dictionary
-        feature_dict = feature_df.groupby('layer')['name'].apply(list).to_dict()
-
-        dfs = []
-        for layer, features in feature_dict.items():
-            if layer in self.dat:
-                # Create a dictionary to look up indices by feature name for each layer
-                feature_index_dict = {feature: i for i, feature in enumerate(self.features[layer])}
-                # Get the indices for the requested features
-                indices = [feature_index_dict[feature] for feature in features if feature in feature_index_dict]
-                # Subset the data matrix for the current layer using the indices
-                subset = self.dat[layer][:, indices]
-                # Convert the subset to a pandas DataFrame, add the layer name as a prefix to each column name
-                df = pd.DataFrame(subset, columns=[f'{layer}_{feature}' for feature in features if feature in feature_index_dict])
-                dfs.append(df)
-            else:
-                print(f"Layer {layer} not found in the dataset.")
-
-        # Concatenate the dataframes along the columns axis
-        result = pd.concat(dfs, axis=1)
-
-        # Set the sample names as the row index
-        result.index = self.samples
-
-        return result
-    
-    def get_dataset_stats(self):
-        stats = {': '.join(['feature_count in', x]): self.dat[x].shape[1] for x in self.dat.keys()}
-        stats['sample_count'] = len(self.samples)
-        return(stats)
-
-
-class MultiomicPYGDataset(MultiomicDataset, PYGDataset):
-    """Multiomic pyg dataset.
-    """
-    def __init__(
-        self,
-        dat,
-        ann,
-        variable_types,
-        features,
-        samples,
-        label_mappings,
-        feature_ann=None,
-        root=None,
-        transform=None,
-        pre_transform=None,
-        pre_filter=None,
-        log=True,
-    ):
-        """Initialize dataset.
-        """
-        super(MultiomicPYGDataset, self).__init__(dat, ann, variable_types, features, samples, label_mappings, feature_ann)
-        super(MultiomicDataset, self).__init__(root, transform, pre_transform, pre_filter, log)
-        self._transform = transform
-        self.transform = None
-
-    def __getitem__(self, idx):
-        return super(MultiomicDataset, self).__getitem__(idx)
-
-    def get(self, idx: int):
-        subset_dat = {}
-        for k, v in self.dat.items():
-            x = v[idx]
-            edge_index = self.feature_ann[k]["edge_index"]
-
-            # If number of node features is 1, insert a new dim:
-            if v[idx].ndim == 1:
-                x = x.unsqueeze(1)
-
-            data = Data(x=x, edge_index=edge_index)
-
-            # Apply pyg transforms here:
-            if self._transform is not None:
-                data = self._transform(data)
-
-            subset_dat[k] = data
-
-        subset_ann = {k: v[idx] for k, v in self.ann.items()}
-        return subset_dat, subset_ann
-
-    def __len__ (self):
-        return super(MultiomicPYGDataset, self).__len__()
-
-    def len(self):
-        return self.__len__()
-
-
-def read_stringdb_links(fname):
-    df = pd.read_csv(fname, header=0, sep=" ")
-    df = df[df.combined_score > 400]
-    df = df[df.combined_score > df.combined_score.quantile(0.9)]
-    df[["protein1", "protein2"]] = df[["protein1", "protein2"]].applymap(lambda a: a.split(".")[-1])
-    return df
-
-
-def stringdb_links_to_list(df):
-    lst = df[["protein1", "protein2"]].to_numpy().tolist()
-    return lst
-
-
-def read_stringdb_aliases(fname: str, node_name: str):
-    protein_id_to_gene_id = {}
-    with open(fname, "r") as f:
-        next(f)
-        for line in f:
-            data = line.split()
-            if node_name == "gene_id":
-                if data[-1].endswith("Ensembl_HGNC_ensembl_gene_id"):
-                    protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
-                elif data[-1].endswith("Ensembl_gene"):
-                    # TODO: Check here if the values are the same
-                    if protein_id_to_gene_id.get(data[0].split(".")[1], None) is None:
-                        protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
-                    else:
-                        continue
-                else:
-                    continue
-            elif node_name == "gene_name":
-                if data[-1].endswith("Ensembl_EntrezGene"):
-                    protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
-                elif data[-1].endswith("Ensembl_HGNC_symbol"):
-                    # TODO: Check here if the values are the same
-                    if protein_id_to_gene_id.get(data[0].split(".")[1], None) is None:
-                        protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
-                    else:
-                        continue    
-                else:
-                    continue
-            else:
-                raise NotImplementedError
-    return protein_id_to_gene_id
-
-    
 # convert_to_labels: if true, given a numeric list, convert to binary labels by median value 
 class DataImporter:
     """
@@ -653,7 +431,228 @@ class DataImporter:
         return df_encoded, variable_types, label_mappings
 
 
+class MultiomicDataset(Dataset):
+    """A PyTorch dataset for multiomic data.
 
+    Args:
+        dat (dict): A dictionary with keys corresponding to different types of data and values corresponding to matrices of the same shape. All matrices must have the same number of samples (rows).
+        ann (data.frame): Data frame with samples on the rows, sample annotations on the columns 
+        features (list or np.array): A 1D array of feature names with length equal to the number of columns in each matrix.
+        samples (list or np.array): A 1D array of sample names with length equal to the number of rows in each matrix.
+
+    Returns:
+        A PyTorch dataset that can be used for training or evaluation.
+    """
+
+    def __init__(self, dat, ann, variable_types, features, samples, label_mappings, feature_ann=None):
+        """Initialize the dataset."""
+        self.dat = dat
+        self.ann = ann
+        self.variable_types = variable_types
+        self.features = features
+        self.samples = samples
+        self.label_mappings = label_mappings
+        self.feature_ann = feature_ann or {}
+
+    def __getitem__(self, index):
+        """Get a single data sample from the dataset.
+
+        Args:
+            index (int): The index of the sample to retrieve.
+
+        Returns:
+            A tuple of two elements: 
+                1. A dictionary with keys corresponding to the different types of data in the input dictionary `dat`, and values corresponding to the data for the given sample.
+                2. The label for the given sample.
+        """
+        subset_dat = {x: self.dat[x][index] for x in self.dat.keys()}
+        subset_ann = {x: self.ann[x][index] for x in self.ann.keys()}
+        return subset_dat, subset_ann
+    
+    def __len__ (self):
+        """Get the total number of samples in the dataset.
+
+        Returns:
+            An integer representing the number of samples in the dataset.
+        """
+        return len(self.samples)
+    
+    def get_feature_subset(self, feature_df):
+        """Get a subset of data matrices corresponding to specified features and concatenate them into a pandas DataFrame.
+
+        Args:
+            feature_df (pandas.DataFrame): A DataFrame which contains at least two columns: 'layer' and 'name'. 
+
+        Returns:
+            A pandas DataFrame that concatenates the data matrices for the specified features from all layers. 
+        """
+        # Convert the DataFrame to a dictionary
+        feature_dict = feature_df.groupby('layer')['name'].apply(list).to_dict()
+
+        dfs = []
+        for layer, features in feature_dict.items():
+            if layer in self.dat:
+                # Create a dictionary to look up indices by feature name for each layer
+                feature_index_dict = {feature: i for i, feature in enumerate(self.features[layer])}
+                # Get the indices for the requested features
+                indices = [feature_index_dict[feature] for feature in features if feature in feature_index_dict]
+                # Subset the data matrix for the current layer using the indices
+                subset = self.dat[layer][:, indices]
+                # Convert the subset to a pandas DataFrame, add the layer name as a prefix to each column name
+                df = pd.DataFrame(subset, columns=[f'{layer}_{feature}' for feature in features if feature in feature_index_dict])
+                dfs.append(df)
+            else:
+                print(f"Layer {layer} not found in the dataset.")
+
+        # Concatenate the dataframes along the columns axis
+        result = pd.concat(dfs, axis=1)
+
+        # Set the sample names as the row index
+        result.index = self.samples
+
+        return result
+    
+    def get_dataset_stats(self):
+        stats = {': '.join(['feature_count in', x]): self.dat[x].shape[1] for x in self.dat.keys()}
+        stats['sample_count'] = len(self.samples)
+        return(stats)
+
+# given a MultiOmicDataset object, convert to Triplets (anchor,positive,negative)
+class TripletMultiOmicDataset(Dataset):
+    """
+    For each sample (anchor) randomly chooses a positive and negative samples
+    """
+
+    def __init__(self, mydataset, main_var):
+        self.dataset = mydataset
+        self.main_var = main_var
+        self.labels_set, self.label_to_indices = self.get_label_indices(self.dataset.ann[self.main_var])
+    def __getitem__(self, index):
+        # get anchor sample and its label
+        anchor, y_dict = self.dataset[index][0], self.dataset[index][1] 
+        # choose another sample with same label
+        label = y_dict[self.main_var].item()
+        positive_index = index
+        while positive_index == index:
+            positive_index = np.random.choice(self.label_to_indices[label])
+        # choose another sample with a different label 
+        negative_label = np.random.choice(list(self.labels_set - set([label])))
+        negative_index = np.random.choice(self.label_to_indices[negative_label])
+        pos = self.dataset[positive_index][0] # positive example
+        neg = self.dataset[negative_index][0] # negative example
+        return anchor, pos, neg, y_dict
+
+    def __len__(self):
+        return len(self.dataset)
+    
+    def get_label_indices(self, labels):
+        labels_set = set(labels.numpy())
+        label_to_indices = {label: np.where(labels.numpy() == label)[0]
+                             for label in labels_set}
+        return labels_set, label_to_indices   
+
+class MultiomicPYGDataset(MultiomicDataset, PYGDataset):
+    """Multiomic pyg dataset.
+    """
+    def __init__(
+        self,
+        dat,
+        ann,
+        variable_types,
+        features,
+        samples,
+        label_mappings,
+        feature_ann=None,
+        root=None,
+        transform=None,
+        pre_transform=None,
+        pre_filter=None,
+        log=True,
+    ):
+        """Initialize dataset.
+        """
+        super(MultiomicPYGDataset, self).__init__(dat, ann, variable_types, features, samples, label_mappings, feature_ann)
+        super(MultiomicDataset, self).__init__(root, transform, pre_transform, pre_filter, log)
+        self._transform = transform
+        self.transform = None
+
+    def __getitem__(self, idx):
+        return super(MultiomicDataset, self).__getitem__(idx)
+
+    def get(self, idx: int):
+        subset_dat = {}
+        for k, v in self.dat.items():
+            x = v[idx]
+            edge_index = self.feature_ann[k]["edge_index"]
+
+            # If number of node features is 1, insert a new dim:
+            if v[idx].ndim == 1:
+                x = x.unsqueeze(1)
+
+            data = Data(x=x, edge_index=edge_index)
+
+            # Apply pyg transforms here:
+            if self._transform is not None:
+                data = self._transform(data)
+
+            subset_dat[k] = data
+
+        subset_ann = {k: v[idx] for k, v in self.ann.items()}
+        return subset_dat, subset_ann
+
+    def __len__ (self):
+        return super(MultiomicPYGDataset, self).__len__()
+
+    def len(self):
+        return self.__len__()
+
+
+def read_stringdb_links(fname):
+    df = pd.read_csv(fname, header=0, sep=" ")
+    df = df[df.combined_score > 400]
+    df = df[df.combined_score > df.combined_score.quantile(0.9)]
+    df[["protein1", "protein2"]] = df[["protein1", "protein2"]].applymap(lambda a: a.split(".")[-1])
+    return df
+
+
+def stringdb_links_to_list(df):
+    lst = df[["protein1", "protein2"]].to_numpy().tolist()
+    return lst
+
+
+def read_stringdb_aliases(fname: str, node_name: str):
+    protein_id_to_gene_id = {}
+    with open(fname, "r") as f:
+        next(f)
+        for line in f:
+            data = line.split()
+            if node_name == "gene_id":
+                if data[-1].endswith("Ensembl_HGNC_ensembl_gene_id"):
+                    protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
+                elif data[-1].endswith("Ensembl_gene"):
+                    # TODO: Check here if the values are the same
+                    if protein_id_to_gene_id.get(data[0].split(".")[1], None) is None:
+                        protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
+                    else:
+                        continue
+                else:
+                    continue
+            elif node_name == "gene_name":
+                if data[-1].endswith("Ensembl_EntrezGene"):
+                    protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
+                elif data[-1].endswith("Ensembl_HGNC_symbol"):
+                    # TODO: Check here if the values are the same
+                    if protein_id_to_gene_id.get(data[0].split(".")[1], None) is None:
+                        protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
+                    else:
+                        continue    
+                else:
+                    continue
+            else:
+                raise NotImplementedError
+    return protein_id_to_gene_id
+
+    
 def split_by_median(tensor_dict):
     new_dict = {}
     for key, tensor in tensor_dict.items():
