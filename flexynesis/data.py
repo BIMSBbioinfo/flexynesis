@@ -275,7 +275,7 @@ class DataImporter:
         dat, ann, samples = self.get_labels(dat, ann)
         # do feature selection: only applied to training data
         if split == 'train': 
-            if self.min_features or self.top_percentile:
+            if self.top_percentile:
                 dat = self.select_features(dat)
         features = {x: dat[x].index for x in dat.keys()}
         return dat, ann, samples, features
