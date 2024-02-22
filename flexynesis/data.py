@@ -128,6 +128,9 @@ class DataImporter:
         # raw data matrices as exists in the data path
         train_dat = self.read_data(training_path)
         test_dat = self.read_data(testing_path)
+        
+        # check for any problems with the the input files 
+        self.validate_input_data(train_dat, test_dat)
 
         if self.use_graph:
             edge_list = self.read_graph(train_dat, test_dat)
@@ -196,6 +199,7 @@ class DataImporter:
             missing_files = required_files - testing_files
             raise ValueError(f"Missing files in testing folder: {', '.join(missing_files)}")
 
+    
     def read_data(self, folder_path):
         data = {}
         required_files = {'clin.csv'} | {f"{dt}.csv" for dt in self.data_types}
@@ -430,6 +434,62 @@ class DataImporter:
 
         return df_encoded, variable_types, label_mappings
 
+    def validate_input_data(self, train_dat, test_dat):   
+        print("\n[INFO] ----------------- Checking for problems with the input data ----------------- ")
+        errors = []
+        warnings = []
+        def check_rownames(dat, split):
+            # Check 1: Validate first columns are unique
+            for file_name, df in dat.items():
+                if not df.index.is_unique:
+                    identifier_type = "Sample labels" if file_name == 'clin' else "Feature names"
+                    errors.append(f"Error in {split}/{file_name}.csv: {identifier_type} in the first column must be unique.")
+
+        def check_sample_labels(dat, split):
+            clin_samples = set(dat['clin'].index)
+            for file_name, df in dat.items():
+                if file_name != 'clin':
+                    omics_samples = set(df.columns)
+                    matching_samples = clin_samples.intersection(omics_samples)
+                    if not matching_samples:
+                        errors.append(f"Error: No matching sample labels found between {split}/clin.csv and {split}/{file_name}.csv.")
+                    elif len(matching_samples) < len(clin_samples):
+                        missing_samples = clin_samples - matching_samples
+                        warnings.append(f"Warning: Some sample labels in {split}/clin.csv are missing in {split}/{file_name}.csv: {missing_samples}")
+
+        def check_common_features(train_dat, test_dat):
+            for file_name in train_dat:
+                if file_name != 'clin' and file_name in test_dat:
+                    train_features = set(train_dat[file_name].index)
+                    test_features = set(test_dat[file_name].index)
+                    common_features = train_features.intersection(test_features)
+                    if not common_features:
+                        errors.append(f"Error: No common features found between train/{file_name}.csv and test/{file_name}.csv.")
+
+        check_rownames(train_dat, 'train')
+        check_rownames(test_dat, 'test')
+
+        check_sample_labels(train_dat, 'train')
+        check_sample_labels(test_dat, 'test')
+
+        check_common_features(train_dat, test_dat)
+
+        # Handle errors and warnings
+        if warnings:
+            print("\n[WARNING] Warnings:\n")
+            for i, warning in enumerate(warnings, 1):
+                print(f"[WARNING] {i}. {warning}")
+
+        if errors:
+            print("[INFO] Found problems with the input data:\n")
+            for i, error in enumerate(errors, 1):
+                print(f"[ERROR] {i}. {error}")
+            raise Exception("[ERROR] Please correct the above errors and try again.")
+
+
+        if not warnings and not errors:
+            print("[INFO] Data structure is valid with no errors or warnings.")       
+            
 
 class MultiomicDataset(Dataset):
     """A PyTorch dataset for multiomic data.
