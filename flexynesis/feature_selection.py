@@ -54,7 +54,7 @@ def laplacian_score(X, k=5, t=None):
     return np.array(scores)
 
 
-def remove_redundant_features(X, laplacian_scores, threshold=0.8, topN=None):
+def remove_redundant_features(X, laplacian_scores, threshold, topN=None):
     """
     Selects features based on Laplacian scores while avoiding highly correlated features. 
 
@@ -108,7 +108,7 @@ def remove_redundant_features(X, laplacian_scores, threshold=0.8, topN=None):
     return selected_features
 
 
-def filter_by_laplacian(X, layer, k=5, t=None, topN=100, remove_redundant=True, threshold=0.8):
+def filter_by_laplacian(X, layer, k=5, t=None, topN=100, correlation_threshold=0.9):
     """
     Given a data matrix, compute laplacian score for each feature
     and return a filtered data matrix based on top laplacian scores.
@@ -143,10 +143,11 @@ def filter_by_laplacian(X, layer, k=5, t=None, topN=100, remove_redundant=True, 
     topN_extended = min(topN_extended, X.shape[1])  # Ensure we don't exceed the number of features
     selected_features = sorted_indices[:topN_extended]
 
-    if remove_redundant:
+    if correlation_threshold < 1:
         # Remove redundancy from topN + 10% features
         selected_features = remove_redundant_features(X[X.columns[selected_features]].values, 
-                                                      scores[selected_features], threshold, topN)
+                                                      scores[selected_features], correlation_threshold, 
+                                                      topN)
         # Prune down to topN features
         selected_features = selected_features[:topN]
 
