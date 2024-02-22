@@ -252,6 +252,7 @@ class DataImporter:
         concatenate (bool): If True, concatenate features from different modalities.
         min_features (int): The minimum number of features to retain after filtering.
         top_percentile (float): The top percentile of features to retain based on variance.
+        correlation_threshold(float): The correlation threshold for dropping highly redundant features
         variance_threshold (float): The variance threshold for removing low-variance features.
         na_threshold (float): The threshold for removing features with too many NA values.
         use_graph (bool): If True, incorporate graph-based features from protein interaction data.
@@ -282,13 +283,16 @@ class DataImporter:
             Imports graph data from a specified file, defaulting to protein interaction data.
 
         cleanup_data(df_dict):
-            Cleans dataframes by removing low-variance features, imputing missing values, and applying sample masks.
+            Cleans dataframes by removing low-variance features, imputing missing values, 
+            removing uninformative featuers (too many NA values).
 
         process_data(data, split='train'):
             Prepares the data for model input by cleaning, filtering, and selecting features and samples.
 
-        filter(dat, min_features, top_percentile):
-            Filters features based on variance and the number of features to retain.
+        select_features(dat):
+            Implements an unsupervised feature selection by ranking features by the Laplacian score, keeping the features at 
+            the top percentile range and removing highly redundant features (optional) based on a correlation threshold,
+            while keeping a minimum number of top features as requested by the user. 
 
         harmonize(dat1, dat2):
             Aligns the feature sets of two datasets (e.g., training and testing) to have the same features.
@@ -314,12 +318,14 @@ class DataImporter:
     protein_aliases = "9606.protein.aliases.v12.0.txt"
 
     def __init__(self, path, data_types, log_transform = False, concatenate = False, min_features=None, 
-                 top_percentile=None, variance_threshold=1e-5, na_threshold=0.1, use_graph=False, node_name="gene_name", transform=None):
+                 top_percentile=None, correlation_threshold = 0.9, variance_threshold=1e-5, na_threshold=0.1, 
+                 use_graph=False, node_name="gene_name", transform=None):
         self.path = path
         self.data_types = data_types
         self.concatenate = concatenate
         self.min_features = min_features
         self.top_percentile = top_percentile
+        self.correlation_threshold = correlation_threshold
         self.variance_threshold = variance_threshold
         self.na_threshold = na_threshold
         self.log_transform = log_transform
@@ -488,7 +494,7 @@ class DataImporter:
         # do feature selection: only applied to training data
         if split == 'train': 
             if self.min_features or self.top_percentile:
-                dat = self.filter(dat, self.min_features, self.top_percentile)
+                dat = self.select_features(dat)
         features = {x: dat[x].index for x in dat.keys()}
         return dat, ann, samples, features
 
@@ -563,9 +569,10 @@ class DataImporter:
         ann = ann.loc[samples]
         return dat, ann, samples
 
-    def filter(self, dat, min_features, top_percentile):
-        counts = {x: max(int(dat[x].shape[0] * top_percentile / 100), min_features) for x in dat.keys()}
-        dat = {x: filter_by_laplacian(dat[x].T, x, topN=counts[x]).T for x in dat.keys()}
+    # unsupervised feature selection using laplacian score and correlation filters (optional)
+    def select_features(self, dat):
+        counts = {x: max(int(dat[x].shape[0] * self.top_percentile / 100), self.min_features) for x in dat.keys()}
+        dat = {x: filter_by_laplacian(dat[x].T, x, topN=counts[x], correlation_threshold = self.correlation_threshold).T for x in dat.keys()}
         return dat
 
     def harmonize(self, dat1, dat2):
