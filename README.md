@@ -48,10 +48,54 @@ tar -xzvf dataset1.tgz
 flexynesis --data_path dataset1 --model_class DirectPred --target_variables Erlotinib --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False --evaluate_baseline_performance False
 ```
 
-To export existing spec-file.txt:
+# Input Dataset Structure
+
+```txt
+InputFolder/
+| --  train 
+|    |-- omics1.csv 
+|    |-- omics2.csv
+|    |--  ... 
+|    |-- clin.csv
+
+| --  test 
+|    |-- omics1.csv 
+|    |-- omics2.csv
+|    |--  ... 
+|    |-- clin.csv
 ```
-conda list --explicit > spec-file.txt
+
+## File contents
+
+### clin.csv
+`clin.csv` contains the sample metadata. The first column contains unique sample identifiers. 
+The other columns contain sample-associated clinical variables. 
+`NA` values are allowed in the clinical variables. 
+
+```csv
+v1,v2
+s1,a,b
+s2,c,d
+s3,e,f
 ```
+
+### omics.csv 
+The first column of the feature tables must be unique feature identifiers (e.g. gene names). 
+The column names must be sample identifiers that should overlap with those in the `clin.csv`. 
+They don't have to be completely identical or in the same order. Samples from the `clin.csv` that are not represented
+in the omics table will be dropped. 
+
+```txt
+s1,s2,s3
+g1,0,1,2
+g2,3,3,5
+g3,2,3,4
+```
+
+### Concordance between train/test splits
+The corresponding omics files in train/test splits must contain overlapping feature names (they don't 
+have to be identical or in the same order). 
+The `clin.csv` files in train/test must contain matching clinical variables. 
 
 # Guix
 
@@ -100,6 +144,10 @@ conda activate flexynesis
 python -m ipykernel install --user --name "flexynesis" --display-name "flexynesis"
 ```
 
+To export existing spec-file.txt:
+```
+conda list --explicit > spec-file.txt
+```
 # Testing
 
 Run unit tests
