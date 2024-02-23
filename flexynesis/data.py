@@ -290,21 +290,24 @@ class DataImporter:
         cleaned_dfs = {}
         sample_masks = []
 
+        feature_logs = {} # keep track of feature variation/NA value scores 
         # First pass: remove near-zero-variation features and create masks for informative samples
         for key, df in df_dict.items():
             original_features_count = df.shape[0]
 
-            # Step 1: Remove near-zero-variation features
-            # Compute variances of features (along rows)
+            # Compute variances and NA percentages for each feature in the DataFrame
             feature_variances = df.var(axis=1)
-            # Keep only features with variance above the threshold
-            df = df.loc[feature_variances > self.variance_threshold, :]
-            
-            # Step 2: Remove features with too many NA values
-            # Compute percentage of NA values for each feature
             na_percentages = df.isna().mean(axis=1)
-            # Keep only features with percentage of NA values below the threshold
-            df = df.loc[na_percentages < self.na_threshold, :]
+
+            # Combine variances and NA percentages into a single DataFrame for logging
+            log_df = pd.DataFrame({ 'feature': df.index, 'na_percent': na_percentages, 'variance': feature_variances, 'selected': False})
+            
+            # Filter based on both variance and NA percentage thresholds
+            # Identify features that meet both criteria
+            df = df.loc[(feature_variances > self.variance_threshold) & (na_percentages < self.na_threshold)]
+            # set selected features to True
+            log_df['selected'] = (log_df['variance'] > self.variance_threshold) & (log_df['na_percent'] < self.na_threshold)
+            feature_logs[key] = log_df
             
             # Step 3: Fill NA values with the median of the feature
             # Check if there are any NA values in the DataFrame
@@ -346,6 +349,8 @@ class DataImporter:
             removed_samples_count = original_samples_count - cleaned_dfs[key].shape[1]
             print(f"[INFO] DataFrame {key} - Removed {removed_samples_count} samples ({removed_samples_count / original_samples_count * 100:.2f}%).")
 
+        # update feature logs from this process
+        self.feature_logs['cleanup'] = feature_logs
         return cleaned_dfs
 
     def get_labels(self, dat, ann):
