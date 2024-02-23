@@ -186,6 +186,12 @@ class DataImporter:
         
         print("[INFO] Training Data Stats: ", training_dataset.get_dataset_stats())
         print("[INFO] Test Data Stats: ", testing_dataset.get_dataset_stats())
+        print("[INFO] Merging Feature Logs...")
+        logs = self.feature_logs
+        self.feature_logs = {x: pd.merge(logs['cleanup'][x], 
+                                         logs['select_features'][x], 
+                                         on = 'feature', how = 'outer', 
+                                         suffixes=['_cleanup', '_laplacian']) for x in self.data_types}
         print("[INFO] Data import successful.")
         
         return training_dataset, testing_dataset
