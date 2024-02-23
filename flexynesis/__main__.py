@@ -85,9 +85,14 @@ def main():
                                             top_percentile= args.features_top_percentile,
                                             use_graph=use_graph,
     )
-    
     train_dataset, test_dataset = data_importer.import_data()
-    
+
+    # print feature logs to file (we use these tables to track which features are dropped/selected and why)
+    feature_logs = data_importer.feature_logs
+    for key in feature_logs.keys():
+        feature_logs[key].to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_logs', key, 'csv'])), 
+                                 header=True, index=False)
+
     # define a tuner object, which will instantiate a DirectPred class 
     # using the input dataset and the tuning configuration from the config.py
     tuner = flexynesis.HyperparameterTuning(train_dataset, 
