@@ -117,6 +117,12 @@ class DataImporter:
         self.use_graph = use_graph
         self.node_name = node_name  
         self.transform = transform
+        
+        # for each feature in the input training data; keep a log of what happens to the feature 
+        # record metrics such as laplacian score, variance
+        # record if the feature is dropped due to these metrics or due to high correlation to a 
+        # higher ranking feature
+        self.feature_logs = {} 
     
     def import_data(self):
         print("\n[INFO] ================= Importing Data =================")
@@ -198,7 +204,6 @@ class DataImporter:
         if not required_files.issubset(testing_files):
             missing_files = required_files - testing_files
             raise ValueError(f"Missing files in testing folder: {', '.join(missing_files)}")
-
     
     def read_data(self, folder_path):
         data = {}
@@ -354,8 +359,17 @@ class DataImporter:
     # unsupervised feature selection using laplacian score and correlation filters (optional)
     def select_features(self, dat):
         counts = {x: max(int(dat[x].shape[0] * self.top_percentile / 100), self.min_features) for x in dat.keys()}
-        dat = {x: filter_by_laplacian(dat[x].T, x, topN=counts[x], correlation_threshold = self.correlation_threshold).T for x in dat.keys()}
-        return dat
+        dat_filtered = {}
+        feature_logs = {} # feature log for each layer
+        for layer in dat.keys():
+            # filter features in the layer and keep a log of filtering process; notice we provide a transposed matrix
+            X_filt, log_df = filter_by_laplacian(X = dat[layer].T, layer = layer, 
+                                                      topN=counts[layer], correlation_threshold = self.correlation_threshold)
+            dat_filtered[layer] = X_filt.T # transpose after laplacian filtering again
+            feature_logs[layer] = log_df
+        # update main feature logs with events from this function
+        self.feature_logs['select_features'] = feature_logs
+        return dat_filtered 
 
     def harmonize(self, dat1, dat2):
         print("\n[INFO] ----------------- Harmonizing Data Sets ----------------- ")
