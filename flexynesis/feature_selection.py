@@ -198,7 +198,7 @@ def filter_by_laplacian(X, layer, k=5, t=None, topN=100, correlation_threshold=0
     """    
     print("[INFO] Implementing feature selection using laplacian score for layer:",layer,"with ",X.shape[1],"features")
     
-    feature_log = None
+    feature_log = pd.DataFrame({'feature': X.columns, 'laplacian_score': np.nan})
     # only apply filtering if topN < n_features
     if topN >= X.shape[1]: 
         print("[INFO] No feature selection applied. Returning original matrix. Demanded # of features is ", 
