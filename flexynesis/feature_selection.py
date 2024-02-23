@@ -136,16 +136,7 @@ def remove_redundant_features(X, laplacian_scores, threshold, topN=None):
         for idx in topped_up_features:
             del redundant_features[idx]
     
-    # Convert redundant_features dictionary to DataFrame
-    redundant_features_df = pd.DataFrame([
-        {
-            "feature": X.columns[idx],
-            "correlated_with": X.columns[redundant_features[idx]['correlated_with']],
-            "correlation_score": redundant_features[idx]['correlation_score']
-        }
-        for idx in redundant_features
-    ])
-    return selected_features, redundant_features_df
+    return selected_features, redundant_features
 
 def filter_by_laplacian(X, layer, k=5, t=None, topN=100, correlation_threshold=0.9):
     """
@@ -222,14 +213,25 @@ def filter_by_laplacian(X, layer, k=5, t=None, topN=100, correlation_threshold=0
         selected_features = sorted_indices[:topN_extended]
 
         # Remove redundancy from topN + 10% features
-        selected_features, redundant_features_df = remove_redundant_features(X[X.columns[selected_features]], 
+        selected_features, redundant_features = remove_redundant_features(X[X.columns[selected_features]], 
                                                       scores[selected_features], correlation_threshold, 
                                                       topN)
         # Prune down to topN features
         selected_features = selected_features[:topN]
         
-        # record the table of features which were removed due to redundancy
-        feature_log = pd.merge(feature_log, redundant_features_df, on = 'feature', how = 'outer')
+        # if any redundant features found, merge feature log with info from this. 
+        if len(redundant_features) > 0:
+            # Convert redundant_features dictionary to DataFrame
+            redundant_features_df = pd.DataFrame([
+                {
+                    "feature": X.columns[idx],
+                    "correlated_with": X.columns[redundant_features[idx]['correlated_with']],
+                    "correlation_score": redundant_features[idx]['correlation_score']
+                }
+                for idx in redundant_features
+            ])
+            # record the table of features which were removed due to redundancy
+            feature_log = pd.merge(feature_log, redundant_features_df, on = 'feature', how = 'outer')
 
     # Extract the selected features from the dataset
     X_selected = X[X.columns[selected_features]]
