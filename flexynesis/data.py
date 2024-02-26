@@ -28,6 +28,7 @@ class DataImporter:
         data_types (list[str]): A list of data modalities to import (e.g., 'rna', 'methylation').
         log_transform (bool): If True, apply log transformation to the data.
         concatenate (bool): If True, concatenate features from different modalities.
+        restrict_to_features (path): path to file that includes user-specific list of features (default: None)
         min_features (int): The minimum number of features to retain after filtering.
         top_percentile (float): The top percentile of features to retain based on variance.
         correlation_threshold(float): The correlation threshold for dropping highly redundant features
@@ -95,7 +96,7 @@ class DataImporter:
     protein_links = "9606.protein.links.v12.0.txt"
     protein_aliases = "9606.protein.aliases.v12.0.txt"
 
-    def __init__(self, path, data_types, log_transform = False, concatenate = False, min_features=None, 
+    def __init__(self, path, data_types, log_transform = False, concatenate = False, restrict_to_features = None, min_features=None, 
                  top_percentile=None, correlation_threshold = 0.9, variance_threshold=1e-5, na_threshold=0.1, 
                  use_graph=False, node_name="gene_name", transform=None):
         self.path = path
@@ -118,11 +119,33 @@ class DataImporter:
         self.node_name = node_name  
         self.transform = transform
         
+        # read user-specified feature list to restrict the analysis to that
+        self.restrict_to_features = restrict_to_features
+        self.get_user_features()
+        
         # for each feature in the input training data; keep a log of what happens to the feature 
         # record metrics such as laplacian score, variance
         # record if the feature is dropped due to these metrics or due to high correlation to a 
         # higher ranking feature
         self.feature_logs = {} 
+    
+    def get_user_features(self):
+        """
+        Load and process user-specified features from a file.
+        """
+        if self.restrict_to_features is not None:
+            if not os.path.isfile(self.restrict_to_features):
+                raise FileNotFoundError(f"File not found: {self.restrict_to_features}")
+            try:
+                with open(self.restrict_to_features, 'r') as fp:
+                    # Read and process the file
+                    feature_list = [x.strip() for x in fp.read().splitlines() if x.strip()]
+                    # Ensure uniqueness and assign
+                    self.restrict_to_features = np.unique(feature_list)
+            except Exception as e:
+                print(f"An error occurred while processing the file: {e}")
+        else: 
+            self.restrict_to_features = None
     
     def import_data(self):
         print("\n[INFO] ================= Importing Data =================")
@@ -135,9 +158,13 @@ class DataImporter:
         train_dat = self.read_data(training_path)
         test_dat = self.read_data(testing_path)
         
+        if self.restrict_to_features is not None:
+            train_dat = self.filter_by_features(train_dat, self.restrict_to_features)
+            test_dat = self.filter_by_features(test_dat, self.restrict_to_features)
+            
         # check for any problems with the the input files 
         self.validate_input_data(train_dat, test_dat)
-
+            
         if self.use_graph:
             edge_list = self.read_graph(train_dat, test_dat)
             
@@ -222,6 +249,22 @@ class DataImporter:
             data[file_name] = pd.read_csv(file_path, index_col=0)
         return data
 
+    def filter_by_features(self, dat, features):
+        """
+        If the user has provided list of features to restrict the analysis to, 
+        subset train/test data to only include those features
+        """
+        dat_filtered = {
+            key: df if key == "clin" else df.loc[df.index.intersection(features)]
+            for key, df in dat.items()
+        }
+
+        print("[INFO] The initial features are filtered to include user-provided features only")
+        for key, df in dat_filtered.items():
+            remaining_features = len(df.index)
+            print(f"In layer '{key}', {remaining_features} features are remaining after filtering.")
+        return dat_filtered        
+    
     def read_graph(self, train_dat, test_dat):
         print("\n[INFO] ----------------- Importing Graph Edges ----------------- ")
         # NOTE: stringdb file hardcoded for now

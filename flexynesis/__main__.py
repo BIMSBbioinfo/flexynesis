@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"], default = 'intermediate')
     parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int, default = 5)
     parser.add_argument("--correlation_threshold", help="Correlation threshold to drop highly redundant features (default: 0.8; set to 1 for no redundancy filtering)", type=float, default = 0.8)
+    parser.add_argument("--restrict_to_features", help="Restrict the analyis to the list of features provided by the user (default: None)", type = str, default = None)
     parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int, default = 500)
     parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float, default = 0.2)
     parser.add_argument("--data_types", help="(Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str, required = True)
@@ -81,10 +82,10 @@ def main():
                                             concatenate = concatenate, 
                                             log_transform = args.log_transform == 'True',
                                             correlation_threshold = args.correlation_threshold,
+                                            restrict_to_features = args.restrict_to_features,
                                             min_features= args.features_min, 
                                             top_percentile= args.features_top_percentile,
-                                            use_graph=use_graph,
-    )
+                                            use_graph=use_graph)
     train_dataset, test_dataset = data_importer.import_data()
 
     # print feature logs to file (we use these tables to track which features are dropped/selected and why)
