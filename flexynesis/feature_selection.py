@@ -215,7 +215,8 @@ def filter_by_laplacian(X, layer, k=5, t=None, topN=100, correlation_threshold=0
     
     # Sort the features based on their Laplacian Scores
     sorted_indices = np.argsort(scores)
-    selected_features = sorted_indices[:topN]
+    selected_feature_indices = sorted_indices[:topN]
+    selected_features = X.columns[selected_feature_indices]
 
     if correlation_threshold < 1:
         # Choose the topN + 10% features with the lowest Laplacian Scores
@@ -225,8 +226,8 @@ def filter_by_laplacian(X, layer, k=5, t=None, topN=100, correlation_threshold=0
         selected_features = sorted_indices[:topN_extended]
 
         # Remove redundancy from topN + 10% features
-        selected_features, redundant_features_df = remove_redundant_features(X[X.columns[selected_features]], 
-                                                      scores[selected_features], correlation_threshold, 
+        selected_features, redundant_features_df = remove_redundant_features(X[X.columns[selected_feature_indices]], 
+                                                      scores[selected_feature_indices], correlation_threshold, 
                                                       topN)
         # Prune down to topN features
         selected_features = selected_features[:topN]
