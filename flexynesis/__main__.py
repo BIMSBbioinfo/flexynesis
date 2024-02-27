@@ -18,10 +18,12 @@ def main():
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, choices=["DirectPred", "DirectPredCNN", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork"], required = True)
     parser.add_argument("--target_variables", help="(Required) Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", type = str, required = True)
-    parser.add_argument('--config_path', type=str, default=None, help='Optional path to an external hyperparameter configuration file in YAML format.')
     parser.add_argument("--batch_variables", 
                         help="(Optional) Which variables in 'clin.csv' to use for data integration / batch correction, comma-separated if multiple", 
                         type = str, default = None)
+    parser.add_argument("--surv_event_var", help="Which column in 'clin.csv' to use as event/status indicator for survival modeling", type = str, default = None)
+    parser.add_argument("--surv_time_var", help="Which column in 'clin.csv' to use as time/duration indicator for survival modeling", type = str, default = None)
+    parser.add_argument('--config_path', type=str, default=None, help='Optional path to an external hyperparameter configuration file in YAML format.')
     parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"], default = 'intermediate')
     parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int, default = 5)
     parser.add_argument("--correlation_threshold", help="Correlation threshold to drop highly redundant features (default: 0.8; set to 1 for no redundancy filtering)", type=float, default = 0.8)
@@ -100,6 +102,8 @@ def main():
                                             model_class = model_class, 
                                             target_variables = args.target_variables,
                                             batch_variables = args.batch_variables,
+                                            surv_event_var = args.surv_event_var,
+                                            surv_time_var = args.surv_time_var,
                                             config_name = config_name, 
                                             config_path = args.config_path,
                                             n_iter=int(args.hpo_iter),
@@ -111,7 +115,9 @@ def main():
         
     # evaluate predictions 
     print("Computing model evaluation metrics")
-    metrics_df = flexynesis.evaluate_wrapper(model.predict(test_dataset), test_dataset)
+    metrics_df = flexynesis.evaluate_wrapper(model.predict(test_dataset), test_dataset, 
+                                             surv_event_var=model.surv_event_var, 
+                                             surv_time_var=model.surv_time_var)
     metrics_df.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
     
     # print known/predicted labels 
