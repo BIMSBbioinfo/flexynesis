@@ -170,8 +170,7 @@ def evaluate_survival(outputs, durations, events):
     # Compute the c-index
     # reverse the directionality of risk_scores to make it compatible with lifelines' assumption
     c_index = concordance_index(durations, -outputs, events)
-    
-    return c_index
+    return {'cindex': c_index}
 
 def evaluate_classifier(y_true, y_pred, print_report = False):
     # Balanced accuracy
@@ -193,13 +192,19 @@ def evaluate_regressor(y_true, y_pred):
     pearson_corr, _ = pearsonr(y_true, y_pred)
     return {"mse": mse, "r2": r2, "pearson_corr": pearson_corr}
 
-def evaluate_wrapper(y_pred_dict, dataset):
+def evaluate_wrapper(y_pred_dict, dataset, surv_event_var = None, surv_time_var = None):
     metrics_list = []
     for var in y_pred_dict.keys():
-        ind = ~torch.isnan(dataset.ann[var])
         if dataset.variable_types[var] == 'numerical':
-            metrics = evaluate_regressor(dataset.ann[var][ind], y_pred_dict[var][ind].flatten())
+            if var == surv_event_var:
+                events = dataset.ann[surv_event_var]
+                durations = dataset.ann[surv_time_var]
+                metrics = evaluate_survival(y_pred_dict[var], durations, events)
+            else:
+                ind = ~torch.isnan(dataset.ann[var])
+                metrics = evaluate_regressor(dataset.ann[var][ind], y_pred_dict[var][ind].flatten())
         else:
+            ind = ~torch.isnan(dataset.ann[var])
             metrics = evaluate_classifier(dataset.ann[var][ind], y_pred_dict[var][ind])
 
         for metric, value in metrics.items():
