@@ -24,12 +24,12 @@ class DirectPred(pl.LightningModule):
         self.config = config
         self.dataset = dataset
         self.target_variables = target_variables
+        self.surv_event_var = surv_event_var
+        self.surv_time_var = surv_time_var
         # both surv event and time variables are assumed to be numerical variables
         # we create only one survival variable for the pair (surv_time_var and surv_event_var)
-        if surv_event_var is not None and surv_time_var is not None:
-            self.target_variables = target_variables + [surv_event_var]
-            self.surv_event_var = surv_event_var
-            self.surv_time_var = surv_time_var
+        if self.surv_event_var is not None and self.surv_time_var is not None:
+            self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
         self.variables = self.target_variables + batch_variables if batch_variables else self.target_variables
         self.val_size = val_size
