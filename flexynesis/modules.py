@@ -5,7 +5,7 @@ from torch import nn
 import torch_geometric.nn as gnn
 
 
-__all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "CNN", "GCNN"]
+__all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "CNN", "GCNN", "cox_ph_loss"]
 
 
 class Encoder(nn.Module):
@@ -267,3 +267,42 @@ class GCNN(nn.Module):
         x = self.relu_2(x)
         x = self.aggregation(x, batch)
         return x
+    
+    
+def cox_ph_loss(outputs, durations, events):
+    """
+    Calculate the Cox proportional hazards loss.
+
+    Args:
+        outputs (torch.Tensor): The output log-risk scores from the MLP.
+        durations (torch.Tensor): The observed times (durations) for each sample.
+        events (torch.Tensor): The event indicators (1 if event occurred, 0 if censored) for each sample.
+
+    Returns:
+        torch.Tensor: The calculated CoxPH loss.
+    """
+    valid_indices = ~torch.isnan(durations) & ~torch.isnan(events)
+    if valid_indices.sum() > 0:
+        outputs = outputs[valid_indices]
+        events = events[valid_indices]
+        durations = durations[valid_indices]
+        
+        # Exponentiate the outputs to get the hazard ratios
+        hazards = torch.exp(outputs)
+        # Ensure hazards is at least 1D
+        if hazards.dim() == 0:
+            hazards = hazards.unsqueeze(0)  # Make hazards 1D if it's a scalar
+        # Calculate the risk set sum
+        log_risk_set_sum = torch.log(torch.cumsum(hazards[torch.argsort(durations, descending=True)], dim=0))
+        # Get the indices that sort the durations in descending order
+        sorted_indices = torch.argsort(durations, descending=True)
+        events_sorted = events[sorted_indices]
+
+        # Calculate the loss
+        uncensored_loss = torch.sum(outputs[sorted_indices][events_sorted == 1]) - torch.sum(log_risk_set_sum[events_sorted == 1])
+        total_loss = -uncensored_loss / torch.sum(events)
+    else: 
+        total_loss = torch.tensor(0.0, device=outputs.device, requires_grad=True)
+    if not torch.isfinite(total_loss):
+        return torch.tensor(0.0, device=outputs.device, requires_grad=True)
+    return total_loss
