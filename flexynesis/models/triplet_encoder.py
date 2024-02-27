@@ -63,7 +63,8 @@ class MultiEmbeddingNetwork(nn.Module):
 class MultiTripletNetwork(pl.LightningModule):
     """
     """
-    def __init__(self, config, dataset, target_variables, batch_variables = None, val_size = 0.2, use_loss_weighting = True):
+    def __init__(self, config, dataset, target_variables, batch_variables = None, 
+                 surv_event_var = None, surv_time_var = None, val_size = 0.2, use_loss_weighting = True):
         """
         Initialize the MultiTripletNetwork with the given parameters.
 
@@ -74,8 +75,14 @@ class MultiTripletNetwork(pl.LightningModule):
         
         self.config = config
         self.target_variables = target_variables
+        self.surv_event_var = surv_event_var
+        self.surv_time_var = surv_time_var
+        # both surv event and time variables are assumed to be numerical variables
+        # we create only one survival variable for the pair (surv_time_var and surv_event_var)
+        if self.surv_event_var is not None and self.surv_time_var is not None:
+            self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
-        self.variables = target_variables + batch_variables if batch_variables else target_variables
+        self.variables = self.target_variables + batch_variables if batch_variables else self.target_variables
         self.val_size = val_size
         self.dataset = dataset
         self.ann = self.dataset.ann
@@ -212,9 +219,15 @@ class MultiTripletNetwork(pl.LightningModule):
         # compute loss values for the supervisor heads 
         losses = {'triplet_loss': triplet_loss}
         for var in self.variables:
-            y_hat = outputs[var]
-            y = y_dict[var]
-            loss = self.compute_loss(var, y, y_hat)
+            if var == self.surv_event_var:
+                durations = y_dict[self.surv_time_var]
+                events = y_dict[self.surv_event_var] 
+                risk_scores = outputs[var] #output of MLP
+                loss = cox_ph_loss(risk_scores, durations, events)
+            else:
+                y_hat = outputs[var]
+                y = y_dict[var]
+                loss = self.compute_loss(var, y, y_hat)
             losses[var] = loss
 
         total_loss = self.compute_total_loss(losses)
@@ -231,9 +244,15 @@ class MultiTripletNetwork(pl.LightningModule):
         # compute loss values for the supervisor heads 
         losses = {'triplet_loss': triplet_loss}
         for var in self.variables:
-            y_hat = outputs[var]
-            y = y_dict[var]
-            loss = self.compute_loss(var, y, y_hat)
+            if var == self.surv_event_var:
+                durations = y_dict[self.surv_time_var]
+                events = y_dict[self.surv_event_var] 
+                risk_scores = outputs[var] #output of MLP
+                loss = cox_ph_loss(risk_scores, durations, events)
+            else:
+                y_hat = outputs[var]
+                y = y_dict[var]
+                loss = self.compute_loss(var, y, y_hat)
             losses[var] = loss
         
         total_loss = sum(losses.values())
