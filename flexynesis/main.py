@@ -47,11 +47,13 @@ class HyperparameterTuning:
         load_and_convert_config(config_path): Loads and converts a configuration file.
     """
     def __init__(self, dataset, model_class, config_name, target_variables, 
-                 batch_variables = None, n_iter = 10, config_path = None, plot_losses = False,
+                 batch_variables = None, surv_event_var = None, surv_time_var = None, n_iter = 10, config_path = None, plot_losses = False,
                  val_size = 0.2, use_loss_weighting = True, early_stop_patience = -1):
         self.dataset = dataset
         self.model_class = model_class
         self.target_variables = target_variables.strip().split(',')
+        self.surv_event_var = surv_event_var
+        self.surv_time_var = surv_time_var
         self.batch_variables = batch_variables.strip().split(',') if batch_variables is not None else None
         self.config_name = config_name
         self.n_iter = n_iter
@@ -79,8 +81,13 @@ class HyperparameterTuning:
                 raise ValueError(f"'{self.config_name}' not found in the default config.")
 
     def objective(self, params, current_step, total_steps):
-        model = self.model_class(params, self.dataset, self.target_variables, 
-                                 self.batch_variables, self.val_size, self.use_loss_weighting)
+        model = self.model_class(config = params, dataset = self.dataset, 
+                                 target_variables = self.target_variables, 
+                                 batch_variables = self.batch_variables, 
+                                 surv_event_var = self.surv_event_var, 
+                                 surv_time_var = self.surv_time_var, 
+                                 val_size = self.val_size, 
+                                 use_loss_weighting = self.use_loss_weighting)
         print(params)
         
         mycallbacks = [self.progress_bar]

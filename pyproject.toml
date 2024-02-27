@@ -35,7 +35,8 @@ dependencies = [
     "captum",
     "ipywidgets",
     "torch_geometric",
-    "ipykernel"
+    "ipykernel",
+    "lifelines"
 ]
 
 [project.scripts]

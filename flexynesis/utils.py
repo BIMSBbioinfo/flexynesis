@@ -18,6 +18,10 @@ from sklearn.feature_selection import SelectFromModel
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
 from sklearn.model_selection import KFold, cross_val_score, GridSearchCV
 
+from lifelines import KaplanMeierFitter
+from lifelines.utils import concordance_index
+
+
 def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', scatter_kwargs=None, legend_kwargs=None, figsize=(10, 8)):
     """
     Plots the first two dimensions of the transformed input matrix in a 2D scatter plot,
@@ -138,6 +142,36 @@ def plot_boxplot(categorical_x, numerical_y, title_x = 'Categories', title_y = '
 def split_by_median(v):
     return ((v - torch.nanmedian(v)) > 0).float()
     
+def evaluate_survival(outputs, durations, events):
+    """
+    Computes the concordance index (c-index) for survival predictions.
+
+    Parameters:
+    - durations: A numpy array or a torch tensor of true survival times or durations.
+    - events: A numpy array or a torch tensor indicating whether an event (e.g., death) occurred.
+    - risk_scores: Predicted risk scores from the model. Higher scores should indicate higher risk of event.
+
+    Returns:
+    - A dictionary containing the c-index.
+    """
+    valid_indices = ~torch.isnan(durations) & ~torch.isnan(events)
+    if valid_indices.sum() > 0:
+        outputs = outputs[valid_indices]
+        events = events[valid_indices]
+        durations = durations[valid_indices]
+    # Ensure inputs are in the correct format (numpy arrays)
+    if isinstance(durations, torch.Tensor):
+        durations = durations.numpy()
+    if isinstance(events, torch.Tensor):
+        events = events.numpy()
+    if isinstance(outputs, torch.Tensor):
+        outputs = outputs.numpy()
+    
+    # Compute the c-index
+    # reverse the directionality of risk_scores to make it compatible with lifelines' assumption
+    c_index = concordance_index(durations, -outputs, events)
+    return {'cindex': c_index}
+
 def evaluate_classifier(y_true, y_pred, print_report = False):
     # Balanced accuracy
     balanced_acc = balanced_accuracy_score(y_true, y_pred)
@@ -158,13 +192,19 @@ def evaluate_regressor(y_true, y_pred):
     pearson_corr, _ = pearsonr(y_true, y_pred)
     return {"mse": mse, "r2": r2, "pearson_corr": pearson_corr}
 
-def evaluate_wrapper(y_pred_dict, dataset):
+def evaluate_wrapper(y_pred_dict, dataset, surv_event_var = None, surv_time_var = None):
     metrics_list = []
     for var in y_pred_dict.keys():
-        ind = ~torch.isnan(dataset.ann[var])
         if dataset.variable_types[var] == 'numerical':
-            metrics = evaluate_regressor(dataset.ann[var][ind], y_pred_dict[var][ind].flatten())
+            if var == surv_event_var:
+                events = dataset.ann[surv_event_var]
+                durations = dataset.ann[surv_time_var]
+                metrics = evaluate_survival(y_pred_dict[var], durations, events)
+            else:
+                ind = ~torch.isnan(dataset.ann[var])
+                metrics = evaluate_regressor(dataset.ann[var][ind], y_pred_dict[var][ind].flatten())
         else:
+            ind = ~torch.isnan(dataset.ann[var])
             metrics = evaluate_classifier(dataset.ann[var][ind], y_pred_dict[var][ind])
 
         for metric, value in metrics.items():
@@ -404,3 +444,43 @@ def print_summary_stats(dataset):
             mean_val = np.nanmean(tensor)
             print(f"Numerical Variable Summary: Median = {median_val}, Mean = {mean_val}")
         print("------")
+        
+
+def plot_kaplan_meier_curves(durations, events, categorical_variable):
+    """
+    Plots Kaplan-Meier survival curves for different groups defined by a categorical variable.
+
+    Parameters:
+    - durations: An array-like object of survival times or durations.
+    - events: An array-like object indicating whether an event (e.g., death) occurred (1) or was censored (0).
+    - categorical_variable: An array-like object defining groups for plotting different survival curves.
+    """
+    # Initialize the Kaplan-Meier fitter
+    kmf = KaplanMeierFitter()
+
+    # Ensure data is in a pandas DataFrame for easy handling
+    data = pd.DataFrame({
+        'Duration': durations,
+        'Event': events,
+        'Group': categorical_variable
+    })
+    
+    # Plot survival curves for each category
+    plt.figure(figsize=(10, 6))
+    categories = data['Group'].unique()
+    for category in categories:
+        # Select data for the group
+        group_data = data[data['Group'] == category]
+        
+        # Fit the model
+        kmf.fit(durations=group_data['Duration'], event_observed=group_data['Event'], label=str(category))
+        
+        # Plot the survival curve for the group
+        kmf.plot_survival_function()
+    
+    plt.title('Kaplan-Meier Survival Curves by Group')
+    plt.xlabel('Time')
+    plt.ylabel('Survival Probability')
+    plt.legend(title='Group')
+    plt.grid(True)
+    plt.show()
