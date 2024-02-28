@@ -3,8 +3,9 @@
   <img alt="logo" src="img/logo.png" width="50%" height="50%">
 </p>
 
-[![Tests](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tests.yml/badge.svg)](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tests.yml)
+![tests](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tests.yml/badge.svg)
 ![benchmarks](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/benchmarks.yml/badge.svg)
+![tutorials](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tutorials.yml/badge.svg)
 
 # flexynesis
 A deep-learning based multi-omics bulk sequencing data integration suite with a focus on (pre-)clinical 
