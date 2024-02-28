@@ -63,32 +63,32 @@ jobs:
       run: |
         conda activate my_env
         notebook='examples/tutorials/brca_subtypes.ipynb'
-        papermill "${notebook}" "${notebook}_out" -p HPO_ITER 1 
+        papermill "${notebook}" "${notebook}_out" -p HPO_ITER 1 -k my_env_kernel 
         
     - name: Compile modeling_drug_response
       shell: bash -l {0}
       run: |
         conda activate my_env
         notebook='examples/tutorials/modeling_drug_response.ipynb'
-        papermill "${notebook}" "${notebook}_out" -p HPO_ITER 1 
+        papermill "${notebook}" "${notebook}_out" -p HPO_ITER 1 -k my_env_kernel
         
     - name: Compile survival_subtypes_LGG_GBM
       shell: bash -l {0}
       run: |
         conda activate my_env
         notebook='examples/tutorials/survival_subtypes_LGG_GBM.ipynb'
-        papermill "${notebook}" "${notebook}_out" -p HPO_ITER 1 
+        papermill "${notebook}" "${notebook}_out" -p HPO_ITER 1 -k my_env_kernel
 
     - name: Compile scrnaseq_bonemarrow
       shell: bash -l {0}
       run: |
         conda activate my_env
         notebook='examples/tutorials/scrnaseq_bonemarrow.ipynb'
-        papermill "${notebook}" "${notebook}_out" -p HPO_ITER 1 neuroblastoma_data_integration
+        papermill "${notebook}" "${notebook}_out" -p HPO_ITER 1 neuroblastoma_data_integration -k my_env_kernel
         
     - name: Compile neuroblastoma_data_integration
       shell: bash -l {0}
       run: |
         conda activate my_env
-        notebook='examples/tutorials/neuroblastoma_data_integration.ipynb'
+        notebook='examples/tutorials/neuroblastoma_data_integration.ipynb' -k my_env_kernel
         papermill "${notebook}" "${notebook}_out" -p HPO_ITER 1
