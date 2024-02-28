@@ -50,6 +50,13 @@ jobs:
       run: |
         conda activate my_env
         pip install torch_geometric nbconvert nbclient papermill
+    
+    - name: Install Jupyter Kernel
+      shell: bash -l {0}
+      run: |
+        conda activate my_env
+        pip install ipykernel
+        python -m ipykernel install --user --name my_env_kernel --display-name "my_env_kernel"
 
     - name: Compile brca_subtypes.ipynb
       shell: bash -l {0}
