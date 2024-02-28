@@ -36,7 +36,8 @@ dependencies = [
     "ipywidgets",
     "torch_geometric",
     "ipykernel",
-    "lifelines"
+    "lifelines",
+    "papermill"
 ]
 
 [project.scripts]
