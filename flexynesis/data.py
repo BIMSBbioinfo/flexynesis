@@ -92,7 +92,6 @@ class DataImporter:
         encode_labels(df):
             Encodes categorical labels in the annotation dataframe.
     """
-    
     protein_links = "9606.protein.links.v12.0.txt"
     protein_aliases = "9606.protein.aliases.v12.0.txt"
 
@@ -164,10 +163,23 @@ class DataImporter:
             
         # check for any problems with the the input files 
         self.validate_input_data(train_dat, test_dat)
-            
-        if self.use_graph:
-            edge_list = self.read_graph(train_dat, test_dat)
-            
+
+        if self.use_graph:  # True | non-empty str
+            # Read a graph specified by user.
+            if isinstance(self.use_graph, str):
+                graph_df = self.read_graph(self.use_graph)
+                available_features = np.unique(graph_df.to_numpy()).tolist()
+                initial_edge_list = graph_df.to_numpy().tolist()
+            # Read stringdb by default.
+            elif isinstance(self.use_graph, bool):
+                graph_df = self.read_stringdb_graph()
+                available_features = np.unique(graph_df[["protein1", "protein2"]].to_numpy()).tolist()
+                initial_edge_list = stringdb_links_to_list(graph_df)
+            else:
+                raise NotImplementedError
+
+            train_dat, test_dat, edge_list = self.sync_graph_and_data(train_dat, test_dat, initial_edge_list, available_features)
+
         # cleanup uninformative features/samples, subset annotation data, do feature selection on training data
         train_dat, train_ann, train_samples, train_features = self.process_data(train_dat, split = 'train')
         test_dat, test_ann, test_samples, test_features = self.process_data(test_dat, split = 'test')
@@ -205,12 +217,14 @@ class DataImporter:
        
         # for early fusion, concatenate all data matrices and feature lists 
         if self.concatenate:
+            if self.use_graph:
+                raise NotImplementedError("Early fusion is not supported for GNNs.")
+
             training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in training_dataset.dat.keys()], dim = 1)}
             training_dataset.features = {'all': list(chain(*training_dataset.features.values()))}
-            
+
             testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in testing_dataset.dat.keys()], dim = 1)}
             testing_dataset.features = {'all': list(chain(*testing_dataset.features.values()))}
-        
         print("[INFO] Training Data Stats: ", training_dataset.get_dataset_stats())
         print("[INFO] Test Data Stats: ", testing_dataset.get_dataset_stats())
         print("[INFO] Merging Feature Logs...")
@@ -263,11 +277,21 @@ class DataImporter:
         for key, df in dat_filtered.items():
             remaining_features = len(df.index)
             print(f"In layer '{key}', {remaining_features} features are remaining after filtering.")
-        return dat_filtered        
-    
-    def read_graph(self, train_dat, test_dat):
+        return dat_filtered
+
+    def read_graph(self, fname, sep=" ", header=None):
+        """Read edge list from a file.
+
+        Returns
+            two cols pandas df.
+        """
+        edges_data_path = os.path.join(self.path, fname)
+        graph_df = pd.read_csv(edges_data_path, sep=sep, header=header)
+        return graph_df
+
+    def read_stringdb_graph(self):
         print("\n[INFO] ----------------- Importing Graph Edges ----------------- ")
-        # NOTE: stringdb file hardcoded for now
+        # NOTE: stringdb file hardcoded for now.
         edges_data_path = os.path.join(self.path, self.protein_links)
         node_data_path = os.path.join(self.path, self.protein_aliases)
 
@@ -288,8 +312,9 @@ class DataImporter:
 
         graph_df[["protein1", "protein2"]] = graph_df[["protein1", "protein2"]].applymap(fn)
 
-        available_features: list[str] = np.unique(graph_df[["protein1", "protein2"]].to_numpy()).tolist()
+        return graph_df
 
+    def sync_graph_and_data(self, train_dat, test_dat, initial_edge_list, available_features):
         print("[INFO] Removing nodes/edges features which don't exist in omics data matrices")
         # Collect genes from both training and testing data matrices
         provided_features = list({x for df in {**train_dat, **test_dat}.values() for x in df.index})
@@ -297,17 +322,39 @@ class DataImporter:
         # Intersect with available genes to filter out non-existing ones
         provided_features = set(available_features).intersection(provided_features)
 
-        initial_edge_list = stringdb_links_to_list(graph_df)
-        print("[INFO] Number of edges in initial edgelist",len(initial_edge_list))
+        print("[INFO] Number of edges in initial edgelist", len(initial_edge_list))
+        print("[INFO] Number of train features BEFORE syncing with the graph", {k: len(v) for k, v in train_dat.items() if k != "clin"})
+        print("[INFO] Number of test features BEFORE syncing with the graph", {k: len(v) for k, v in test_dat.items() if k != "clin"})
+
         # Now filter the graph edges based on provided_genes
         edge_list = []
         for edge in initial_edge_list:
             src, dst = edge
             if (src in provided_features) and (dst in provided_features):
                 edge_list.append(edge)
-        print("[INFO] Number of edges in pruned edgelist",len(edge_list))
-        return edge_list
-    
+
+        print("[INFO] Number of edges in pruned edgelist", len(edge_list))
+
+        filtered_train_dat = {}
+        filtered_test_dat = {}
+        for data, filtered_data in zip([train_dat, test_dat], [filtered_train_dat, filtered_test_dat]):
+            # Now sync data matrices
+            for k, v in data.items():
+                # Skip annotations, since a graph is feature based.
+                if k == "clin":
+                    filtered_data[k] = v
+                else:
+                    sorted_features = []
+                    for f in v.index.to_list():
+                        if f in provided_features:
+                            sorted_features.append(f)
+                    filtered_data[k] = v.loc[sorted_features]
+
+        print("[INFO] Number of train features AFTER syncing with the graph", {k: len(v) for k, v in train_dat.items() if k != "clin"})
+        print("[INFO] Number of test features AFTER syncing with the graph", {k: len(v) for k, v in test_dat.items() if k != "clin"})
+
+        return train_dat, test_dat, edge_list
+
     def filter_graph_by_modality(self, dat, edge_list):
         feature_ann = {}
         for k, v in dat.items():
