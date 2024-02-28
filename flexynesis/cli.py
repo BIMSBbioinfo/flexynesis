@@ -19,7 +19,6 @@ class AvailableModels(NamedTuple):
     DirectPred: tuple[DirectPred, str] = DirectPred, "DirectPred"
     supervised_vae: tuple[supervised_vae, str] = supervised_vae, "supervised_vae"
     MultiTripletNetwork: tuple[MultiTripletNetwork, str] = MultiTripletNetwork, "MultiTripletNetwork"
-    DirectPredCNN: tuple[DirectPredCNN, str] = DirectPredCNN, "DirectPredCNN"
     DirectPredGCNN: tuple[DirectPredGCNN, str] = DirectPredGCNN, "DirectPredGCNN"
 
 

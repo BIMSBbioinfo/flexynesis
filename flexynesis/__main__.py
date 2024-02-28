@@ -16,7 +16,7 @@ def main():
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
-    parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, choices=["DirectPred", "DirectPredCNN", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork"], required = True)
+    parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork"], required = True)
     parser.add_argument("--target_variables", help="(Required) Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", type = str, required = True)
     parser.add_argument("--batch_variables", 
                         help="(Optional) Which variables in 'clin.csv' to use for data integration / batch correction, comma-separated if multiple", 
@@ -58,7 +58,6 @@ def main():
         DirectPred: tuple[DirectPred, str] = DirectPred, "DirectPred"
         supervised_vae: tuple[supervised_vae, str] = supervised_vae, "supervised_vae"
         MultiTripletNetwork: tuple[MultiTripletNetwork, str] = MultiTripletNetwork, "MultiTripletNetwork"
-        DirectPredCNN: tuple[DirectPredCNN, str] = DirectPredCNN, "DirectPredCNN"
         DirectPredGCNN: tuple[DirectPredGCNN, str] = DirectPredGCNN, "DirectPredGCNN"
 
     available_models = AvailableModels()
