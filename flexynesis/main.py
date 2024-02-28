@@ -51,10 +51,10 @@ class HyperparameterTuning:
                  val_size = 0.2, use_loss_weighting = True, early_stop_patience = -1):
         self.dataset = dataset
         self.model_class = model_class
-        self.target_variables = target_variables.strip().split(',')
+        self.target_variables = target_variables
         self.surv_event_var = surv_event_var
         self.surv_time_var = surv_time_var
-        self.batch_variables = batch_variables.strip().split(',') if batch_variables is not None else None
+        self.batch_variables = batch_variables
         self.config_name = config_name
         self.n_iter = n_iter
         self.plot_losses = plot_losses # Whether to show live loss plots (useful in interactive mode)

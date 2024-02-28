@@ -99,8 +99,8 @@ def main():
     # using the input dataset and the tuning configuration from the config.py
     tuner = flexynesis.HyperparameterTuning(train_dataset, 
                                             model_class = model_class, 
-                                            target_variables = args.target_variables,
-                                            batch_variables = args.batch_variables,
+                                            target_variables = args.target_variables.strip().split(','),
+                                            batch_variables = args.batch_variables.strip().split(',') if args.batch_variables is not None else None,
                                             surv_event_var = args.surv_event_var,
                                             surv_time_var = args.surv_time_var,
                                             config_name = config_name, 
