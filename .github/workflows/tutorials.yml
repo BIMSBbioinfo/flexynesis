@@ -84,11 +84,11 @@ jobs:
       run: |
         conda activate my_env
         notebook='examples/tutorials/scrnaseq_bonemarrow'
-        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 neuroblastoma_data_integration -k my_env_kernel
+        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
         
     - name: Compile neuroblastoma_data_integration
       shell: bash -l {0}
       run: |
         conda activate my_env
-        notebook='examples/tutorials/neuroblastoma_data_integration' -k my_env_kernel
-        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1
+        notebook='examples/tutorials/neuroblastoma_data_integration' 
+        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
