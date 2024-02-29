@@ -96,7 +96,7 @@ class DataImporter:
     protein_aliases = "9606.protein.aliases.v12.0.txt"
 
     def __init__(self, path, data_types, log_transform = False, concatenate = False, restrict_to_features = None, min_features=None, 
-                 top_percentile=None, correlation_threshold = 0.9, variance_threshold=1e-5, na_threshold=0.1, 
+                 top_percentile=20, correlation_threshold = 0.9, variance_threshold=1e-5, na_threshold=0.1, 
                  use_graph=False, node_name="gene_name", transform=None):
         self.path = path
         self.data_types = data_types

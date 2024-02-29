@@ -29,7 +29,7 @@ def main():
     parser.add_argument("--correlation_threshold", help="Correlation threshold to drop highly redundant features (default: 0.8; set to 1 for no redundancy filtering)", type=float, default = 0.8)
     parser.add_argument("--restrict_to_features", help="Restrict the analyis to the list of features provided by the user (default: None)", type = str, default = None)
     parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int, default = 500)
-    parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float, default = 0.2)
+    parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float, default = 20)
     parser.add_argument("--data_types", help="(Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str, required = True)
     parser.add_argument("--outdir", help="Path to the output folder to save the model outputs", type=str, default = os.getcwd())
     parser.add_argument("--prefix", help="Job prefix to use for output files", type=str, default = 'job')
