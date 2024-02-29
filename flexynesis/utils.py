@@ -20,6 +20,7 @@ from sklearn.model_selection import KFold, cross_val_score, GridSearchCV
 
 from lifelines import KaplanMeierFitter
 from lifelines.utils import concordance_index
+from lifelines import CoxPHFitter
 
 
 def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', scatter_kwargs=None, legend_kwargs=None, figsize=(10, 8)):
@@ -484,3 +485,92 @@ def plot_kaplan_meier_curves(durations, events, categorical_variable):
     plt.legend(title='Group')
     plt.grid(True)
     plt.show()
+    
+
+def plot_hazard_ratios(cox_model):
+    """
+    Plots the sorted log hazard ratios from a fitted Cox Proportional Hazards model,
+    sorted by their p-values and annotated with stars to indicate levels of
+    statistical significance.
+
+    Parameters:
+    - cox_model: A fitted CoxPH model from the lifelines package.
+    """
+    # Extract the coefficients (log hazard ratios), their confidence intervals, and p-values
+    coef_summary = cox_model.summary[['coef', 'coef lower 95%', 'coef upper 95%', 'p']]
+    
+    # Sort the DataFrame by the p-values
+    coef_summary_sorted = coef_summary.sort_values(by='p')
+    
+    # Calculate the error bars
+    errors = np.abs(coef_summary_sorted[['coef lower 95%', 'coef upper 95%']].subtract(coef_summary_sorted['coef'], axis=0).values.T)
+    
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    y_positions = np.arange(len(coef_summary_sorted))
+    ax.errorbar(coef_summary_sorted['coef'], y_positions, xerr=errors, fmt='o', color='skyblue', capsize=4)
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(coef_summary_sorted.index)
+    ax.axvline(x=0, color='grey', linestyle='--')
+    
+    p_thresholds = [(0.0001, '***'), (0.001, '**'), (0.05, '*'), (0.1, '.')]
+    annotations = ['' if p > 0.05 else next(stars for threshold, stars in p_thresholds if p < threshold) 
+                   for p in coef_summary_sorted['p']]
+
+    for i, annotation in enumerate(annotations):
+        ax.text(coef_summary_sorted['coef'][i], y_positions[i], f'  {annotation}', verticalalignment='center')
+    
+    ax.invert_yaxis()  # Invert y-axis so the most significant variables are at the top
+    plt.xlabel('Log Hazard Ratio')
+    plt.title('Log Hazard Ratios Sorted by P-Value with 95% CI')
+    plt.grid(axis='x', linestyle='--', linewidth=0.7)
+    plt.tight_layout()
+    plt.show()
+    
+
+def build_cox_model(df, duration_col, event_col):
+    """
+    Fits a Cox Proportional Hazards model to the data.
+
+    Parameters:
+    - df: Pandas DataFrame containing the clinical variables, predicted risk scores,
+          durations, and event indicators.
+    - duration_col: The name of the column in df that contains the survival times.
+    - event_col: The name of the column in df that contains the event occurrence indicator (1 if event occurred, 0 otherwise).
+
+    Returns:
+    - cox_model: Fitted CoxPH model.
+    """
+    
+    def remove_low_variance_survival_features(df, duration_col, event_col, threshold=0.01):
+        events = df[event_col].astype(bool)
+        low_variance_features = []
+
+        for feature in df.drop(columns=[duration_col, event_col]).columns:
+            # Calculate variance within each group (event occurred and not occurred)
+            variance_when_event = df.loc[events, feature].var()
+            variance_when_no_event = df.loc[~events, feature].var()
+
+            # If variance in both groups is below the threshold, mark for removal
+            if variance_when_event < threshold or variance_when_no_event < threshold:
+                low_variance_features.append(feature)
+    
+        # Remove identified low variance features
+        df_filtered = df.drop(columns=low_variance_features)
+        # Report removed features
+        if low_variance_features:
+            print("Removed low variance features due to conditioning on event:", low_variance_features)
+        else:
+            print("No low variance features were removed based on event conditioning.")
+        return df_filtered    
+    
+    # remove uninformative features 
+    df = remove_low_variance_survival_features(df, duration_col, event_col)
+                                      
+    # Initialize the Cox Proportional Hazards model
+    cox_model = CoxPHFitter()
+
+    # Fit the model
+    cox_model.fit(df, duration_col=duration_col, event_col=event_col)
+
+    return cox_model
