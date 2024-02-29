@@ -18,6 +18,9 @@ from sklearn.feature_selection import SelectFromModel
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
 from sklearn.model_selection import KFold, cross_val_score, GridSearchCV
 
+from sksurv.ensemble import RandomSurvivalForest
+from sksurv.metrics import concordance_index_censored
+
 from lifelines import KaplanMeierFitter
 from lifelines.utils import concordance_index
 from lifelines import CoxPHFitter
@@ -238,7 +241,7 @@ def get_predicted_labels(y_pred_dict, dataset, split):
         dfs.append(df)
     return pd.concat(dfs, ignore_index=True)
 
-
+# evaluate performance of off-the-shelf methods such as Random Forests and SVMs on regression/classification tasks
 def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_folds=5, n_jobs = 4):
     def prepare_data(data_object):
         # Concatenate Data Matrices
@@ -326,6 +329,65 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_
     # Convert the list of metrics to a DataFrame
     return pd.DataFrame(metrics_list)
 
+def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration_col, event_col, n_folds=5, n_jobs=4):
+    print(f"[INFO] Evaluating baseline survival prediction performance")
+    def prepare_data(data_object, duration_col, event_col):
+        # Concatenate Data Matrices
+        X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=1)
+        
+        # Prepare Survival Data (Durations and Events)
+        durations = np.array(data_object.ann[duration_col])
+        events = np.array(data_object.ann[event_col])
+        y = np.array([(event, duration) for event, duration in zip(events, durations)], 
+                     dtype=[('Event', '?'), ('Time', '<f8')])
+        
+        # Filter out samples without a valid survival data
+        valid_indices = ~np.isnan(durations) & ~np.isnan(events)
+        X = X[valid_indices]
+        y = y[valid_indices]
+        return X, y
+
+    # Prepare train and test data
+    X_train, y_train = prepare_data(train_dataset, duration_col, event_col)
+    X_test, y_test = prepare_data(test_dataset, duration_col, event_col)
+
+    # Initialize Random Survival Forest
+    rsf = RandomSurvivalForest(n_estimators=100, max_depth=5, min_samples_split=10,
+                               min_samples_leaf=15, max_features="sqrt", n_jobs=n_jobs, random_state=42)
+
+    # Cross-Validation to determine the best model
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
+    c_index_scores = []
+
+    for train_index, test_index in kf.split(X_train):
+        X_fold_train, X_fold_test = X_train[train_index], X_train[test_index]
+        y_fold_train, y_fold_test = y_train[train_index], y_train[test_index]
+        
+        rsf.fit(X_fold_train, y_fold_train)
+        prediction = rsf.predict(X_fold_test)
+        c_index = concordance_index_censored(y_fold_test['Event'], y_fold_test['Time'], prediction)
+        c_index_scores.append(c_index[0])
+
+    # Calculate average C-index across all folds
+    avg_c_index = np.mean(c_index_scores)
+    print(f"[INFO] Average C-index in cross-validation: {avg_c_index}")
+
+    # Retrain on full training data and evaluate on test data
+    rsf.fit(X_train, y_train)
+    test_prediction = rsf.predict(X_test)
+    test_c_index = concordance_index_censored(y_test['Event'], y_test['Time'], test_prediction)
+    print(f"[INFO] C-index on test data: {test_c_index[0]}")
+
+    # Reporting
+    metrics_list = [{
+        'method': 'RandomSurvivalForest',
+        'var': event_col, 
+        'variable_type': 'numerical',
+        'metric': 'cindex',
+        'value': test_c_index[0]
+    }]
+    
+    return pd.DataFrame(metrics_list)
 
 def remove_batch_associated_variables(data, variable_types, target_dict, batch_dict = None, mi_threshold=0.1):
     """

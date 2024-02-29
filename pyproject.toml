@@ -37,7 +37,8 @@ dependencies = [
     "torch_geometric",
     "ipykernel",
     "lifelines",
-    "papermill"
+    "papermill",
+    "scikit-survival"
 ]
 
 [project.scripts]

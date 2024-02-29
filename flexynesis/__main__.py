@@ -17,7 +17,9 @@ def main():
     
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork"], required = True)
-    parser.add_argument("--target_variables", help="(Required) Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", type = str, required = True)
+    parser.add_argument("--target_variables", 
+                        help="(Optional if survival variables are not set to None) Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", 
+                        type = str, default = None)
     parser.add_argument("--batch_variables", 
                         help="(Optional) Which variables in 'clin.csv' to use for data integration / batch correction, comma-separated if multiple", 
                         type = str, default = None)
@@ -99,7 +101,7 @@ def main():
     # using the input dataset and the tuning configuration from the config.py
     tuner = flexynesis.HyperparameterTuning(train_dataset, 
                                             model_class = model_class, 
-                                            target_variables = args.target_variables.strip().split(','),
+                                            target_variables = args.target_variables.strip().split(',') if args.target_variables is not None else [],
                                             batch_variables = args.batch_variables.strip().split(',') if args.batch_variables is not None else None,
                                             surv_event_var = args.surv_event_var,
                                             surv_time_var = args.surv_time_var,
@@ -127,7 +129,7 @@ def main():
     # compute feature importance values
     print("Computing variable importance scores")
     for var in model.target_variables:
-        model.compute_feature_importance(var, steps = 20)
+        model.compute_feature_importance(var, steps = 30)
     df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], 
                        ignore_index = True)
     df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
@@ -156,10 +158,21 @@ def main():
     # evaluate off-the-shelf methods on the main target variable 
     if args.evaluate_baseline_performance == 'True':
         print("Computing off-the-shelf method performance on first target variable:",model.target_variables[0])
-        metrics_baseline = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, 
-                                                                    variable_name= model.target_variables[0], 
-                                                                    n_folds=5)
-        metrics_baseline.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'baseline.stats.csv'])), header=True, index=False) 
+        var = model.target_variables[0]
+        metrics = pd.DataFrame()
+        if var != model.surv_event_var: 
+            metrics = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, 
+                                                            variable_name = var, 
+                                                            n_folds=5)
+        if model.surv_event_var and model.surv_time_var:
+            metrics_baseline_survival = flexynesis.evaluate_baseline_survival_performance(train_dataset, test_dataset, 
+                                                                                             model.surv_time_var, 
+                                                                                             model.surv_event_var, 
+                                                                                             n_folds = 5)
+            metrics = pd.concat([metrics, metrics_baseline_survival], axis = 0, ignore_index = True)
+        
+        if not metrics.empty:
+            metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'baseline.stats.csv'])), header=True, index=False) 
     
     # save the trained model in file
     torch.save(model, os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.pth'])))
