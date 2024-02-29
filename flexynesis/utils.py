@@ -25,6 +25,11 @@ from lifelines import KaplanMeierFitter
 from lifelines.utils import concordance_index
 from lifelines import CoxPHFitter
 
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.metrics.pairwise import euclidean_distances
+import networkx as nx
+import community as community_louvain
 
 def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', scatter_kwargs=None, legend_kwargs=None, figsize=(10, 8)):
     """
@@ -636,3 +641,102 @@ def build_cox_model(df, duration_col, event_col):
     cox_model.fit(df, duration_col=duration_col, event_col=event_col)
 
     return cox_model
+
+
+def k_means_clustering(data, k):
+    """
+    Perform k-means clustering on a given pandas DataFrame.
+
+    Parameters:
+    - data: pandas DataFrame, where rows are samples and columns are features.
+    - k: int, the number of clusters to form.
+
+    Returns:
+    - cluster_labels: A pandas Series indicating the cluster label for each sample.
+    - kmeans: The fitted KMeans instance, which can be used to access cluster centers and other attributes.
+    """
+    # Initialize the KMeans model
+    kmeans = KMeans(n_clusters=k, random_state=42)
+
+    # Fit the model to the data
+    kmeans.fit(data)
+
+    # Extract the cluster labels for each data point
+    cluster_labels = pd.Series(kmeans.labels_, index=data.index)
+
+    return cluster_labels, kmeans
+
+def louvain_clustering(X, threshold=None, k=None):
+    """
+    Create a graph from pairwise distances within X. You can define a threshold to connect edges
+    or specify k for k-nearest neighbors.
+    
+    Parameters:
+    - X: numpy array, shape (n_samples, n_features)
+    - threshold: float, distance threshold to create an edge between two nodes.
+    - k: int, number of nearest neighbors to connect for each node.
+    
+    Returns:
+    - G: a networkx graph
+    """
+    distances = euclidean_distances(X)
+    G = nx.Graph()
+    for i in range(distances.shape[0]):
+        for j in range(i + 1, distances.shape[0]):
+            # If a threshold is defined, use it to create edges
+            if threshold is not None and distances[i, j] < threshold:
+                G.add_edge(i, j, weight=1/distances[i, j])
+            # If k is defined, add an edge if j is one of i's k-nearest neighbors
+            elif k is not None:
+                if np.argsort(distances[i])[:k + 1].__contains__(j):
+                    G.add_edge(i, j, weight=1/distances[i, j])
+    partition = community_louvain.best_partition(G)
+    
+    cluster_labels = np.full(len(X), np.nan, dtype=float)
+    # Fill the array with the cluster labels from the partition dictionary
+    for node_id, cluster_label in partition.items():
+        if node_id in range(len(X)):  # Check if the node_id is a valid index in X
+            cluster_labels[node_id] = cluster_label
+        else:
+            # If node_id is not a valid index in X, it's already set to NaN
+            continue
+
+    return cluster_labels, G, partition
+
+
+def get_optimal_clusters(data, min_k=2, max_k=10):
+    """
+    Find the optimal number of clusters (k) for k-means clustering on the given data,
+    based on the silhouette score, and return the cluster labels for the optimal k.
+
+    Parameters:
+    - data: pandas DataFrame or numpy array, dataset for clustering.
+    - min_k: int, minimum number of clusters to try.
+    - max_k: int, maximum number of clusters to try.
+
+    Returns:
+    - int, the optimal number of clusters based on the silhouette score.
+    - DataFrame, silhouette scores for each k.
+    - array, cluster labels for the optimal number of clusters.
+    """
+    silhouette_scores = []
+    cluster_labels_dict = {}  # To store cluster labels for each k
+
+    for k in range(min_k, max_k + 1):
+        kmeans = KMeans(n_clusters=k, random_state=42)
+        cluster_labels = kmeans.fit_predict(data)
+        silhouette_avg = silhouette_score(data, cluster_labels)
+        silhouette_scores.append((k, silhouette_avg))
+        cluster_labels_dict[k] = cluster_labels  # Store cluster labels
+        print(f"Number of clusters: {k}, Silhouette Score: {silhouette_avg:.4f}")
+    
+    # Convert silhouette scores to DataFrame for easier handling and visualization
+    silhouette_scores_df = pd.DataFrame(silhouette_scores, columns=['k', 'silhouette_score'])
+    
+    # Find the optimal k (number of clusters) with the highest silhouette score
+    optimal_k = silhouette_scores_df.loc[silhouette_scores_df['silhouette_score'].idxmax()]['k']
+    
+    # Retrieve the cluster labels for the optimal k
+    optimal_cluster_labels = cluster_labels_dict[optimal_k]
+    
+    return optimal_cluster_labels, optimal_k, silhouette_scores_df

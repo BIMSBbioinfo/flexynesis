@@ -38,7 +38,8 @@ dependencies = [
     "ipykernel",
     "lifelines",
     "papermill",
-    "scikit-survival"
+    "scikit-survival",
+    "python-louvain" 
 ]
 
 [project.scripts]
