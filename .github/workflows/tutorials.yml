@@ -91,4 +91,11 @@ jobs:
       run: |
         conda activate my_env
         notebook='examples/tutorials/neuroblastoma_data_integration' 
+        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
+
+    - name: Compile unsupervised_analysis_single_cell
+      shell: bash -l {0}
+      run: |
+        conda activate my_env
+        notebook='examples/tutorials/unsupervised_analysis_single_cell'
         papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
