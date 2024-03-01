@@ -1,6 +1,3 @@
-from pytorch_lightning import seed_everything
-# Set the seed for all the possible random number generators.
-seed_everything(42, workers=True)
 import argparse
 from typing import NamedTuple
 import os
@@ -46,6 +43,20 @@ def main():
     warnings.filterwarnings("ignore", "The `srun` command is available on your system but is not used")
 
     args = parser.parse_args()
+    
+    # do some sanity checks on input arguments
+    # 1. Check for survival variables consistency
+    if (args.surv_event_var is None) != (args.surv_time_var is None):
+        parser.error("Both --surv_event_var and --surv_time_var must be provided together or left as None.")
+
+    # 2. Check for required variables for model classes
+    if args.model_class != "supervised_vae":
+        if not any([args.target_variables, args.surv_event_var, args.batch_variables]):
+            parser.error("When selecting a model other than 'supervised_vae', you must provide at least one of --target_variables, survival variables (--surv_event_var and --surv_time_var), or --batch_variables.")
+
+    # 3. Check for compatibility of fusion_type with DirectPredGCNN
+    if args.fusion_type == "early" and args.model_class == "DirectPredGCNN":
+        parser.error("The 'DirectPredGCNN' model cannot be used with early fusion type. Use --fusion_type intermediate instead.")
     
     torch.set_num_threads(args.threads)
 
