@@ -35,7 +35,6 @@ class DirectPredGCNN(pl.LightningModule):
         self.config = config
         self.dataset = dataset
         self.target_variables = target_variables
-        self.target_variables = target_variables
         self.surv_event_var = surv_event_var
         self.surv_time_var = surv_time_var
         # both surv event and time variables are assumed to be numerical variables
