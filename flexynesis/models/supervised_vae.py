@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import pandas as pd
 import numpy as np
 
-import pytorch_lightning as pl
+import lightning as pl
 from scipy import stats
 
 from captum.attr import IntegratedGradients

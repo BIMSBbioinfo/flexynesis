@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-import pytorch_lightning as pl
+import lightning as pl
 from torch.utils.data import Dataset, DataLoader, random_split
 
 import pandas as pd

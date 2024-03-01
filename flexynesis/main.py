@@ -1,13 +1,13 @@
-from pytorch_lightning import seed_everything
+from lightning import seed_everything
 # Set the seed for all the possible random number generators.
 seed_everything(42, workers=True)
 import torch 
 from torch.utils.data import DataLoader, random_split
 
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import RichProgressBar
-from pytorch_lightning.callbacks.progress.rich_progress import RichProgressBarTheme
-from pytorch_lightning.callbacks import EarlyStopping
+import lightning as pl
+from lightning.pytorch.callbacks import RichProgressBar
+from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBarTheme
+from lightning.pytorch.callbacks import EarlyStopping
 
 from tqdm import tqdm
 
@@ -99,7 +99,8 @@ class HyperparameterTuning:
             mycallbacks.append(self.init_early_stopping())
             
         trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=5, 
-                            callbacks = mycallbacks, default_root_dir="./", logger=False, enable_checkpointing=False) 
+                            callbacks = mycallbacks, default_root_dir="./", logger=False, enable_checkpointing=False,
+                            devices=1, accelerator="gpu") 
         try:
             # Train the model
             trainer.fit(model)
@@ -119,6 +120,7 @@ class HyperparameterTuning:
 
         with tqdm(total=self.n_iter, desc='Tuning Progress') as pbar:
             for i in range(self.n_iter):
+                np.int = int
                 suggested_params_list = opt.ask()
                 suggested_params_dict = {param.name: value for param, value in zip(self.space, suggested_params_list)}
                 loss, model = self.objective(suggested_params_dict, current_step=i+1, total_steps=self.n_iter)
@@ -177,7 +179,7 @@ class HyperparameterTuning:
 
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
-from pytorch_lightning import Callback
+from lightning import Callback
 
 class LiveLossPlot(Callback):
     """

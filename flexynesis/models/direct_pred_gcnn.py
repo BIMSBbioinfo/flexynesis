@@ -6,7 +6,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import random_split
 
-import pytorch_lightning as pl
+import lightning as pl
 
 from torch_geometric.data import Data, Batch
 from torch_geometric.loader import DataLoader

@@ -9,7 +9,7 @@ import itertools
 import pandas as pd
 import numpy as np
 
-import pytorch_lightning as pl
+import lightning as pl
 
 from ..modules import *
 from ..data import TripletMultiOmicDataset
