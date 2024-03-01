@@ -10,6 +10,7 @@ import matplotlib
 from sklearn.decomposition import PCA
 from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 from scipy.stats import pearsonr
 
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
@@ -740,3 +741,33 @@ def get_optimal_clusters(data, min_k=2, max_k=10):
     optimal_cluster_labels = cluster_labels_dict[optimal_k]
     
     return optimal_cluster_labels, optimal_k, silhouette_scores_df
+
+# compute adjusted rand index; adjusted mutual information for two sets of paired labels
+def compute_ami_ari(labels1, labels2):
+    def convert_nan (labels):
+        return ['unavailable' if pd.isna(x) else x for x in labels]
+    labels1 = convert_nan(labels1)
+    labels2 = convert_nan(labels2)
+    ami = adjusted_mutual_info_score(labels1, labels2)
+    ari = adjusted_rand_score(labels1, labels2)
+    return {'ami': ami, 'ari': ari}
+
+
+def plot_label_concordance_heatmap(labels1, labels2, figsize=(12, 10)):
+    """
+    Plot a heatmap reflecting the concordance between two sets of labels using pandas crosstab.
+
+    Parameters:
+    - labels1: The first set of labels.
+    - labels2: The second set of labels.
+    """
+    # Compute the cross-tabulation
+    ct = pd.crosstab(pd.Series(labels1, name='Labels Set 1'), pd.Series(labels2, name='Labels Set 2'))
+    # Normalize the cross-tabulation matrix column-wise
+    ct_normalized = ct.div(ct.sum(axis=1), axis=0)
+    
+    # Plot the heatmap
+    plt.figure(figsize = figsize)
+    sns.heatmap(ct_normalized, annot=True,cmap='viridis', linewidths=.5)# col_cluster=False)
+    plt.title('Concordance between label groups')
+    plt.show()
