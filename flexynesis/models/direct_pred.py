@@ -274,7 +274,13 @@ class DirectPred(pl.LightningModule):
         Returns:
             attributions (list of torch.Tensor): The feature importances for each class.
         """
-        x_list = [self.dataset.dat[x] for x in self.dataset.dat.keys()]
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Assuming self.dataset.dat is a dictionary of tensors
+        x_list = [self.dataset.dat[x].to(device) for x in self.dataset.dat.keys()]
+        
+        # Initialize the Integrated Gradients method
+        self.to(device)  # Move the model to the same device as the data
                 
         # Initialize the Integrated Gradients method
         ig = IntegratedGradients(self.forward_target)
@@ -304,15 +310,21 @@ class DirectPred(pl.LightningModule):
         # average over samples 
         imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
 
-        # combine into a single data frame 
+        # Move the processed tensors to CPU for further operations that are not supported on GPU
+        imp_cpu = [[[a.cpu() for a in attr_class] for attr_class in class_attr] for class_attr in imp]
+
+        self.to('cpu')
+        
+        # combine into a single data frame
         df_list = []
         layers = list(self.dataset.dat.keys())
         for i in range(num_class):
             for j in range(len(layers)):
                 features = self.dataset.features[layers[j]]
-                importances = imp[i][j][0].detach().numpy()
+                # Ensure tensors are already on CPU before converting to numpy
+                importances = imp_cpu[i][j][0].detach().numpy()
                 df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
-        df_imp = pd.concat(df_list, ignore_index = True)
+        df_imp = pd.concat(df_list, ignore_index=True)
         
         # save the computed scores in the model
         self.feature_importances[target_var] = df_imp

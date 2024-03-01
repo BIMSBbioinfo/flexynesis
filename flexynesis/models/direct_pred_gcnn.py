@@ -264,8 +264,14 @@ class DirectPredGCNN(pl.LightningModule):
         return self.forward(inputs)[target_var]
 
     def compute_feature_importance(self, target_var, steps=5):
-        xs = [x for x in self.dataset.dat.values()]
-        edge_indices = [self.dataset.feature_ann[k]["edge_index"] for k in self.dataset.dat.keys()]
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Move the model to the selected device
+        self.to(device)
+        
+        # Prepare inputs and baselines, moving them to the GPU
+        xs = [x.to(device) for x in self.dataset.dat.values()]
+        edge_indices = [self.dataset.feature_ann[k]["edge_index"].to(device) for k in self.dataset.dat.keys()]
 
         inputs = tuple(xs)
         baselines = tuple([torch.zeros_like(x) for x in inputs])
@@ -308,19 +314,19 @@ class DirectPredGCNN(pl.LightningModule):
                 )
             )
 
-        # Summarize feature importances
-        # Compute absolute attributions
-        abs_attr = [[torch.abs(a) for a in attr_class] for attr_class in attributions]
-        # average over samples
+        # Move computations back to the CPU for further processing
+        abs_attr = [[torch.abs(a).cpu() for a in attr_class] for attr_class in attributions]
         imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
 
-        # combine into a single data frame
+        self.to('cpu')
+
+        # Combine into a single data frame
         df_list = []
         layers = list(self.dataset.dat.keys())
         for i in range(num_class):
             for j in range(len(layers)):
                 features = self.dataset.features[layers[j]]
-                importances = imp[i][j][0].detach().numpy()
+                importances = imp[i][j][0].detach().numpy()  # Safe to call .numpy() now, as tensors are on CPU
                 df_list.append(
                     pd.DataFrame(
                         {
@@ -334,5 +340,5 @@ class DirectPredGCNN(pl.LightningModule):
                 )
         df_imp = pd.concat(df_list, ignore_index=True)
 
-        # save the computed scores in the model
+        # Save the computed scores in the model
         self.feature_importances[target_var] = df_imp
