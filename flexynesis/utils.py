@@ -657,7 +657,7 @@ def k_means_clustering(data, k):
     - kmeans: The fitted KMeans instance, which can be used to access cluster centers and other attributes.
     """
     # Initialize the KMeans model
-    kmeans = KMeans(n_clusters=k, random_state=42)
+    kmeans = KMeans(n_clusters=k, n_init='auto', random_state=42)
 
     # Fit the model to the data
     kmeans.fit(data)
@@ -724,12 +724,12 @@ def get_optimal_clusters(data, min_k=2, max_k=10):
     cluster_labels_dict = {}  # To store cluster labels for each k
 
     for k in range(min_k, max_k + 1):
-        kmeans = KMeans(n_clusters=k, random_state=42)
+        kmeans = KMeans(n_clusters=k, n_init = 'auto', random_state=42)
         cluster_labels = kmeans.fit_predict(data)
         silhouette_avg = silhouette_score(data, cluster_labels)
         silhouette_scores.append((k, silhouette_avg))
         cluster_labels_dict[k] = cluster_labels  # Store cluster labels
-        print(f"Number of clusters: {k}, Silhouette Score: {silhouette_avg:.4f}")
+        #print(f"Number of clusters: {k}, Silhouette Score: {silhouette_avg:.4f}")
     
     # Convert silhouette scores to DataFrame for easier handling and visualization
     silhouette_scores_df = pd.DataFrame(silhouette_scores, columns=['k', 'silhouette_score'])
