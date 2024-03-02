@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-import pytorch_lightning as pl
+import lightning as pl
 from torch.utils.data import Dataset, DataLoader, random_split
 
 import pandas as pd
@@ -16,7 +16,8 @@ from ..modules import *
 
 class DirectPred(pl.LightningModule):
     def __init__(self, config, dataset, target_variables, batch_variables = None, 
-                 surv_event_var = None, surv_time_var = None, val_size = 0.2, use_loss_weighting = True):
+                 surv_event_var = None, surv_time_var = None, val_size = 0.2, use_loss_weighting = True,
+                device_type = None):
         super(DirectPred, self).__init__()
         self.config = config
         self.dataset = dataset
@@ -34,6 +35,8 @@ class DirectPred(pl.LightningModule):
         self.feature_importances = {}
         self.use_loss_weighting = use_loss_weighting
 
+        self.device_type = device_type
+        
         if self.use_loss_weighting:
             # Initialize log variance parameters for uncertainty weighting
             self.log_vars = nn.ParameterDict()
@@ -274,8 +277,14 @@ class DirectPred(pl.LightningModule):
         Returns:
             attributions (list of torch.Tensor): The feature importances for each class.
         """
-        x_list = [self.dataset.dat[x] for x in self.dataset.dat.keys()]
-                
+        device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
+        self.to(device)
+        
+        print("[INFO] Computing feature importance for variable:",target_var,"on device:",device)
+        
+        # Assuming self.dataset.dat is a dictionary of tensors
+        x_list = [self.dataset.dat[x].to(device) for x in self.dataset.dat.keys()]
+                        
         # Initialize the Integrated Gradients method
         ig = IntegratedGradients(self.forward_target)
 
@@ -300,19 +309,24 @@ class DirectPred(pl.LightningModule):
 
         # summarize feature importances
         # Compute absolute attributions
-        abs_attr = [[torch.abs(a) for a in attr_class] for attr_class in attributions]
+        # Move the processed tensors to CPU for further operations that are not supported on GPU
+        abs_attr = [[torch.abs(a).cpu() for a in attr_class] for attr_class in attributions]
         # average over samples 
         imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
 
-        # combine into a single data frame 
+        # move the model also back to cpu (if not already on cpu)
+        self.to('cpu')
+        
+        # combine into a single data frame
         df_list = []
         layers = list(self.dataset.dat.keys())
         for i in range(num_class):
             for j in range(len(layers)):
                 features = self.dataset.features[layers[j]]
+                # Ensure tensors are already on CPU before converting to numpy
                 importances = imp[i][j][0].detach().numpy()
                 df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
-        df_imp = pd.concat(df_list, ignore_index = True)
+        df_imp = pd.concat(df_list, ignore_index=True)
         
         # save the computed scores in the model
         self.feature_importances[target_var] = df_imp
