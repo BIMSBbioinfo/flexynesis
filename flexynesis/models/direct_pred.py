@@ -16,7 +16,8 @@ from ..modules import *
 
 class DirectPred(pl.LightningModule):
     def __init__(self, config, dataset, target_variables, batch_variables = None, 
-                 surv_event_var = None, surv_time_var = None, val_size = 0.2, use_loss_weighting = True):
+                 surv_event_var = None, surv_time_var = None, val_size = 0.2, use_loss_weighting = True,
+                device_type = None):
         super(DirectPred, self).__init__()
         self.config = config
         self.dataset = dataset
@@ -34,6 +35,8 @@ class DirectPred(pl.LightningModule):
         self.feature_importances = {}
         self.use_loss_weighting = use_loss_weighting
 
+        self.device_type = device_type
+        
         if self.use_loss_weighting:
             # Initialize log variance parameters for uncertainty weighting
             self.log_vars = nn.ParameterDict()
@@ -274,14 +277,14 @@ class DirectPred(pl.LightningModule):
         Returns:
             attributions (list of torch.Tensor): The feature importances for each class.
         """
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
+        self.to(device)
+        
+        print("[INFO] Computing feature importance for variable:",target_var,"on device:",device)
         
         # Assuming self.dataset.dat is a dictionary of tensors
         x_list = [self.dataset.dat[x].to(device) for x in self.dataset.dat.keys()]
-        
-        # Initialize the Integrated Gradients method
-        self.to(device)  # Move the model to the same device as the data
-                
+                        
         # Initialize the Integrated Gradients method
         ig = IntegratedGradients(self.forward_target)
 
@@ -313,6 +316,7 @@ class DirectPred(pl.LightningModule):
         # Move the processed tensors to CPU for further operations that are not supported on GPU
         imp_cpu = [[[a.cpu() for a in attr_class] for attr_class in class_attr] for class_attr in imp]
 
+        # move the model also back to cpu (if not already on cpu)
         self.to('cpu')
         
         # combine into a single data frame
