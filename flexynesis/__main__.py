@@ -34,7 +34,7 @@ def main():
     parser.add_argument("--prefix", help="Job prefix to use for output files", type=str, default = 'job')
     parser.add_argument("--log_transform", help="whether to apply log-transformation to input data matrices", type=str, choices=['True', 'False'], default = 'False')
     parser.add_argument("--threads", help="Number of threads to use", type=int, default = 4)
-    parser.add_argument("--early_stop_patience", help="How many epochs to wait when no improvements in validation loss is observed (default: -1; no early stopping)", type=int, default = -1)
+    parser.add_argument("--early_stop_patience", help="How many epochs to wait when no improvements in validation loss is observed (default: 10; set to -1 to disable early stopping)", type=int, default = 10)
     parser.add_argument("--use_loss_weighting", help="whether to apply loss-balancing using uncertainty weights method", type=str, choices=['True', 'False'], default = 'True')
     parser.add_argument("--evaluate_baseline_performance", help="whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset", type=str, choices=['True', 'False'], default = 'True')
 
