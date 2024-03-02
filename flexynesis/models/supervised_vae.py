@@ -438,12 +438,10 @@ class supervised_vae(pl.LightningModule):
 
         # summarize feature importances
         # Compute absolute attributions
-        abs_attr = [[torch.abs(a) for a in attr_class] for attr_class in attributions]
+        # Move the processed tensors to CPU for further operations that are not supported on GPU
+        abs_attr = [[torch.abs(a).cpu() for a in attr_class] for attr_class in attributions]
         # average over samples 
         imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
-
-        # Move the processed tensors to CPU for further operations that are not supported on GPU
-        imp_cpu = [[[a.cpu() for a in attr_class] for attr_class in class_attr] for class_attr in imp]
 
         # move the model also back to cpu (if not already on cpu)
         self.to('cpu')
@@ -454,7 +452,7 @@ class supervised_vae(pl.LightningModule):
         for i in range(num_class):
             for j in range(len(layers)):
                 features = self.dataset.features[layers[j]]
-                importances = imp_cpu[i][j][0].detach().numpy()
+                importances = imp[i][j][0].detach().numpy()
                 df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
         df_imp = pd.concat(df_list, ignore_index = True)
         
