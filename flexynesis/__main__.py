@@ -7,6 +7,7 @@ import pandas as pd
 import flexynesis
 from flexynesis.models import *
 import warnings
+import time
 
 def main():
     parser = argparse.ArgumentParser(description="Flexynesis - Your PyTorch model training interface", 
@@ -15,7 +16,8 @@ def main():
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork"], required = True)
     parser.add_argument("--target_variables", 
-                        help="(Optional if survival variables are not set to None) Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", 
+                        help="(Optional if survival variables are not set to None)." 
+                        "Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", 
                         type = str, default = None)
     parser.add_argument("--batch_variables", 
                         help="(Optional) Which variables in 'clin.csv' to use for data integration / batch correction, comma-separated if multiple", 
@@ -33,11 +35,13 @@ def main():
     parser.add_argument("--outdir", help="Path to the output folder to save the model outputs", type=str, default = os.getcwd())
     parser.add_argument("--prefix", help="Job prefix to use for output files", type=str, default = 'job')
     parser.add_argument("--log_transform", help="whether to apply log-transformation to input data matrices", type=str, choices=['True', 'False'], default = 'False')
-    parser.add_argument("--threads", help="Number of threads to use", type=int, default = 4)
     parser.add_argument("--early_stop_patience", help="How many epochs to wait when no improvements in validation loss is observed (default: 10; set to -1 to disable early stopping)", type=int, default = 10)
     parser.add_argument("--use_loss_weighting", help="whether to apply loss-balancing using uncertainty weights method", type=str, choices=['True', 'False'], default = 'True')
     parser.add_argument("--evaluate_baseline_performance", help="whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset", type=str, choices=['True', 'False'], default = 'True')
-
+    parser.add_argument("--threads", help="(Optional) How many threads to use when using CPU (default: 4)", type=int, default = 4)
+    parser.add_argument("--use_gpu", action="store_true", 
+                        help="(Optional) If set, the system will attempt to use CUDA/GPU if available.")
+    
     warnings.filterwarnings("ignore", ".*does not have many workers.*")
     warnings.filterwarnings("ignore", "has been removed as a dependency of the")
     warnings.filterwarnings("ignore", "The `srun` command is available on your system but is not used")
@@ -52,14 +56,33 @@ def main():
     # 2. Check for required variables for model classes
     if args.model_class != "supervised_vae":
         if not any([args.target_variables, args.surv_event_var, args.batch_variables]):
-            parser.error("When selecting a model other than 'supervised_vae', you must provide at least one of --target_variables, survival variables (--surv_event_var and --surv_time_var), or --batch_variables.")
+            parser.error("When selecting a model other than 'supervised_vae'," 
+                         "you must provide at least one of --target_variables, "
+                         "survival variables (--surv_event_var and --surv_time_var)", 
+                         "or --batch_variables.")
 
     # 3. Check for compatibility of fusion_type with DirectPredGCNN
     if args.fusion_type == "early" and args.model_class == "DirectPredGCNN":
-        parser.error("The 'DirectPredGCNN' model cannot be used with early fusion type. Use --fusion_type intermediate instead.")
+        parser.error("The 'DirectPredGCNN' model cannot be used with early fusion type. "
+                     "Use --fusion_type intermediate instead.")
     
-    torch.set_num_threads(args.threads)
-
+    # 4. Check for device availability if --accelerator is set. 
+    if args.use_gpu:
+        if not torch.cuda.is_available():
+            warnings.warn(''.join(["\n\n!!! WARNING: GPU REQUESTED BUT NOT AVAILABLE. FALLING BACK TO CPU.\n",
+                                   "PERFORMANCE MAY BE DEGRADED, PARTICULARLY FOR DirectPredGCNN.\n",
+                                   "OTHER MODELS SHOULD HAVE REASONABLE PERFORMANCE ON CPU. \n",
+                                   "IF USING A SLURM SCHEDULER, ENSURE YOU REQUEST A GPU WITH: ",
+                                   "`srun --gpus=1 --pty flexynesis <rest of your_command>` !!!\n\n"]))
+            time.sleep(3)  #wait a bit to capture user's attention to the warning
+            device_type = 'cpu'
+            torch.set_num_threads(args.threads)
+        else:
+            device_type = 'gpu'
+    else:
+        device_type = 'cpu'
+        torch.set_num_threads(args.threads)
+    
     # Validate paths
     if not os.path.exists(args.data_path):
         raise FileNotFoundError(f"Input --data_path doesn't exist at:",  {args.data_path})
@@ -120,13 +143,14 @@ def main():
                                             config_path = args.config_path,
                                             n_iter=int(args.hpo_iter),
                                             use_loss_weighting = args.use_loss_weighting == 'True',
-                                            early_stop_patience = int(args.early_stop_patience))    
+                                            early_stop_patience = int(args.early_stop_patience), 
+                                            device_type = device_type)    
     
     # do a hyperparameter search training multiple models and get the best_configuration 
     model, best_params = tuner.perform_tuning()
         
     # evaluate predictions 
-    print("Computing model evaluation metrics")
+    print("[INFO] Computing model evaluation metrics")
     metrics_df = flexynesis.evaluate_wrapper(model.predict(test_dataset), test_dataset, 
                                              surv_event_var=model.surv_event_var, 
                                              surv_time_var=model.surv_time_var)
@@ -138,7 +162,7 @@ def main():
                                 ignore_index=True)
     predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
     # compute feature importance values
-    print("Computing variable importance scores")
+    print("[INFO] Computing variable importance scores")
     for var in model.target_variables:
         model.compute_feature_importance(var, steps = 30)
     df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], 
@@ -146,7 +170,7 @@ def main():
     df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
 
     # get sample embeddings and save 
-    print("Extracting sample embeddings")
+    print("[INFO] Extracting sample embeddings")
     embeddings_train = model.transform(train_dataset)
     embeddings_test = model.transform(test_dataset)
     
@@ -154,7 +178,7 @@ def main():
     embeddings_test.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.csv'])), header=True)
     
     # also filter embeddings to remove batch-associated dims and only keep target-variable associated dims 
-    print("Printing filtered embeddings")
+    print("[INFO] Printing filtered embeddings")
     embeddings_train_filtered = flexynesis.remove_batch_associated_variables(data = embeddings_train, 
                                                                              batch_dict={x: train_dataset.ann[x] for x in model.batch_variables} if model.batch_variables is not None else None, 
                                                                              target_dict={x: train_dataset.ann[x] for x in model.target_variables}, 
@@ -168,7 +192,7 @@ def main():
     
     # evaluate off-the-shelf methods on the main target variable 
     if args.evaluate_baseline_performance == 'True':
-        print("Computing off-the-shelf method performance on first target variable:",model.target_variables[0])
+        print("[INFO] Computing off-the-shelf method performance on first target variable:",model.target_variables[0])
         var = model.target_variables[0]
         metrics = pd.DataFrame()
         if var != model.surv_event_var: 
@@ -176,6 +200,7 @@ def main():
                                                             variable_name = var, 
                                                             n_folds=5)
         if model.surv_event_var and model.surv_time_var:
+            print("[INFO] Computing off-the-shelf method performance on survival variable:",model.surv_time_var)
             metrics_baseline_survival = flexynesis.evaluate_baseline_survival_performance(train_dataset, test_dataset, 
                                                                                              model.surv_time_var, 
                                                                                              model.surv_event_var, 
