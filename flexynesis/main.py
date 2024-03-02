@@ -39,7 +39,7 @@ class HyperparameterTuning:
         val_size: Validation set size as a fraction of the dataset.
         use_loss_weighting: Flag to use loss weighting during training.
         early_stop_patience: Number of epochs to wait for improvement before stopping.
-    
+        device_type: Str (cpu, gpu)
     Methods:
         objective(params, current_step, total_steps): Evaluates a set of parameters.
         perform_tuning(): Executes the hyperparameter tuning process.
@@ -47,11 +47,16 @@ class HyperparameterTuning:
         load_and_convert_config(config_path): Loads and converts a configuration file.
     """
     def __init__(self, dataset, model_class, config_name, target_variables, 
-                 batch_variables = None, surv_event_var = None, surv_time_var = None, n_iter = 10, config_path = None, plot_losses = False,
-                 val_size = 0.2, use_loss_weighting = True, early_stop_patience = -1):
+                 batch_variables = None, surv_event_var = None, surv_time_var = None, 
+                 n_iter = 10, config_path = None, plot_losses = False,
+                 val_size = 0.2, use_loss_weighting = True, early_stop_patience = -1,
+                 device_type = None):
         self.dataset = dataset
         self.model_class = model_class
         self.target_variables = target_variables
+        self.device_type = device_type
+        if self.device_type is None:
+            self.device_type = "gpu" if torch.cuda.is_available() else "cpu"
         self.surv_event_var = surv_event_var
         self.surv_time_var = surv_time_var
         self.batch_variables = batch_variables
@@ -87,7 +92,8 @@ class HyperparameterTuning:
                                  surv_event_var = self.surv_event_var, 
                                  surv_time_var = self.surv_time_var, 
                                  val_size = self.val_size, 
-                                 use_loss_weighting = self.use_loss_weighting)
+                                 use_loss_weighting = self.use_loss_weighting,
+                                 device_type = self.device_type)
         print(params)
         
         mycallbacks = [self.progress_bar]
@@ -99,13 +105,23 @@ class HyperparameterTuning:
             mycallbacks.append(self.init_early_stopping())
             
         trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=5, 
-                            callbacks = mycallbacks, default_root_dir="./", logger=False, enable_checkpointing=False,
-                            devices=1, accelerator="gpu") 
+                            callbacks = mycallbacks, default_root_dir="./", logger=False, 
+                             enable_checkpointing=False,
+                            devices=1, accelerator=self.device_type) 
+        
+        # Create a new Trainer instance for validation, ensuring single-device processing
+        validation_trainer = pl.Trainer(
+            logger=False, 
+            enable_checkpointing=False,
+            devices=1,  # make sure to a single device for validation
+            accelerator=self.device_type
+        )
+        
         try:
             # Train the model
             trainer.fit(model)
             # Validate the model
-            val_loss = trainer.validate(model)[0]['val_loss']
+            val_loss = validation_trainer.validate(model)[0]['val_loss']
         except ValueError as e:
             print(str(e))
             val_loss = float('inf')  # or some other value indicating failure
