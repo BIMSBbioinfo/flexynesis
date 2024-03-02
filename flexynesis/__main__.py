@@ -56,10 +56,10 @@ def main():
     # 2. Check for required variables for model classes
     if args.model_class != "supervised_vae":
         if not any([args.target_variables, args.surv_event_var, args.batch_variables]):
-            parser.error("When selecting a model other than 'supervised_vae'," 
-                         "you must provide at least one of --target_variables, "
-                         "survival variables (--surv_event_var and --surv_time_var)", 
-                         "or --batch_variables.")
+            parser.error(''.join(["When selecting a model other than 'supervised_vae',"
+                                  "you must provide at least one of --target_variables, ",
+                                  "survival variables (--surv_event_var and --surv_time_var)",
+                                  "or --batch_variables."]))
 
     # 3. Check for compatibility of fusion_type with DirectPredGCNN
     if args.fusion_type == "early" and args.model_class == "DirectPredGCNN":
