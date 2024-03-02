@@ -27,6 +27,7 @@ class DirectPredGCNN(pl.LightningModule):
         surv_time_var=None,
         val_size=0.2,
         use_loss_weighting=True,
+        device_type = None
     ):
         super().__init__()
         self.config = config
@@ -44,6 +45,8 @@ class DirectPredGCNN(pl.LightningModule):
         self.dat_train, self.dat_val = self.prepare_data()
         self.feature_importances = {}
         self.use_loss_weighting = use_loss_weighting
+
+        self.device_type = device_type 
 
         if self.use_loss_weighting:
             # Initialize log variance parameters for uncertainty weighting
@@ -264,10 +267,11 @@ class DirectPredGCNN(pl.LightningModule):
         return self.forward(inputs)[target_var]
 
     def compute_feature_importance(self, target_var, steps=5):
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        # Move the model to the selected device
+        # find out the device the model was trained on.
+        device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
         self.to(device)
+        
+        print("[INFO] Computing feature importance for variable:",target_var,"on device:",device)
         
         # Prepare inputs and baselines, moving them to the GPU
         xs = [x.to(device) for x in self.dataset.dat.values()]
