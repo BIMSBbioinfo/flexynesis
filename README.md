@@ -35,15 +35,27 @@ The code for the benchmarking pipeline is at: https://github.com/BIMSBbioinfo/fl
 
 # Quick Start
 
+## Install 
+
 ```
-# install 
 git clone https://github.com/BIMSBbioinfo/flexynesis.git
 cd flexynesis
-conda create --name flexynesis --file spec-file.txt
-conda activate flexynesis
+python -m venv env
+source env/bin/activate
 pip install -e .
+```
 
-# test the installation
+## Options
+
+For a full set of command-line options:
+```
+flexynesis -h 
+```
+
+## Test the installation
+
+Download a dataset and test the flexynesis installation on a test run. 
+```
 curl -L -o dataset1.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz
 tar -xzvf dataset1.tgz
 
@@ -142,13 +154,8 @@ flexynesis and its dependencies available on the jupyter session.
 
 Assuming you have already defined an environment and installed the package: 
 ```
-conda activate flexynesis
+source env/bin/activate 
 python -m ipykernel install --user --name "flexynesis" --display-name "flexynesis"
-```
-
-To export existing spec-file.txt:
-```
-conda list --explicit > spec-file.txt
 ```
 
 # Compiling Notebooks
