@@ -7,7 +7,6 @@ on:
     paths:
       - 'flexynesis/**'
       - '.github/workflows/**'
-      - './spec-file.txt'
       - './pyproject.toml'
       - './manifest.scm'
       - './guix.scm'
@@ -23,40 +22,25 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.9'
+        python-version: '3.11'
 
-    - name: Set up Miniconda
-      uses: conda-incubator/setup-miniconda@v2
-      with:
-        auto-update-conda: true
-        python-version: '3.9'
-
-    - name: Cache Conda environment
+    - name: Cache Python environment
       uses: actions/cache@v2
       with:
-        path: ~/miniconda/envs
-        key: ${{ runner.os }}-conda-${{ hashFiles('spec-file.txt') }}
+        path: ~/.venv  # Adjust path based on where you create your venv
+        key: ${{ runner.os }}-venv-${{ hashFiles('pyproject.toml') }}  
         restore-keys: |
-          ${{ runner.os }}-conda-
+          ${{ runner.os }}-venv-
 
-    - name: Create environment with dependencies
-      shell: bash -l {0}
+    - name: Create virtual environment
       run: |
-        conda create --name my_env --file spec-file.txt
-        conda activate my_env
+        python -m venv ~/.venv/my_env
 
     - name: Install my package from source
       shell: bash -l {0}
       run: |
-        conda activate my_env
-        pip install -e .
-    
-    # NOTE: Install pytorch geometric via pip
-    - name: Install pytorch-geometric
-      shell: bash -l {0}
-      run: |
-        conda activate my_env
-        pip install torch_geometric
+        source ~/.venv/my_env/bin/activate
+        python -m pip install -e .
 
     - name: Download dataset1
       run: |
@@ -83,29 +67,29 @@ jobs:
     - name: Run DirectPred
       shell: bash -l {0}
       run: |
-        conda activate my_env
+        source ~/.venv/my_env/bin/activate
         flexynesis --data_path dataset1 --model_class DirectPred --target_variables Erlotinib --batch_variables Crizotinib --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False --evaluate_baseline_performance False
 
     - name: Run DirectPred_TestSurvival
       shell: bash -l {0}
       run: |
-        conda activate my_env
+        source ~/.venv/my_env/bin/activate
         flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut,cna --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --evaluate_baseline_performance False --surv_event_var OS_STATUS --surv_time_var OS_MONTHS
 
     - name: Run supervised_vae
       shell: bash -l {0}
       run: |
-        conda activate my_env
+        source ~/.venv/my_env/bin/activate
         flexynesis --data_path dataset1 --model_class supervised_vae --target_variables Erlotinib,Crizotinib --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_svae --early_stop_patience 3 --use_loss_weighting True --evaluate_baseline_performance False
 
     - name: Run MultiTripletNetwork
       shell: bash -l {0}
       run: |
-        conda activate my_env
+        source ~/.venv/my_env/bin/activate
         flexynesis --data_path dataset2 --model_class MultiTripletNetwork --target_variables y --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,meth --outdir . --prefix msi_triplet --early_stop_patience 3 --evaluate_baseline_performance False
 
     - name: Run DirectPredGCNN
       shell: bash -l {0}
       run: |
-        conda activate my_env
+        source ~/.venv/my_env/bin/activate
         flexynesis --data_path dataset1 --model_class DirectPredGCNN --target_variables Erlotinib --batch_variables Crizotinib --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False --evaluate_baseline_performance False
