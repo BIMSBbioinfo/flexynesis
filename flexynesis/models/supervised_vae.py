@@ -43,7 +43,8 @@ class supervised_vae(pl.LightningModule):
 
     """
     def __init__(self,  config, dataset, target_variables, batch_variables = None, 
-                 surv_event_var = None, surv_time_var = None, val_size = 0.2, use_loss_weighting = True):
+                 surv_event_var = None, surv_time_var = None, val_size = 0.2, use_loss_weighting = True,
+                 device_type = None):
         super(supervised_vae, self).__init__()
         self.config = config
         self.dataset = dataset
@@ -63,7 +64,9 @@ class supervised_vae(pl.LightningModule):
         
         # sometimes the model may have exploding/vanishing gradients leading to NaN values
         self.nan_detected = False 
-        
+
+        self.device_type = device_type
+
         self.use_loss_weighting = use_loss_weighting
         
         if self.use_loss_weighting:
@@ -377,7 +380,7 @@ class supervised_vae(pl.LightningModule):
         Returns:
             torch.Tensor: A scalar tensor representing the MMD loss.
         """
-        true_samples = torch.randn(200, latent_dim)
+        true_samples = torch.randn(200, latent_dim, device = self.device)
         mmd = self.compute_mmd(true_samples, z) # compute maximum mean discrepancy (MMD)
         nll = (xhat - x).pow(2).mean() #negative log likelihood
         return mmd+nll
@@ -405,7 +408,11 @@ class supervised_vae(pl.LightningModule):
         Returns:
             attributions (list of torch.Tensor): The feature importances for each class.
         """
-        x_list = [self.dataset.dat[x] for x in self.dataset.dat.keys()]
+        device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
+        self.to(device)
+        
+        print("[INFO] Computing feature importance for variable:",target_var,"on device:",device)
+        x_list = [self.dataset.dat[x].to(device) for x in self.dataset.dat.keys()]
                 
         # Initialize the Integrated Gradients method
         ig = IntegratedGradients(self.forward_target)
@@ -435,13 +442,19 @@ class supervised_vae(pl.LightningModule):
         # average over samples 
         imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
 
+        # Move the processed tensors to CPU for further operations that are not supported on GPU
+        imp_cpu = [[[a.cpu() for a in attr_class] for attr_class in class_attr] for class_attr in imp]
+
+        # move the model also back to cpu (if not already on cpu)
+        self.to('cpu')
+
         # combine into a single data frame 
         df_list = []
         layers = list(self.dataset.dat.keys())
         for i in range(num_class):
             for j in range(len(layers)):
                 features = self.dataset.features[layers[j]]
-                importances = imp[i][j][0].detach().numpy()
+                importances = imp_cpu[i][j][0].detach().numpy()
                 df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
         df_imp = pd.concat(df_list, ignore_index = True)
         
