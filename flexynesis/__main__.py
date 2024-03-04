@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, 
                         choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork"], required = True)
     parser.add_argument("--gnn_conv_type", help="If model_class is set to DirectPredGCNN, choose which graph convolution type to use", type=str, 
-                        choices=["GC", "GCN", "GAT", "GIN", "SAGE", "CHEB", "GCNN"])
+                        choices=["GC", "GCN", "GAT", "SAGE"])
     parser.add_argument("--target_variables", 
                         help="(Optional if survival variables are not set to None)." 
                         "Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", 
@@ -96,7 +96,7 @@ def main():
             ])
             warnings.warn(warning_message)
             time.sleep(3)  #wait a bit to capture user's attention to the warning
-            gnn_conv_type = 'GCNN'
+            gnn_conv_type = 'GC'
         else:
             gnn_conv_type = args.gnn_conv_type
     else:
