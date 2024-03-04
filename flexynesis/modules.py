@@ -3,6 +3,8 @@
 import torch
 from torch import nn
 import torch_geometric.nn as gnn
+from torch_geometric.nn import GCNConv, GATConv, GINConv, PNAConv, SAGEConv, ChebConv, GraphConv, \
+    global_mean_pool as gmeanp, global_max_pool as gmaxp, global_add_pool as gap
 
 
 __all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "GCNN", "cox_ph_loss"]
@@ -225,6 +227,146 @@ class CNN(nn.Module):
         x = x.squeeze(-1)
         return x
 
+class GraphNNs(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, conv='CHEB',
+                 dropout=0.1, number_layers=1, deg=None, act = None):
+        super().__init__()
+        """
+        Initializes a Graph Neural Network model with customizable convolution types, activation functions,
+        and the ability to specify the number of layers.
+        This model can use various graph convolution types (e.g., GCN, GAT, GIN, SAGE, CHEB) as specified by the user,
+        each potentially followed by batch normalization and a specified activation function. Dropout is applied for regularization.
+        The model concludes with a fully connected layer to produce the output.
+
+        Args:
+            input_dim (int): The dimensionality of input features.
+            hidden_dim (int): The dimensionality of features after the first fully connected layer.
+            output_dim (int): The dimensionality of the output features.
+            conv (str): The type of graph convolution to use. Defaults to 'CHEB'.
+            dropout (float): Dropout rate for regularization. Defaults to 0.5.
+            number_layers (int): The number of convolutional layers. Defaults to 5.
+            deg: (torch.Tensor): A tensor of the degrees of the nodes in the 
+                    input graph. Default value is None.(used in specific convolution types like PNA).
+            act (str): The activation function to use. Options include 'relu', 'sigmoid', etc.
+
+        
+        Methods:
+
+        - `reset_parameters()`: A method that initializes the parameters of 
+            the model.
+
+        Inputs:
+
+        - `batch` (torch_geometric.data.Batch): A PyTorch Geometric batch 
+            object that represents the input graph. The batch object contains 
+            the following attributes:
+            - `x` (torch.Tensor): A tensor of node features.
+
+            - `edge_index` (torch.LongTensor): A tensor of shape `(2, num_edges)` that 
+                represents the indices of the edges in the graph.
+
+            - `batch` (torch.LongTensor): A tensor of shape `(num_nodes,)` that 
+                indicates the membership of each node in a particular graph in the 
+                batch.
+
+            - `edge_attr` (torch.Tensor): A tensor of shape `(num_edges, num_edge_features)` 
+                that represents the edge features. If there are no edge features, then this 
+                tensor is not used.
+        
+            - `inputs` (torch.Tensor): A tensor of shape `(num_graphs, num_input_features)` 
+                that represents the Molecular Mechanic features for each graph in the batch. 
+                If `inputs` is `"False"`, then this tensor is not used.
+
+            - `output` (torch.Tensor): A tensor of shape `(num_graphs, output_dim)` 
+                that represents the target labels for each graph in the batch.
+
+        Outputs:
+
+            - `x` (torch.Tensor): A tensor of shape `(batch_size, output_dim)`
+                that represents the predicted class probabilities for each graph in 
+                the batch.
+        """
+        act_options = {
+            'relu': (torch.nn.ReLU()),
+            'sigmoid': (torch.nn.Sigmoid()),
+            'tanh': (torch.nn.Tanh()),
+            'softmax': (torch.nn.Softmax(dim=None)),
+            'leakyrelu': (torch.nn.LeakyReLU(negative_slope=0.01, inplace=False)),
+            'elu': (torch.nn.ELU(alpha=1.0, inplace=False)),
+            'gelu': (torch.nn.GELU())
+        }
+        # check if the activation function string is valid
+        if act not in act_options:
+            raise ValueError("Invalid activation function string. Choose from 'relu', 'sigmoid', 'tanh', 'softmax', 'leakyrelu', 'elu', or 'gelu'.")
+        
+        # instantiate the activation function
+        self.activation = act_options[act]
+
+        self.dropout = torch.nn.Dropout(dropout)
+
+        self.convs = torch.nn.ModuleList()
+        self.bns = torch.nn.ModuleList()
+        
+        conv_options = {
+            'GCN': (GCNConv(input_dim, input_dim)),
+            'GAT': (GATConv(input_dim, input_dim)),
+            'GIN': (GINConv(nn.Sequential(nn.Linear(input_dim, input_dim), 
+                                                   torch.nn.BatchNorm1d(input_dim), 
+                                                   nn.ReLU(), nn.Linear(input_dim, input_dim)))),
+            'SAGE': (SAGEConv(input_dim, input_dim)),
+            'CHEB': (ChebConv(input_dim, input_dim, K=2)),
+            'GC': (GraphConv(input_dim, input_dim)) 
+        }
+        if conv not in conv_options:
+            raise ValueError('Unknown convolution type. Choose one of: ',conv_options.keys())
+        
+        self.conv = conv_options[conv]
+        
+        for i in range(number_layers):
+            self.convs.append(self.conv)
+            self.bns.append(nn.BatchNorm1d(input_dim))
+
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.bn_ff1 = nn.BatchNorm1d(hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
+
+
+    def reset_parameters(self):
+        for layer in self.children():
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+
+    def forward(self, x, edge_index, batch):
+
+        for conv, batch_norm in zip(self.convs, self.bns):
+            if conv == "GCN" or conv == "CHEB" or conv == "GAT":
+                x = self.dropout(self.activation(batch_norm(conv(x, edge_index))))
+            else:
+                x = self.dropout(self.activation(batch_norm(conv(x, edge_index))))
+        x = gap(x, batch)
+
+        x = self.activation(self.bn_ff1(self.fc1(x)))
+        x = self.dropout(x)
+        out = self.fc2(x)
+
+        return out
+
+    def extract_embeddings(self, x, edge_index, batch):
+        for conv, batch_norm in zip(self.convs, self.bns):
+            if conv == "GCN" or conv == "CHEB" or conv == "GAT":
+                x = self.dropout(self.activation(batch_norm(conv(x, edge_index))))
+            else:
+                x = self.dropout(self.activation(batch_norm(conv(x, edge_index))))        
+        return x
+    
+    def get_attention_scores(self, x, edge_index, batch):
+        attention_scores_list = []
+        for i, (conv, batch_norm) in enumerate(zip(self.convs, self.bns)):
+
+            x, attention_scores = conv(x, edge_index, return_attention_weights=True)  # adapt as per your GAT layer's API
+            attention_scores_list.append((i, attention_scores))
+        return attention_scores_list
+
 
 class GCNN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -261,6 +403,7 @@ class GCNN(nn.Module):
         Returns:
             Tensor: The output tensor after processing through the GCNN, with shape [num_nodes, output_dim].
         """
+        #print('batch:', batch.x)
         x = self.layer_1(x, edge_index)
         x = self.relu_1(x)
         x = self.layer_2(x, edge_index)

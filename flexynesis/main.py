@@ -50,7 +50,7 @@ class HyperparameterTuning:
                  batch_variables = None, surv_event_var = None, surv_time_var = None, 
                  n_iter = 10, config_path = None, plot_losses = False,
                  val_size = 0.2, use_loss_weighting = True, early_stop_patience = -1,
-                 device_type = None):
+                 device_type = None, gnn_conv_type = None):
         self.dataset = dataset
         self.model_class = model_class
         self.target_variables = target_variables
@@ -71,6 +71,7 @@ class HyperparameterTuning:
                                     progress_bar_finished='red'))
         self.early_stop_patience = early_stop_patience
         self.use_loss_weighting = use_loss_weighting
+        self.gnn_conv_type = gnn_conv_type
         
         # If config_path is provided, use it
         if config_path:
@@ -93,7 +94,8 @@ class HyperparameterTuning:
                                  surv_time_var = self.surv_time_var, 
                                  val_size = self.val_size, 
                                  use_loss_weighting = self.use_loss_weighting,
-                                 device_type = self.device_type)
+                                 device_type = self.device_type, 
+                                 gnn_conv_type = self.gnn_conv_type)
         print(params)
         
         mycallbacks = [self.progress_bar]

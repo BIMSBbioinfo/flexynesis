@@ -14,7 +14,10 @@ def main():
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
-    parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork"], required = True)
+    parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, 
+                        choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork"], required = True)
+    parser.add_argument("--gnn_conv_type", help="If model_class is set to DirectPredGCNN, choose which graph convolution type to use", type=str, 
+                        choices=["GC", "GCN", "GAT", "GIN", "SAGE", "CHEB"])
     parser.add_argument("--target_variables", 
                         help="(Optional if survival variables are not set to None)." 
                         "Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", 
@@ -56,7 +59,7 @@ def main():
     # 2. Check for required variables for model classes
     if args.model_class != "supervised_vae":
         if not any([args.target_variables, args.surv_event_var, args.batch_variables]):
-            parser.error(''.join(["When selecting a model other than 'supervised_vae',"
+            parser.error(''.join(["When selecting a model other than 'supervised_vae',",
                                   "you must provide at least one of --target_variables, ",
                                   "survival variables (--surv_event_var and --surv_time_var)",
                                   "or --batch_variables."]))
@@ -82,7 +85,21 @@ def main():
     else:
         device_type = 'cpu'
         torch.set_num_threads(args.threads)
-    
+
+    # 5. check GNN arguments
+    if args.model_class == 'DirectPredGCNN':
+        if not args.gnn_conv_type:
+            warning_message = "\n".join([
+                "\n\n!!! When running DirectPredGCNN, a convolution type can be set",
+                "with the --gnn_conv_type flag. See `flexynesis -h` for full set of options.",
+                "Falling back on the default convolution type: GC !!!\n\n"
+            ])
+            warnings.warn(warning_message)
+            time.sleep(3)  #wait a bit to capture user's attention to the warning
+            gnn_conv_type = 'GC'
+        else:
+            gnn_conv_type = args.gnn_conv_type
+        
     # Validate paths
     if not os.path.exists(args.data_path):
         raise FileNotFoundError(f"Input --data_path doesn't exist at:",  {args.data_path})
@@ -144,7 +161,8 @@ def main():
                                             n_iter=int(args.hpo_iter),
                                             use_loss_weighting = args.use_loss_weighting == 'True',
                                             early_stop_patience = int(args.early_stop_patience), 
-                                            device_type = device_type)    
+                                            device_type = device_type,
+                                            gnn_conv_type = gnn_conv_type)    
     
     # do a hyperparameter search training multiple models and get the best_configuration 
     model, best_params = tuner.perform_tuning()

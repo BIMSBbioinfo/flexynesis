@@ -39,6 +39,10 @@ search_spaces = {
         Integer(64, 512, name="hidden_dim"),
         Real(0.0001, 0.01, prior="log-uniform", name="lr"),
         Integer(32, 128, name="batch_size"),
-        Categorical(epochs, name="epochs")
-    ],
+        Categorical(epochs, name="epochs"),
+        # below parameters apply to all convolution types except for 'GC'
+        Real(0.1, 0.4, prior="log-uniform", name="dropout"),
+        Integer(1, 3, name="number_layers"),
+        Categorical(['relu', 'sigmoid', 'tanh'], name="activation")
+    ]
 }
