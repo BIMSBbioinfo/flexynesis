@@ -87,15 +87,17 @@ class HyperparameterTuning:
                 raise ValueError(f"'{self.config_name}' not found in the default config.")
 
     def objective(self, params, current_step, total_steps):
-        model = self.model_class(config = params, dataset = self.dataset, 
-                                 target_variables = self.target_variables, 
-                                 batch_variables = self.batch_variables, 
-                                 surv_event_var = self.surv_event_var, 
-                                 surv_time_var = self.surv_time_var, 
-                                 val_size = self.val_size, 
-                                 use_loss_weighting = self.use_loss_weighting,
-                                 device_type = self.device_type, 
-                                 gnn_conv_type = self.gnn_conv_type)
+        
+        # args common to all model classes 
+        model_args = {"config": params, "dataset": self.dataset, "target_variables": self.target_variables,
+               "batch_variables": self.batch_variables, "surv_event_var": self.surv_event_var, 
+               "surv_time_var": self.surv_time_var, "val_size": self.val_size, 
+                "use_loss_weighting": self.use_loss_weighting, "device_type": self.device_type}
+        if self.model_class.__name__ == 'DirectPredGCNN':
+            model_args["gnn_conv_type"] = self.gnn_conv_type
+            
+        print(model_args)
+        model = self.model_class(**model_args)
         print(params)
         
         mycallbacks = [self.progress_bar]
