@@ -2,12 +2,11 @@
 
 import torch
 from torch import nn
-import torch_geometric.nn as gnn
-from torch_geometric.nn import GCNConv, GATConv, GINConv, PNAConv, SAGEConv, ChebConv, GraphConv, \
+from torch_geometric.nn import aggr, GCNConv, GATConv, SAGEConv, GraphConv, \
     global_mean_pool as gmeanp, global_max_pool as gmaxp, global_add_pool as gap
 
 
-__all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "GCNN", "cox_ph_loss"]
+__all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "GNNs", "cox_ph_loss"]
 
 
 class Encoder(nn.Module):
@@ -259,7 +258,7 @@ class GNNs(nn.Module):
         self.relu_1 = nn.ReLU()
         self.layer_2 = self.conv(hidden_dim, output_dim)
         self.relu_2 = nn.ReLU()
-        self.aggregation = gnn.aggr.SumAggregation()
+        self.aggregation = aggr.SumAggregation()
 
     def forward(self, x, edge_index, batch):
         x = self.layer_1(x, edge_index)
