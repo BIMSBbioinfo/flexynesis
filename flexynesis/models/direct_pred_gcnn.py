@@ -13,7 +13,7 @@ from torch_geometric.loader import DataLoader
 
 from captum.attr import IntegratedGradients
 
-from ..modules import GCNN, MLP, cox_ph_loss
+from ..modules import GCNN, MLP, cox_ph_loss, GraphNNs
 
 
 class DirectPredGCNN(pl.LightningModule):
@@ -61,10 +61,12 @@ class DirectPredGCNN(pl.LightningModule):
 
         self.encoders = nn.ModuleList(
             [
-                GCNN(
+                GraphNNs(
                     input_dim=input_dims[i],
                     hidden_dim=int(self.config["hidden_dim"]),  # int because of pyg
                     output_dim=self.config["latent_dim"],
+                    device='cuda:0',
+                    act = 'relu'
                 )
                 for i in range(len(layers))
             ]
