@@ -232,15 +232,60 @@ class GraphNNs(nn.Module):
                  dropout=0.5, number_layers=5, device=None, deg=None, act = None):
         super().__init__()
         """
-        Initialize the GNNs model.
-
-        This model consists of two Graph Convolutional layers, each followed by a ReLU activation.
-        After the second convolutional layer, the features of nodes are aggregated.
+        Initializes a Graph Neural Network model with customizable convolution types, activation functions,
+        and the ability to specify the number of layers.
+        This model can use various graph convolution types (e.g., GCN, GAT, GIN, SAGE, CHEB) as specified by the user,
+        each potentially followed by batch normalization and a specified activation function. Dropout is applied for regularization.
+        The model concludes with a fully connected layer to produce the output.
 
         Args:
-            input_dim (int): The number of input dimensions or features.
-            hidden_dim (int): The number of hidden dimensions or features after the first graph convolutional layer.
-            output_dim (int): The number of output dimensions or features after the second graph convolutional layer.
+            input_dim (int): The dimensionality of input features.
+            hidden_dim (int): The dimensionality of features after the first fully connected layer.
+            output_dim (int): The dimensionality of the output features.
+            conv (str): The type of graph convolution to use. Defaults to 'CHEB'.
+            dropout (float): Dropout rate for regularization. Defaults to 0.5.
+            number_layers (int): The number of convolutional layers. Defaults to 5.
+            device: The device (cpu or cuda) on which to perform computations.
+            deg: (torch.Tensor): A tensor of the degrees of the nodes in the 
+                    input graph. Default value is None.(used in specific convolution types like PNA).
+            act (str): The activation function to use. Options include 'relu', 'sigmoid', etc.
+
+        
+        Methods:
+
+        - `reset_parameters()`: A method that initializes the parameters of 
+            the model.
+
+        Inputs:
+
+        - `batch` (torch_geometric.data.Batch): A PyTorch Geometric batch 
+            object that represents the input graph. The batch object contains 
+            the following attributes:
+            - `x` (torch.Tensor): A tensor of node features.
+
+            - `edge_index` (torch.LongTensor): A tensor of shape `(2, num_edges)` that 
+                represents the indices of the edges in the graph.
+
+            - `batch` (torch.LongTensor): A tensor of shape `(num_nodes,)` that 
+                indicates the membership of each node in a particular graph in the 
+                batch.
+
+            - `edge_attr` (torch.Tensor): A tensor of shape `(num_edges, num_edge_features)` 
+                that represents the edge features. If there are no edge features, then this 
+                tensor is not used.
+        
+            - `inputs` (torch.Tensor): A tensor of shape `(num_graphs, num_input_features)` 
+                that represents the Molecular Mechanic features for each graph in the batch. 
+                If `inputs` is `"False"`, then this tensor is not used.
+
+            - `output` (torch.Tensor): A tensor of shape `(num_graphs, output_dim)` 
+                that represents the target labels for each graph in the batch.
+
+        Outputs:
+
+            - `x` (torch.Tensor): A tensor of shape `(batch_size, output_dim)`
+                that represents the predicted class probabilities for each graph in 
+                the batch.
         """
         self.device = device
 
@@ -335,20 +380,7 @@ class GraphNNs(nn.Module):
         return attention_scores_list
 
     def forward(self, x, edge_index, batch):
-        """
-        Define the forward pass of the GraphNNs.
 
-        The input graph data is processed through two graph convolutional layers with ReLU activation.
-        Finally, the node features are aggregated.
-
-        Args:
-            x (Tensor): Node feature matrix with shape [num_nodes, input_dim].
-            edge_index (LongTensor): The edge indices in COO format with shape [2, num_edges].
-            batch (LongTensor): The batch vector which assigns each node to a specific example in the batch.
-
-        Returns:
-            Tensor: The output tensor after processing through the GCNN, with shape [num_nodes, output_dim].
-        """
         for conv, batch_norm in zip(self.convs, self.bns):
             if conv == "GCN" or conv == "CHEB" or conv == "GAT":
                 x = self.dropout(self.activation(batch_norm(conv(x, edge_index))))
