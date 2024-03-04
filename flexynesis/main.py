@@ -219,7 +219,7 @@ class LiveLossPlot(Callback):
         on_train_epoch_end(trainer, pl_module): Updates and plots the loss after each training epoch.
         plot_losses(): Renders the loss plot with the current training metrics.
     """
-    def __init__(self, hyperparams, current_step, total_steps, figsize=(10, 8)):
+    def __init__(self, hyperparams, current_step, total_steps, figsize=(8, 6)):
         super().__init__()
         self.hyperparams = hyperparams
         self.current_step = current_step
@@ -240,16 +240,27 @@ class LiveLossPlot(Callback):
         self.plot_losses()
 
     def plot_losses(self):
+        plt.rcParams['figure.figsize'] = self.figsize
         clear_output(wait=True)
         plt.figure(figsize=self.figsize)
+        epochs_to_show = 25  # Number of most recent epochs to display
+
         for key, losses in self.losses.items():
-            plt.plot(losses, label=key)
-        
+            # If there are more than 25 epochs, slice the list to get the last 25 entries
+            if len(losses) > epochs_to_show:
+                losses_to_plot = losses[-epochs_to_show:]
+                epochs_range = range(len(losses) - epochs_to_show, len(losses))
+            else:
+                losses_to_plot = losses
+                epochs_range = range(len(losses))
+
+            plt.plot(epochs_range, losses_to_plot, label=key)
+
         hyperparams_str = ', '.join(f"{key}={value}" for key, value in self.hyperparams.items())
         title = f"HPO Step={self.current_step} out of {self.total_steps}\n({hyperparams_str})"
-        
+
         plt.title(title)
-        plt.xlabel("Epoch")
+        plt.xlabel(f"Last {epochs_to_show} Epochs")
         plt.ylabel("Loss")
         plt.legend()
         plt.tight_layout()  # Adjust layout so everything fits
