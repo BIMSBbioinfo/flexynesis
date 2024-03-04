@@ -96,7 +96,6 @@ class HyperparameterTuning:
         if self.model_class.__name__ == 'DirectPredGCNN':
             model_args["gnn_conv_type"] = self.gnn_conv_type
             
-        print(model_args)
         model = self.model_class(**model_args)
         print(params)
         

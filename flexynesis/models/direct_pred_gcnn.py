@@ -13,7 +13,7 @@ from torch_geometric.loader import DataLoader
 
 from captum.attr import IntegratedGradients
 
-from ..modules import GCNN, MLP, cox_ph_loss, GraphNNs
+from ..modules import GCNN, MLP, cox_ph_loss, GNNs
 
 
 class DirectPredGCNN(pl.LightningModule):
@@ -74,13 +74,11 @@ class DirectPredGCNN(pl.LightningModule):
         else: 
             self.encoders = nn.ModuleList(
                 [
-                    GraphNNs(
+                    GNNs(
                             input_dim=input_dims[i],
                             hidden_dim=int(self.config["hidden_dim"]),  # int because of pyg
                             output_dim=self.config["latent_dim"],
                             act = self.config['activation'],
-                            number_layers = self.config['number_layers'], 
-                            dropout = self.config['dropout'],
                             conv = self.gnn_conv_type
                         )
                         for i in range(len(layers))       
