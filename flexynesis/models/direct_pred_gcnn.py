@@ -13,7 +13,7 @@ from torch_geometric.loader import DataLoader
 
 from captum.attr import IntegratedGradients
 
-from ..modules import GCNN, MLP, cox_ph_loss, GNNs
+from ..modules import MLP, cox_ph_loss, GNNs
 
 
 class DirectPredGCNN(pl.LightningModule):
