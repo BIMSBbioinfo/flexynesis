@@ -27,7 +27,8 @@ class DirectPredGCNN(pl.LightningModule):
         surv_time_var=None,
         val_size=0.2,
         use_loss_weighting=True,
-        device_type = None
+        device_type = None,
+        gnn_conv_type = None 
     ):
         super().__init__()
         self.config = config
@@ -47,7 +48,8 @@ class DirectPredGCNN(pl.LightningModule):
         self.use_loss_weighting = use_loss_weighting
 
         self.device_type = device_type 
-
+        self.gnn_conv_type = gnn_conv_type
+        
         if self.use_loss_weighting:
             # Initialize log variance parameters for uncertainty weighting
             self.log_vars = nn.ParameterDict()
@@ -59,18 +61,30 @@ class DirectPredGCNN(pl.LightningModule):
         # NOTE: For now we use matrices, so number of node input features is 1.
         input_dims = [1 for _ in range(len(layers))]
 
-        self.encoders = nn.ModuleList(
-            [
-                GraphNNs(
-                    input_dim=input_dims[i],
-                    hidden_dim=int(self.config["hidden_dim"]),  # int because of pyg
-                    output_dim=self.config["latent_dim"],
-                    device='cuda:0',
-                    act = 'relu'
-                )
-                for i in range(len(layers))
-            ]
-        )
+        if self.gnn_conv_type == 'GCNN':
+            self.encoders = nn.ModuleList(
+                [
+                    GCNN(
+                        input_dim=input_dims[i],
+                        hidden_dim=int(self.config["hidden_dim"]),  # int because of pyg
+                        output_dim=self.config["latent_dim"],
+                    )
+                    for i in range(len(layers))
+                ])
+        else: 
+            self.encoders = nn.ModuleList(
+                [
+                    GraphNNs(
+                            input_dim=input_dims[i],
+                            hidden_dim=int(self.config["hidden_dim"]),  # int because of pyg
+                            output_dim=self.config["latent_dim"],
+                            act = self.config['activation'],
+                            number_layers = self.config['number_layers'], 
+                            dropout = self.config['dropout'],
+                            conv = self.gnn_conv_type
+                        )
+                        for i in range(len(layers))       
+                ])
 
         # Init output layers
         self.MLPs = nn.ModuleDict()
