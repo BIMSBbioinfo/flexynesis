@@ -96,7 +96,7 @@ def main():
             ])
             warnings.warn(warning_message)
             time.sleep(3)  #wait a bit to capture user's attention to the warning
-            gnn_conv_type = 'GC'
+            gnn_conv_type = 'GCNN'
         else:
             gnn_conv_type = args.gnn_conv_type
         
