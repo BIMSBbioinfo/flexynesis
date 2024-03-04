@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, 
                         choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork"], required = True)
     parser.add_argument("--gnn_conv_type", help="If model_class is set to DirectPredGCNN, choose which graph convolution type to use", type=str, 
-                        choices=["GC", "GCN", "GAT", "GIN", "SAGE", "CHEB"])
+                        choices=["GC", "GCN", "GAT", "GIN", "SAGE", "CHEB", "GCNN"])
     parser.add_argument("--target_variables", 
                         help="(Optional if survival variables are not set to None)." 
                         "Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", 
@@ -99,6 +99,8 @@ def main():
             gnn_conv_type = 'GCNN'
         else:
             gnn_conv_type = args.gnn_conv_type
+    else:
+        gnn_conv_type = None
         
     # Validate paths
     if not os.path.exists(args.data_path):
@@ -150,7 +152,7 @@ def main():
 
     # define a tuner object, which will instantiate a DirectPred class 
     # using the input dataset and the tuning configuration from the config.py
-    tuner = flexynesis.HyperparameterTuning(train_dataset, 
+    tuner = flexynesis.HyperparameterTuning(dataset = train_dataset, 
                                             model_class = model_class, 
                                             target_variables = args.target_variables.strip().split(',') if args.target_variables is not None else [],
                                             batch_variables = args.batch_variables.strip().split(',') if args.batch_variables is not None else None,
