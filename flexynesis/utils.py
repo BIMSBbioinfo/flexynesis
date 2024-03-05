@@ -2,6 +2,13 @@ import pandas as pd
 import numpy as np
 import torch
 import math
+import requests
+import tarfile
+import os
+from glob import glob
+import re
+import logging 
+from tqdm import tqdm
 
 from umap import UMAP
 import seaborn as sns
@@ -771,3 +778,90 @@ def plot_label_concordance_heatmap(labels1, labels2, figsize=(12, 10)):
     sns.heatmap(ct_normalized, annot=True,cmap='viridis', linewidths=.5)# col_cluster=False)
     plt.title('Concordance between label groups')
     plt.show()
+    
+
+class CBioPortalData:
+    def __init__(self, base_url=None, study_id=None, data_files=None):
+        self.base_url = base_url if base_url is not None else "https://cbioportal-datahub.s3.amazonaws.com"
+        self.study_id = study_id
+        self.data_files = data_files if data_files is not None else []
+        self.data_tables = {}  # Initialize data_tables as an empty dictionary
+        
+        logging.basicConfig(level=logging.INFO, format='[INFO] %(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("Initializing CBioPortalData")
+        archive_path = self.download_study_archive()
+        study_dir = self.extract_archive(archive_path)
+        self.read_data()
+        self.list_data_files()
+
+    def download_study_archive(self):
+        url = os.path.join(self.base_url, f"{self.study_id}.tar.gz")
+        dest_file = f"{self.study_id}.tar.gz"
+        if not os.path.exists(dest_file):
+            self.logger.info(f"Downloading {self.study_id} data archive")
+            r = requests.get(url)
+            with open(dest_file, 'wb') as f:
+                f.write(r.content)
+        return dest_file
+
+    def extract_archive(self, archive_path):
+        self.logger.info(f"Extracting {archive_path}")
+        base = archive_path.split('.')[0]
+        if not os.path.exists(base):
+            with tarfile.open(archive_path, "r:gz") as tar:
+                tar.extractall()
+        self.data_files = [f for f in glob(os.path.join(base, "data_*.txt"))]
+        return base
+
+    def read_data(self, files=None):
+        if files is None:
+            files = self.data_files
+        
+        self.data_tables = {}
+        for file_path in tqdm(files, desc="Processing Files"):
+            file_name = os.path.basename(file_path)
+            self.logger.info(f"Importing data file: {file_name}")
+            df = pd.read_csv(file_path, comment='#', sep='\t', low_memory=False)
+
+            if re.search('mutations', file_name):
+                self.logger.info(f"Binarizing and converting to matrix: {file_name}")
+                df = self.binarize_mutations(df)
+            elif not re.search('clinical|drug_treatment', file_name) and "Hugo_Symbol" in df.columns:
+                self.logger.info(f"Converting {file_name} to matrix")
+                df = self.process_data(df)
+
+            clean_name = re.sub(r"data_|\.txt", "", file_name)
+            self.data_tables[clean_name] = df
+
+    def process_data(self, df):
+        # Exclude 'Hugo_Symbol' and 'Entrez_Gene_Id' fields
+        cols = [col for col in df.columns if col not in ('Hugo_Symbol', 'Entrez_Gene_Id')]
+        # Remove non-unique rows based on 'Hugo_Symbol'; keep first among duplicates. 
+        df_unique = df.drop_duplicates(subset=['Hugo_Symbol'], keep='first')
+        # Set 'Hugo_Symbol' as index and select the desired columns
+        df_processed = df_unique.set_index('Hugo_Symbol')[cols]
+        return df_processed
+
+    def binarize_mutations(self, df):
+        # Check if required columns exist
+        if 'Hugo_Symbol' not in df.columns or 'Tumor_Sample_Barcode' not in df.columns:
+            raise ValueError("Required columns are missing.")
+
+        # Group by 'Hugo_Symbol' and 'Tumor_Sample_Barcode', count mutations
+        mutation_counts = df.groupby(['Hugo_Symbol', 'Tumor_Sample_Barcode']).size().reset_index(name='counts')
+
+        # Pivot table to create a matrix (genes vs samples)
+        df_pivot = mutation_counts.pivot(index='Hugo_Symbol', columns='Tumor_Sample_Barcode', values='counts').fillna(0)
+
+        # Binarize the matrix
+        df_binary = (df_pivot > 0).astype(int)
+
+        # Process the binary data further if needed, similar to process_data method
+        df_processed = self.process_data(df_binary.reset_index())
+
+        return df_processed
+    
+    def list_data_files(self):
+        # Create a DataFrame with file names
+        return {x: self.data_tables[x].shape for x in self.data_tables.keys()}
