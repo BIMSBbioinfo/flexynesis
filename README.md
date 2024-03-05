@@ -65,6 +65,34 @@ conda activate flexynesisenv
 flexynesis --data_path dataset1 --model_class DirectPred --target_variables Erlotinib --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False --evaluate_baseline_performance False
 ```
 
+## Accelerating with GPUs
+
+If you have access to GPUs on your system, they can be used to accelerate the training of models. 
+However, making GPUs accessible to `torch` is system-specific. Please contact your system administrator 
+to make sure you have accessible GPUs and methods to access them. 
+
+### With Slurm 
+
+If you have [Slurm Workload Manager] in your system, you can call `flexynesis` as follows: 
+
+```
+conda activate flexynesisenv
+srun --gpus=1 --pty flexynesis --use_gpu ...otherarguments
+```
+
+### GridEngine
+
+If you have an HPC sytem running GridEngine with GPU nodes, you may be allowed to request a node with 
+GPUs. The important thing here is to request a GPU node with the proper **CUDA** version installed on it. 
+
+```
+# request 1 GPU device node with CUDA version 12
+qrsh -l gpu=1,cuda12
+# activate your environment
+conda activate flexynesisenv
+flexynesis --use_gpu ...otherarguments 
+```
+
 # Input Dataset Structure
 
 ```txt
