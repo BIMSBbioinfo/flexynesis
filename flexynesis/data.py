@@ -1,6 +1,6 @@
 from torch.utils.data import Dataset, DataLoader
-from torch_geometric.data import Data
-from torch_geometric.data import download_url, extract_gz, Dataset as PYGDataset
+from torch_geometric.data import download_url, extract_gz
+from torch_geometric.data import Data, Dataset as PYGDataset
 
 import numpy as np
 import pandas as pd
