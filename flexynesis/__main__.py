@@ -127,9 +127,6 @@ def main():
     else:
         model_class, config_name = model_class
 
-    # Use STRING
-    # graph = "STRING" if config_name == "DirectPredGCNN" else False
-
     # import assays and labels
     inputDir = args.data_path
     
