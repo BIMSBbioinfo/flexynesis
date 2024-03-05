@@ -1,12 +1,13 @@
 from torch.utils.data import Dataset, DataLoader
-from torch_geometric.data import Data
-from torch_geometric.data import Dataset as PYGDataset
+from torch_geometric.data import download_url, extract_gz
+from torch_geometric.data import Data, Dataset as PYGDataset
 
 import numpy as np
 import pandas as pd
 from functools import reduce
 import torch
 import os
+import shutil
 
 from tqdm import tqdm
 
@@ -34,16 +35,17 @@ class DataImporter:
         correlation_threshold(float): The correlation threshold for dropping highly redundant features
         variance_threshold (float): The variance threshold for removing low-variance features.
         na_threshold (float): The threshold for removing features with too many NA values.
-        use_graph (bool): If True, incorporate graph-based features from protein interaction data.
-        node_name (str): The type of node names used in the graph ('gene_name' or 'gene_id').
-        transform (callable): An optional data transformation function to be applied.
+        graph (str | None): If not None, incorporate graph-based features from protein interaction data (default: None).
+        string_organism (int): STRING organism (species) id (default: 9606 (human)).
+        string_node_name (str): The type of node names used in the graph. Available options: "gene_name", "gene_id" (default: "gene_name").
+        transform (callable): An optional graph transformation function to be applied for each modality.
 
     Methods:
         import_data():
             The primary method to orchestrate the data import and preprocessing workflow. It follows these steps:
                 1. Validates the presence of required data files in training and testing directories.
                 2. Imports data using `read_data` for both training and testing sets.
-                3. If `use_graph` is True, imports graph data using `read_graph` and processes it.
+                3. If `graph` is not None, imports graph data using `read_graph` and processes it.
                 4. Cleans and preprocesses the data through `cleanup_data`.
                 5. Processes data to align features and samples across modalities using `process_data`.
                 6. Harmonizes training and testing datasets to have the same features using `harmonize`.
@@ -92,12 +94,10 @@ class DataImporter:
         encode_labels(df):
             Encodes categorical labels in the annotation dataframe.
     """
-    protein_links = "9606.protein.links.v12.0.txt"
-    protein_aliases = "9606.protein.aliases.v12.0.txt"
 
     def __init__(self, path, data_types, log_transform = False, concatenate = False, restrict_to_features = None, min_features=None, 
-                 top_percentile=20, correlation_threshold = 0.9, variance_threshold=1e-5, na_threshold=0.1, 
-                 use_graph=False, node_name="gene_name", transform=None):
+                 top_percentile=20, correlation_threshold = 0.9, variance_threshold=1e-5, na_threshold=0.1,
+                 graph=None, string_organism=9606, string_node_name="gene_name", transform=None):
         self.path = path
         self.data_types = data_types
         self.concatenate = concatenate
@@ -114,10 +114,13 @@ class DataImporter:
         # initialize data transformers
         self.transformers = None
 
-        self.use_graph = use_graph
-        self.node_name = node_name  
+        self.graph = graph
+        if self.graph is not None:
+            if self.graph == "STRING":
+                # Download STRING network graph data.
+                self.graph = STRING(self.path, organism=string_organism, node_name=string_node_name)
         self.transform = transform
-        
+
         # read user-specified feature list to restrict the analysis to that
         self.restrict_to_features = restrict_to_features
         self.get_user_features()
@@ -164,21 +167,22 @@ class DataImporter:
         # check for any problems with the the input files 
         self.validate_input_data(train_dat, test_dat)
 
-        if self.use_graph:  # True | non-empty str
+        if self.graph is not None:  # True | non-empty str
             # Read a graph specified by user.
-            if isinstance(self.use_graph, str):
-                graph_df = self.read_graph(self.use_graph)
+            if isinstance(self.graph, str):
+                # Assumes that graph csv file in a dataset root dir.
+                graph_df = read_user_graph(os.path.join(self.path, self.graph))
                 available_features = np.unique(graph_df.to_numpy()).tolist()
                 initial_edge_list = graph_df.to_numpy().tolist()
-            # Read stringdb by default.
-            elif isinstance(self.use_graph, bool):
-                graph_df = self.read_stringdb_graph()
+            # Read STRING by default.
+            elif isinstance(self.graph, STRING):
+                graph_df = self.graph.df
                 available_features = np.unique(graph_df[["protein1", "protein2"]].to_numpy()).tolist()
                 initial_edge_list = stringdb_links_to_list(graph_df)
             else:
                 raise NotImplementedError
 
-            train_dat, test_dat, edge_list = self.sync_graph_and_data(train_dat, test_dat, initial_edge_list, available_features)
+            train_dat, test_dat, edge_list = sync_graph_and_data(train_dat, test_dat, initial_edge_list, available_features)
 
         # cleanup uninformative features/samples, subset annotation data, do feature selection on training data
         train_dat, train_ann, train_samples, train_features = self.process_data(train_dat, split = 'train')
@@ -189,14 +193,14 @@ class DataImporter:
 
         train_feature_ann = {}
         test_feature_ann = {}
-        if self.use_graph:
+        if self.graph is not None:
             # apply a second filter to the graph, 
             # this time by each data modality separately 
             print("\n[INFO] ----------------- Filtering graph by modality -----------------")
-            train_feature_ann = self.filter_graph_by_modality(train_dat, edge_list)
+            train_feature_ann = filter_graph_by_modality(train_dat, edge_list)
             print("[INFO] Number of edges by modality in training data", 
                   {x: train_feature_ann[x]['edge_index'].shape[1] for x in train_feature_ann.keys()})
-            test_feature_ann = self.filter_graph_by_modality(test_dat, edge_list)
+            test_feature_ann = filter_graph_by_modality(test_dat, edge_list)
             print("[INFO] Number of edges by modality in test data", 
                   {x: test_feature_ann[x]['edge_index'].shape[1] for x in test_feature_ann.keys()})
             
@@ -217,7 +221,7 @@ class DataImporter:
        
         # for early fusion, concatenate all data matrices and feature lists 
         if self.concatenate:
-            if self.use_graph:
+            if self.graph is not None:
                 raise NotImplementedError("Early fusion is not supported for GNNs.")
 
             training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in training_dataset.dat.keys()], dim = 1)}
@@ -279,95 +283,6 @@ class DataImporter:
             print(f"In layer '{key}', {remaining_features} features are remaining after filtering.")
         return dat_filtered
 
-    def read_graph(self, fname, sep=" ", header=None):
-        """Read edge list from a file.
-
-        Returns
-            two cols pandas df.
-        """
-        edges_data_path = os.path.join(self.path, fname)
-        graph_df = pd.read_csv(edges_data_path, sep=sep, header=header)
-        return graph_df
-
-    def read_stringdb_graph(self):
-        print("\n[INFO] ----------------- Importing Graph Edges ----------------- ")
-        # NOTE: stringdb file hardcoded for now.
-        edges_data_path = os.path.join(self.path, self.protein_links)
-        node_data_path = os.path.join(self.path, self.protein_aliases)
-
-        # Read graph from the file
-        graph_df = read_stringdb_links(edges_data_path)
-        # Convert graph nodes names accordingly
-        if self.node_name in ["gene_name", "gene_id"]:
-            node_name_mapping = read_stringdb_aliases(node_data_path, self.node_name)
-        else:
-            raise NotImplementedError("Node name must be either 'gene_name' or 'gene_id'.")
-
-        def fn(a):
-            try:
-                out = node_name_mapping[a]
-            except KeyError:
-                out = ""
-            return out
-
-        graph_df[["protein1", "protein2"]] = graph_df[["protein1", "protein2"]].applymap(fn)
-
-        return graph_df
-
-    def sync_graph_and_data(self, train_dat, test_dat, initial_edge_list, available_features):
-        print("[INFO] Removing nodes/edges features which don't exist in omics data matrices")
-        # Collect genes from both training and testing data matrices
-        provided_features = list({x for df in {**train_dat, **test_dat}.values() for x in df.index})
-
-        # Intersect with available genes to filter out non-existing ones
-        provided_features = set(available_features).intersection(provided_features)
-
-        print("[INFO] Number of edges in initial edgelist", len(initial_edge_list))
-        print("[INFO] Number of train features BEFORE syncing with the graph", {k: len(v) for k, v in train_dat.items() if k != "clin"})
-        print("[INFO] Number of test features BEFORE syncing with the graph", {k: len(v) for k, v in test_dat.items() if k != "clin"})
-
-        # Now filter the graph edges based on provided_genes
-        edge_list = []
-        for edge in initial_edge_list:
-            src, dst = edge
-            if (src in provided_features) and (dst in provided_features):
-                edge_list.append(edge)
-
-        print("[INFO] Number of edges in pruned edgelist", len(edge_list))
-
-        filtered_train_dat = {}
-        filtered_test_dat = {}
-        for data, filtered_data in zip([train_dat, test_dat], [filtered_train_dat, filtered_test_dat]):
-            # Now sync data matrices
-            for k, v in data.items():
-                # Skip annotations, since a graph is feature based.
-                if k == "clin":
-                    filtered_data[k] = v
-                else:
-                    sorted_features = []
-                    for f in v.index.to_list():
-                        if f in provided_features:
-                            sorted_features.append(f)
-                    filtered_data[k] = v.loc[sorted_features]
-
-        print("[INFO] Number of train features AFTER syncing with the graph", {k: len(v) for k, v in train_dat.items() if k != "clin"})
-        print("[INFO] Number of test features AFTER syncing with the graph", {k: len(v) for k, v in test_dat.items() if k != "clin"})
-
-        return train_dat, test_dat, edge_list
-
-    def filter_graph_by_modality(self, dat, edge_list):
-        feature_ann = {}
-        for k, v in dat.items():
-            mod_gene_list = v.index.to_list()
-            node_to_idx = {node: i for i, node in enumerate(mod_gene_list)}
-            mod_edge_list = []
-            for edge in edge_list:
-                src, dst = edge
-                if (src in mod_gene_list) and (dst in mod_gene_list):
-                    mod_edge_list.append([node_to_idx[src], node_to_idx[dst]])
-            feature_ann[k] = {"edge_index": torch.tensor(mod_edge_list).T}
-        return feature_ann
-    
     def process_data(self, data, split = 'train'):
         print(f"\n[INFO] ----------------- Processing Data ({split}) ----------------- ")
         # remove uninformative features and samples with no information (from data matrices)
@@ -514,7 +429,7 @@ class DataImporter:
 
         # Convert DataFrame to tensor
         ann = {col: torch.from_numpy(ann[col].values) for col in ann.columns}
-        if not self.use_graph:
+        if self.graph is None:
             return MultiomicDataset(dat, ann, variable_types, features, samples, label_mappings)
         else:
             return MultiomicPYGDataset(dat, ann, variable_types, features, samples, label_mappings, feature_ann, transform=self.transform)
@@ -775,11 +690,64 @@ class MultiomicPYGDataset(MultiomicDataset, PYGDataset):
         subset_ann = {k: v[idx] for k, v in self.ann.items()}
         return subset_dat, subset_ann
 
-    def __len__ (self):
+    def __len__(self):
         return super(MultiomicPYGDataset, self).__len__()
 
     def len(self):
         return self.__len__()
+
+
+class STRING(PYGDataset):
+    base_folder = "STRING"
+    version = "12.0"
+    files = ("links", "aliases")
+    url = ("https://stringdb-downloads.org/download/"
+           "protein.{data}.v{version}/"
+           "{organism}.protein.{data}.v{version}.txt.gz")
+
+    def __init__(self, root: str, organism: int = 9606, node_name: str = "gene_name") -> None:
+        self.organism = organism
+        self.node_name = node_name
+        super().__init__(os.path.join(root, self.base_folder))
+        self.df = read_user_graph(self.processed_paths[0], sep=",", header=0, index_col=0)
+
+    def len(self) -> int:
+        return 0
+
+    def get(self, idx: int):
+        return None
+
+    @property
+    def raw_file_names(self) -> list[str]:
+        return [f"{self.organism}.protein.{f}.v{self.version}.txt" for f in self.files]
+
+    @property
+    def processed_file_names(self) -> str:
+        return "graph.csv"
+
+    def download(self) -> None:
+        folder = os.path.join(self.root, str(self.organism))
+        for d in self.files:
+            url = self.url.format(organism=self.organism, data=d, version=self.version)
+            path = download_url(url, folder)
+            extract_gz(path, folder)
+            os.unlink(path)
+        shutil.rmtree(self.raw_dir)
+        os.rename(folder, self.raw_dir)
+
+    def process(self) -> None:
+        graph_df = read_stringdb_graph(self.node_name, self.raw_paths[0], self.raw_paths[1])
+        # Drop nans and save to disk.
+        graph_df.dropna().to_csv(self.processed_paths[0])
+
+
+def read_user_graph(fpath, sep=" ", header=None, **pd_read_csv_kw):
+    """Read edge list from a file prepared by user.
+
+    Returns
+        two cols pandas df.
+    """
+    return pd.read_csv(fpath, sep=sep, header=header, **pd_read_csv_kw)
 
 
 def read_stringdb_links(fname):
@@ -790,44 +758,113 @@ def read_stringdb_links(fname):
     return df
 
 
-def stringdb_links_to_list(df):
-    lst = df[["protein1", "protein2"]].to_numpy().tolist()
-    return lst
-
-
-def read_stringdb_aliases(fname: str, node_name: str):
+def read_stringdb_aliases(fname: str, node_name: str) -> dict[str, str]:
+    if node_name == "gene_id":
+        source = ("Ensembl_HGNC_ensembl_gene_id", "Ensembl_gene")
+    elif node_name == "gene_name":
+        source = ("Ensembl_EntrezGene", "Ensembl_HGNC_symbol")
+    else:
+        raise NotImplementedError
     protein_id_to_gene_id = {}
     with open(fname, "r") as f:
         next(f)
         for line in f:
             data = line.split()
-            if node_name == "gene_id":
-                if data[-1].endswith("Ensembl_HGNC_ensembl_gene_id"):
+            if data[-1].endswith(source[0]):
+                protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
+            elif data[-1].endswith(source[1]):
+                # TODO: Check here if the values are the same
+                if protein_id_to_gene_id.get(data[0].split(".")[1], None) is None:
                     protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
-                elif data[-1].endswith("Ensembl_gene"):
-                    # TODO: Check here if the values are the same
-                    if protein_id_to_gene_id.get(data[0].split(".")[1], None) is None:
-                        protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
-                    else:
-                        continue
-                else:
-                    continue
-            elif node_name == "gene_name":
-                if data[-1].endswith("Ensembl_EntrezGene"):
-                    protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
-                elif data[-1].endswith("Ensembl_HGNC_symbol"):
-                    # TODO: Check here if the values are the same
-                    if protein_id_to_gene_id.get(data[0].split(".")[1], None) is None:
-                        protein_id_to_gene_id[data[0].split(".")[1]] = data[1]
-                    else:
-                        continue    
                 else:
                     continue
             else:
-                raise NotImplementedError
+                continue
     return protein_id_to_gene_id
 
-    
+
+def read_stringdb_graph(node_name, edges_data_path, nodes_data_path):
+    # Read graph from the file
+    graph_df = read_stringdb_links(edges_data_path)
+    # Convert graph nodes names accordingly
+    if node_name in ("gene_name", "gene_id"):
+        node_name_mapping = read_stringdb_aliases(nodes_data_path, node_name)
+    else:
+        raise NotImplementedError("Node name must be either 'gene_name' or 'gene_id'.")
+
+    def fn(a):
+        try:
+            out = node_name_mapping[a]
+        except KeyError:
+            # If smth wrong use NA.
+            out = pd.NA
+        return out
+
+    graph_df[["protein1", "protein2"]] = graph_df[["protein1", "protein2"]].applymap(fn)
+    return graph_df
+
+
+def sync_graph_and_data(train_dat, test_dat, initial_edge_list, available_features):
+    print("[INFO] Removing nodes/edges features which don't exist in omics data matrices")
+    # Collect genes from both training and testing data matrices
+    provided_features = list({x for df in {**train_dat, **test_dat}.values() for x in df.index})
+
+    # Intersect with available genes to filter out non-existing ones
+    provided_features = set(available_features).intersection(provided_features)
+
+    print("[INFO] Number of edges in initial edgelist", len(initial_edge_list))
+    print("[INFO] Number of train features BEFORE syncing with the graph", {k: len(v) for k, v in train_dat.items() if k != "clin"})
+    print("[INFO] Number of test features BEFORE syncing with the graph", {k: len(v) for k, v in test_dat.items() if k != "clin"})
+
+    # Now filter the graph edges based on provided_genes
+    edge_list = []
+    for edge in initial_edge_list:
+        src, dst = edge
+        if (src in provided_features) and (dst in provided_features):
+            edge_list.append(edge)
+
+    print("[INFO] Number of edges in pruned edgelist", len(edge_list))
+
+    filtered_train_dat = {}
+    filtered_test_dat = {}
+    for data, filtered_data in zip([train_dat, test_dat], [filtered_train_dat, filtered_test_dat]):
+        # Now sync data matrices
+        for k, v in data.items():
+            # Skip annotations, since a graph is feature based.
+            if k == "clin":
+                filtered_data[k] = v
+            else:
+                sorted_features = []
+                for f in v.index.to_list():
+                    if f in provided_features:
+                        sorted_features.append(f)
+                filtered_data[k] = v.loc[sorted_features]
+
+    print("[INFO] Number of train features AFTER syncing with the graph", {k: len(v) for k, v in train_dat.items() if k != "clin"})
+    print("[INFO] Number of test features AFTER syncing with the graph", {k: len(v) for k, v in test_dat.items() if k != "clin"})
+
+    return train_dat, test_dat, edge_list
+
+
+def filter_graph_by_modality(dat, edge_list):
+    feature_ann = {}
+    for k, v in dat.items():
+        mod_gene_list = v.index.to_list()
+        node_to_idx = {node: i for i, node in enumerate(mod_gene_list)}
+        mod_edge_list = []
+        for edge in edge_list:
+            src, dst = edge
+            if (src in mod_gene_list) and (dst in mod_gene_list):
+                mod_edge_list.append([node_to_idx[src], node_to_idx[dst]])
+        feature_ann[k] = {"edge_index": torch.tensor(mod_edge_list).T}
+    return feature_ann
+
+
+def stringdb_links_to_list(df):
+    lst = df[["protein1", "protein2"]].to_numpy().tolist()
+    return lst
+
+
 def split_by_median(tensor_dict):
     new_dict = {}
     for key, tensor in tensor_dict.items():

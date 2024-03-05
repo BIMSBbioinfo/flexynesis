@@ -44,7 +44,12 @@ def main():
     parser.add_argument("--threads", help="(Optional) How many threads to use when using CPU (default: 4)", type=int, default = 4)
     parser.add_argument("--use_gpu", action="store_true", 
                         help="(Optional) If set, the system will attempt to use CUDA/GPU if available.")
-    
+    # DirectPredGCNN args.
+    parser.add_argument("--graph", help="Graph to use, name of the database or path to the edge list on the disk.", type=str,  default="STRING")
+    parser.add_argument("--string_organism", help="STRING DB organism id.", type=int, default=9606)
+    parser.add_argument("--string_node_name", help="Type of node name.", type=str, choices=["gene_name", "gene_id"], default="gene_name")
+
+
     warnings.filterwarnings("ignore", ".*does not have many workers.*")
     warnings.filterwarnings("ignore", "has been removed as a dependency of the")
     warnings.filterwarnings("ignore", "The `srun` command is available on your system but is not used")
@@ -122,9 +127,6 @@ def main():
     else:
         model_class, config_name = model_class
 
-    # Set use_graph var
-    use_graph = True if config_name == "DirectPredGCNN" else False
-
     # import assays and labels
     inputDir = args.data_path
     
@@ -141,7 +143,9 @@ def main():
                                             restrict_to_features = args.restrict_to_features,
                                             min_features= args.features_min, 
                                             top_percentile= args.features_top_percentile,
-                                            use_graph=use_graph)
+                                            graph=args.graph,
+                                            string_organism=args.string_organism,
+                                            string_node_name=args.string_node_name)
     train_dataset, test_dataset = data_importer.import_data()
 
     # print feature logs to file (we use these tables to track which features are dropped/selected and why)
