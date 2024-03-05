@@ -40,8 +40,10 @@ The code for the benchmarking pipeline is at: https://github.com/BIMSBbioinfo/fl
 ```
 git clone https://github.com/BIMSBbioinfo/flexynesis.git
 cd flexynesis
-python -m venv env
-source env/bin/activate
+# create an environment with python 3.11 
+conda create --name flexynesisenv --file spec-file.txt # alternatively: conda create --name flexynesisenv python==3.11 )
+# activate environment and install dependencies
+conda activate flexynesisenv 
 pip install -e .
 ```
 
@@ -59,6 +61,7 @@ Download a dataset and test the flexynesis installation on a test run.
 curl -L -o dataset1.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz
 tar -xzvf dataset1.tgz
 
+conda activate flexynesisenv
 flexynesis --data_path dataset1 --model_class DirectPred --target_variables Erlotinib --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False --evaluate_baseline_performance False
 ```
 
@@ -154,8 +157,8 @@ flexynesis and its dependencies available on the jupyter session.
 
 Assuming you have already defined an environment and installed the package: 
 ```
-source env/bin/activate 
-python -m ipykernel install --user --name "flexynesis" --display-name "flexynesis"
+conda activate flexynesisenv 
+python -m ipykernel install --user --name "flexynesisenv" --display-name "flexynesisenv"
 ```
 
 # Compiling Notebooks
