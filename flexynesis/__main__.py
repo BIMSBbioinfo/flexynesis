@@ -127,6 +127,9 @@ def main():
     else:
         model_class, config_name = model_class
 
+    # Fix graph argument for non GNN models.
+    graph = args.graph if config_name == "DirectPredGCNN" else None
+
     # import assays and labels
     inputDir = args.data_path
     
@@ -143,7 +146,7 @@ def main():
                                             restrict_to_features = args.restrict_to_features,
                                             min_features= args.features_min, 
                                             top_percentile= args.features_top_percentile,
-                                            graph=args.graph,
+                                            graph=graph,
                                             string_organism=args.string_organism,
                                             string_node_name=args.string_node_name)
     train_dataset, test_dataset = data_importer.import_data()
