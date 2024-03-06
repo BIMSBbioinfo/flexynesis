@@ -41,7 +41,7 @@ class DirectPredGCNN(pl.LightningModule):
         if self.surv_event_var is not None and self.surv_time_var is not None:
             self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
-        self.variables = target_variables + batch_variables if batch_variables else target_variables
+        self.variables = self.target_variables + self.batch_variables if self.batch_variables else self.target_variables
         self.val_size = val_size
         self.dat_train, self.dat_val = self.prepare_data()
         self.feature_importances = {}
