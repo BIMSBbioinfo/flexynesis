@@ -95,11 +95,12 @@ class DataImporter:
             Encodes categorical labels in the annotation dataframe.
     """
 
-    def __init__(self, path, data_types, log_transform = False, concatenate = False, restrict_to_features = None, min_features=None, 
+    def __init__(self, path, data_types, processed_dir="processed", log_transform = False, concatenate = False, restrict_to_features = None, min_features=None,
                  top_percentile=20, correlation_threshold = 0.9, variance_threshold=1e-5, na_threshold=0.1,
                  graph=None, string_organism=9606, string_node_name="gene_name", transform=None):
         self.path = path
         self.data_types = data_types
+        self.processed_dir = os.path.join(self.path, processed_dir)
         self.concatenate = concatenate
         self.min_features = min_features
         self.top_percentile = top_percentile
@@ -118,8 +119,11 @@ class DataImporter:
         if self.graph is not None:
             if self.graph == "STRING":
                 # Download STRING network graph data.
-                self.graph = STRING(self.path, organism=string_organism, node_name=string_node_name)
+                self.graph = STRING(self.processed_dir, organism=string_organism, node_name=string_node_name)
         self.transform = transform
+        # NOTE: For now  pre_transform and pre_filter are disabled.
+        self.pre_transform = None
+        self.pre_filter = None
 
         # read user-specified feature list to restrict the analysis to that
         self.restrict_to_features = restrict_to_features
@@ -148,8 +152,19 @@ class DataImporter:
                 print(f"An error occurred while processing the file: {e}")
         else: 
             self.restrict_to_features = None
-    
-    def import_data(self):
+
+    def import_data(self, force=False):
+        # Skip processing if data already on a disk.
+        if (not force) and (self.graph is not None):
+            print("\n[INFO] ================= Skipping Importing Data =================")
+            print("\n[INFO] ================= Loading Data from a Disk =================")
+            train_dataset = self.get_torch_dataset(None, None, None, None, force=False, subset="train")
+            test_dataset = self.get_torch_dataset(None, None, None, None, force=False, subset="test")
+            print("[INFO] Data loaded successfully.")
+            return train_dataset, test_dataset
+
+        # Otherwise (If force is True) - process data and rewrite data on a disk.
+        # NOTE: This feature is available only for GNNs (for STRING and custom graphs).
         print("\n[INFO] ================= Importing Data =================")
         training_path = os.path.join(self.path, 'train')
         testing_path = os.path.join(self.path, 'test')
@@ -171,7 +186,7 @@ class DataImporter:
             # Read a graph specified by user.
             if isinstance(self.graph, str):
                 # Assumes that graph csv file in a dataset root dir.
-                graph_df = read_user_graph(os.path.join(self.path, self.graph))
+                graph_df = read_user_graph(self.graph)
                 available_features = np.unique(graph_df.to_numpy()).tolist()
                 initial_edge_list = graph_df.to_numpy().tolist()
             # Read STRING by default.
@@ -214,12 +229,14 @@ class DataImporter:
         # learned from training data to apply on test data (see fit = False)
         train_dat = self.normalize_data(train_dat, scaler_type="standard", fit=True)
         test_dat = self.normalize_data(test_dat, scaler_type="standard", fit=False)
-        
+
         # encode the variable annotations, convert data matrices and annotations pytorch datasets 
-        training_dataset = self.get_torch_dataset(train_dat, train_ann, train_samples, train_feature_ann)
-        testing_dataset = self.get_torch_dataset(test_dat, test_ann, test_samples, test_feature_ann)
-       
-        # for early fusion, concatenate all data matrices and feature lists 
+        training_dataset = self.get_torch_dataset(train_dat, train_ann, train_samples, train_feature_ann, force=True, subset="train")
+        testing_dataset = self.get_torch_dataset(test_dat, test_ann, test_samples, test_feature_ann, force=True, subset="test")
+
+        # NOTE: Exporting to the disk happens in get_torch_dataset, so the concatenate doesn't work.
+        # TODO: Find better way for early integration, or move it to get_torch_dataset. Otherwise it will be ignored.
+        # for early fusion, concatenate all data matrices and feature lists
         if self.concatenate:
             if self.graph is not None:
                 raise NotImplementedError("Early fusion is not supported for GNNs.")
@@ -421,7 +438,15 @@ class DataImporter:
                            for x in data.keys()}
         return normalized_data
     
-    def get_torch_dataset(self, dat, ann, samples, feature_ann):
+    def get_torch_dataset(self, dat, ann, samples, feature_ann, force, subset=None):
+        # If not force and graph is there - load already preprocessed data.
+        if (not force) and (self.graph is not None):
+            if subset is None:
+                raise ValueError("train and test subsets cannot be stored in a same location!")
+            data_path_on_disk = os.path.join(self.processed_dir, subset)
+            print(f"[DATA IMPORTER] Using data from existing {data_path_on_disk} folder...")
+            return MultiOmicPYGDataset(data_path_on_disk)
+
         features = {x: dat[x].index for x in dat.keys()}
         dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
 
@@ -432,8 +457,23 @@ class DataImporter:
         if self.graph is None:
             return MultiomicDataset(dat, ann, variable_types, features, samples, label_mappings)
         else:
-            return MultiomicPYGDataset(dat, ann, variable_types, features, samples, label_mappings, feature_ann, transform=self.transform)
-   
+            if subset is None:
+                raise ValueError("train and test subsets cannot be stored in a same location!")
+
+            data_path_on_disk = os.path.join(self.processed_dir, subset)
+
+            print(f"[DATA IMPORTER] Removing data from existing {data_path_on_disk} folder...")
+            shutil.rmtree(data_path_on_disk, ignore_errors=True)
+            return MultiOmicPYGDataset(
+                data_path_on_disk,
+                dat, ann,
+                variable_types, features, samples, label_mappings,
+                feature_ann,
+                transform=self.transform,
+                pre_transform=self.pre_transform,
+                pre_filter=self.pre_filter,
+            )
+
     def encode_labels(self, df):
         label_mappings = {}
         def encode_column(series):
@@ -639,62 +679,91 @@ class TripletMultiOmicDataset(Dataset):
         labels_set = set(labels.numpy())
         label_to_indices = {label: np.where(labels.numpy() == label)[0]
                              for label in labels_set}
-        return labels_set, label_to_indices   
+        return labels_set, label_to_indices
 
-class MultiomicPYGDataset(MultiomicDataset, PYGDataset):
-    """Multiomic pyg dataset.
-    """
+
+class MultiOmicPYGDataset(PYGDataset):
+    required = ["variable_types", "features", "samples", "label_mappings", "feature_ann"]
+
     def __init__(
         self,
-        dat,
-        ann,
-        variable_types,
-        features,
-        samples,
-        label_mappings,
+        root,
+        dat=None,
+        ann=None,
+        variable_types=None,
+        features=None,
+        samples=None,
+        label_mappings=None,
         feature_ann=None,
-        root=None,
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        log=True,
     ):
-        """Initialize dataset.
-        """
-        super(MultiomicPYGDataset, self).__init__(dat, ann, variable_types, features, samples, label_mappings, feature_ann)
-        super(MultiomicDataset, self).__init__(root, transform, pre_transform, pre_filter, log)
-        self._transform = transform
-        self.transform = None
+        self.dat = dat
+        self.ann = ann
+        self.variable_types = variable_types
+        self.features = features
+        self.samples = samples
+        self.label_mappings = label_mappings
+        self.feature_ann = feature_ann
+        for attr in self.required:
+            if getattr(self, attr) is None:
+                setattr(self, attr, torch.load(os.path.join(root, "processed", f"{attr}.pt")))
+        super().__init__(root, transform, pre_transform, pre_filter)
 
-    def __getitem__(self, idx):
-        return super(MultiomicDataset, self).__getitem__(idx)
+    @property
+    def raw_file_names(self):
+        # NOTE: Skip for now. DataImport is in charge of data/graph preprocessing.
+        return [""]
 
-    def get(self, idx: int):
-        subset_dat = {}
-        for k, v in self.dat.items():
-            x = v[idx]
-            edge_index = self.feature_ann[k]["edge_index"]
+    @property
+    def processed_file_names(self):
+        fnames = [f"data_{i}.pt" for i in range(len(self.samples))]
+        return fnames + [f"{f}.pt" for f in self.required]
 
-            # If number of node features is 1, insert a new dim:
-            if v[idx].ndim == 1:
-                x = x.unsqueeze(1)
+    def download(self):
+        # NOTE: We skip download step. This is done before the dataset creation.
+        pass
 
-            data = Data(x=x, edge_index=edge_index)
-
-            # Apply pyg transforms here:
-            if self._transform is not None:
-                data = self._transform(data)
-
-            subset_dat[k] = data
-
-        subset_ann = {k: v[idx] for k, v in self.ann.items()}
-        return subset_dat, subset_ann
-
-    def __len__(self):
-        return super(MultiomicPYGDataset, self).__len__()
+    def process(self):
+        # Save data sample to the disk.
+        idx = 0
+        for _ in range(len(self.samples)):
+            subset_dat = {}
+            for k, v in self.dat.items():
+                x = v[idx]
+                # If number of node features is 1, insert a new dim.
+                if x.ndim == 1:
+                    x = x.unsqueeze(1)
+                edge_index = self.feature_ann[k]["edge_index"]
+                data = Data(x=x, edge_index=edge_index)
+                # NOTE: Applies the same type filter to all data modalities.
+                if self.pre_filter is not None and not self.pre_filter(data):
+                    continue
+                # NOTE: Applies the same type pre_transform to all data modalities.
+                if self.pre_transform is not None:
+                    data = self.pre_transform(data)
+                subset_dat[k] = data
+            subset_ann = {k: v[idx] for k, v in self.ann.items()}
+            torch.save((subset_dat, subset_ann), os.path.join(self.processed_dir, f"data_{idx}.pt"))
+            idx += 1
+        # Save additional data to the disk.
+        for attr in self.required:
+            torch.save(getattr(self, attr), os.path.join(self.processed_dir, f"{attr}.pt"))
 
     def len(self):
-        return self.__len__()
+        return len(self.processed_file_names) - len(self.required)
+
+    def get(self, idx):
+        data = torch.load(os.path.join(self.processed_dir, f"data_{idx}.pt"))
+        return data
+
+    def get_dataset_stats(self):
+        stats = {}
+        stats |= {"feature_count in: " + k: v.x.size(0) for k, v in self[0][0].items()}
+        stats |= {"n_edges in: " + k: v.edge_index.size(1) for k, v in self[0][0].items()}
+        stats["sample_count"] = len(self)
+        return stats
 
 
 class STRING(PYGDataset):
@@ -754,7 +823,7 @@ def read_stringdb_links(fname):
     df = pd.read_csv(fname, header=0, sep=" ")
     df = df[df.combined_score > 400]
     df = df[df.combined_score > df.combined_score.quantile(0.9)]
-    df[["protein1", "protein2"]] = df[["protein1", "protein2"]].applymap(lambda a: a.split(".")[-1])
+    df[["protein1", "protein2"]] = df[["protein1", "protein2"]].map(lambda a: a.split(".")[-1])
     return df
 
 
@@ -800,7 +869,7 @@ def read_stringdb_graph(node_name, edges_data_path, nodes_data_path):
             out = pd.NA
         return out
 
-    graph_df[["protein1", "protein2"]] = graph_df[["protein1", "protein2"]].applymap(fn)
+    graph_df[["protein1", "protein2"]] = graph_df[["protein1", "protein2"]].map(fn)
     return graph_df
 
 
