@@ -154,6 +154,9 @@ class DataImporter:
             self.restrict_to_features = None
 
     def import_data(self, force=False):
+        if not force:
+            if not (os.path.exists(os.path.join(self.processed_dir, "train")) and os.path.exists(os.path.join(self.processed_dir, "test"))):
+                force = True
         # Skip processing if data already on a disk.
         if (not force) and (self.graph is not None):
             print("\n[INFO] ================= Skipping Importing Data =================")
