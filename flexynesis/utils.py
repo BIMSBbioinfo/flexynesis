@@ -16,9 +16,9 @@ import matplotlib.pyplot as plt
 import matplotlib
 from sklearn.decomposition import PCA
 from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, linregress
 
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.svm import SVC, SVR
@@ -205,9 +205,9 @@ def evaluate_classifier(y_true, y_pred, print_report = False):
 
 def evaluate_regressor(y_true, y_pred):
     mse = mean_squared_error(y_true, y_pred)
-    r2 = r2_score(y_true, y_pred)
-    pearson_corr, _ = pearsonr(y_true, y_pred)
-    return {"mse": mse, "r2": r2, "pearson_corr": pearson_corr}
+    slope, intercept, r_value, p_value, std_err = linregress(y_true,y_pred)
+    r2 = r_value**2 
+    return {"mse": mse, "r2": r2, "pearson_corr": r_value}
 
 def evaluate_wrapper(y_pred_dict, dataset, surv_event_var = None, surv_time_var = None):
     metrics_list = []
