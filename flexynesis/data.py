@@ -346,18 +346,16 @@ class DataImporter:
             # Check if there are any NA values in the DataFrame
             
             if np.sum(df.isna().sum()) > 0:
-                # Identify rows that contain missing values
                 missing_rows = df.isna().any(axis=1)
                 print("[INFO] Imputing NA values to median of features, affected # of cells in the matrix", np.sum(df.isna().sum()), " # of rows:",sum(missing_rows))
-
-                # Only calculate the median for rows with missing values
-                medians = df[missing_rows].median(axis=1)
-
-                # Iterate over the index using tqdm to display a progress bar
-                for i in tqdm(medians.index):
-                    # Replace missing values in the row with the corresponding median
-                    df.loc[i] = df.loc[i].fillna(medians[i])
-                    
+                
+                # Calculate medians for each 'column' (originally rows) and fill NAs
+                # Note: After transposition, operations are more efficient
+                df_T = df.T
+                medians_T = df_T.median(axis=0)
+                df_T.fillna(medians_T, inplace=True)
+                df = df_T.T
+            
             print("[INFO] Number of NA values: ",np.sum(df.isna().sum()))
                                    
             removed_features_count = original_features_count - df.shape[0]
