@@ -35,7 +35,8 @@ class DataImporter:
         correlation_threshold(float): The correlation threshold for dropping highly redundant features
         variance_threshold (float): The variance threshold for removing low-variance features.
         na_threshold (float): The threshold for removing features with too many NA values.
-        graph (str | None): If not None, incorporate graph-based features from protein interaction data (default: None).
+        graph (str | None): Either provide a path to a file containing the network as an edge-list or choose "STRING" for automated  downloading from the StringDB. 
+                            (default: None, graph features are not used).
         string_organism (int): STRING organism (species) id (default: 9606 (human)).
         string_node_name (str): The type of node names used in the graph. Available options: "gene_name", "gene_id" (default: "gene_name").
         transform (callable): An optional graph transformation function to be applied for each modality.
@@ -324,6 +325,7 @@ class DataImporter:
         feature_logs = {} # keep track of feature variation/NA value scores 
         # First pass: remove near-zero-variation features and create masks for informative samples
         for key, df in df_dict.items():
+            print("\n[INFO] working on layer: ",key)
             original_features_count = df.shape[0]
 
             # Compute variances and NA percentages for each feature in the DataFrame
@@ -346,7 +348,7 @@ class DataImporter:
             if np.sum(df.isna().sum()) > 0:
                 # Identify rows that contain missing values
                 missing_rows = df.isna().any(axis=1)
-                print("[INFO] Imputing NA values to median of features, affected # of features ", np.sum(df.isna().sum()), " # of rows:",sum(missing_rows))
+                print("[INFO] Imputing NA values to median of features, affected # of cells in the matrix", np.sum(df.isna().sum()), " # of rows:",sum(missing_rows))
 
                 # Only calculate the median for rows with missing values
                 medians = df[missing_rows].median(axis=1)
