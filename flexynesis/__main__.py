@@ -1,6 +1,7 @@
 import argparse
 from typing import NamedTuple
 import os
+os.environ["OMP_NUM_THREADS"] = "1"
 import yaml
 import torch
 import pandas as pd
