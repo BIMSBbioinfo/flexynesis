@@ -226,13 +226,15 @@ def main():
         if var != model.surv_event_var: 
             metrics = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, 
                                                             variable_name = var, 
-                                                            n_folds=5)
+                                                            n_folds=5,
+                                                            n_jobs = int(args.threads))
         if model.surv_event_var and model.surv_time_var:
             print("[INFO] Computing off-the-shelf method performance on survival variable:",model.surv_time_var)
             metrics_baseline_survival = flexynesis.evaluate_baseline_survival_performance(train_dataset, test_dataset, 
                                                                                              model.surv_time_var, 
                                                                                              model.surv_event_var, 
-                                                                                             n_folds = 5)
+                                                                                             n_folds = 5,
+                                                                                             n_jobs = int(args.threads))
             metrics = pd.concat([metrics, metrics_baseline_survival], axis = 0, ignore_index = True)
         
         if not metrics.empty:
