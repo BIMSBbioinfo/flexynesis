@@ -148,6 +148,7 @@ def main():
                                             min_features= args.features_min, 
                                             top_percentile= args.features_top_percentile,
                                             graph=graph,
+                                            processed_dir = '_'.join(['processed', args.prefix]),
                                             string_organism=args.string_organism,
                                             string_node_name=args.string_node_name)
     train_dataset, test_dataset = data_importer.import_data()
