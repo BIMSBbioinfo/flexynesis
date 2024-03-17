@@ -16,7 +16,7 @@ def main():
     
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, 
-                        choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork"], required = True)
+                        choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred"], required = True)
     parser.add_argument("--gnn_conv_type", help="If model_class is set to DirectPredGCNN, choose which graph convolution type to use", type=str, 
                         choices=["GC", "GCN", "GAT", "SAGE"])
     parser.add_argument("--target_variables", 
@@ -36,6 +36,16 @@ def main():
     parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int, default = 500)
     parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float, default = 20)
     parser.add_argument("--data_types", help="(Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str, required = True)
+    parser.add_argument("--input_layers", 
+                        help="If model_class is set to CrossModalPred, choose which data types to use as input/encoded layers"
+                        "Comma-separated if multiple",
+                        type=str, default = None
+                        )
+    parser.add_argument("--output_layers", 
+                        help="If model_class is set to CrossModalPred, choose which data types to use as output/decoded layers"
+                        "Comma-separated if multiple",
+                        type=str, default = None
+                        )    
     parser.add_argument("--outdir", help="Path to the output folder to save the model outputs", type=str, default = os.getcwd())
     parser.add_argument("--prefix", help="Job prefix to use for output files", type=str, default = 'job')
     parser.add_argument("--log_transform", help="whether to apply log-transformation to input data matrices", type=str, choices=['True', 'False'], default = 'False')
@@ -71,9 +81,14 @@ def main():
                                   "or --batch_variables."]))
 
     # 3. Check for compatibility of fusion_type with DirectPredGCNN
-    if args.fusion_type == "early" and args.model_class == "DirectPredGCNN":
-        parser.error("The 'DirectPredGCNN' model cannot be used with early fusion type. "
-                     "Use --fusion_type intermediate instead.")
+    if args.fusion_type == "early":
+        if args.model_class == "DirectPredGCNN":
+            parser.error("The 'DirectPredGCNN' model cannot be used with early fusion type. "
+                         "Use --fusion_type intermediate instead.")
+        if args.model_class == 'CrossModalPred': 
+            parser.error("The 'CrossModalPred' model cannot be used with early fusion type. "
+                         "Use --fusion_type intermediate instead.")
+            
     
     # 4. Check for device availability if --accelerator is set. 
     if args.use_gpu:
@@ -108,6 +123,23 @@ def main():
     else:
         gnn_conv_type = None
         
+    # 6. Check CrossModalPred arguments
+    input_layers = args.input_layers
+    output_layers = args.output_layers
+    datatypes = args.data_types.strip().split(',')
+    if args.model_class == 'CrossModalPred':
+        # check if input output layers are matching the requested data types 
+        if args.input_layers: 
+            input_layers = input_layers.strip().split(',')
+            # Check if input_layers are a subset of datatypes
+            if not all(layer in datatypes for layer in input_layers):
+                raise ValueError(f"Input layers {input_layers} are not a valid subset of the data types: ({datatypes}).")
+        # check if output_layers are a subset of datatypes
+        if args.output_layers: 
+            output_layers = output_layers.strip().split(',')
+            if not all(layer in datatypes for layer in output_layers):
+                raise ValueError(f"Output layers {output_layers} are not a valid subset of the data types: ({datatypes}).")
+        
     # Validate paths
     if not os.path.exists(args.data_path):
         raise FileNotFoundError(f"Input --data_path doesn't exist at:",  {args.data_path})
@@ -120,6 +152,7 @@ def main():
         supervised_vae: tuple[supervised_vae, str] = supervised_vae, "supervised_vae"
         MultiTripletNetwork: tuple[MultiTripletNetwork, str] = MultiTripletNetwork, "MultiTripletNetwork"
         DirectPredGCNN: tuple[DirectPredGCNN, str] = DirectPredGCNN, "DirectPredGCNN"
+        CrossModalPred: tuple[CrossModalPred, str] = CrossModalPred, "CrossModalPred"
 
     available_models = AvailableModels()
     model_class = getattr(available_models, args.model_class, None)
@@ -140,7 +173,7 @@ def main():
         concatenate = True
         
     data_importer = flexynesis.DataImporter(path = args.data_path, 
-                                            data_types = args.data_types.strip().split(','),
+                                            data_types = datatypes,
                                             concatenate = concatenate, 
                                             log_transform = args.log_transform == 'True',
                                             correlation_threshold = args.correlation_threshold,
@@ -173,7 +206,9 @@ def main():
                                             use_loss_weighting = args.use_loss_weighting == 'True',
                                             early_stop_patience = int(args.early_stop_patience), 
                                             device_type = device_type,
-                                            gnn_conv_type = gnn_conv_type)    
+                                            gnn_conv_type = gnn_conv_type,
+                                            input_layers = input_layers,
+                                            output_layers = output_layers)    
     
     # do a hyperparameter search training multiple models and get the best_configuration 
     model, best_params = tuner.perform_tuning()
