@@ -415,7 +415,7 @@ class CrossModalPred(pl.LightningModule):
         self.to(device)
         
         print("[INFO] Computing feature importance for variable:",target_var,"on device:",device)
-        x_list = [self.dataset.dat[x].to(device) for x in self.dataset.dat.keys()]
+        x_list = [self.dataset.dat[x].to(device) for x in self.input_layers]
                 
         # Initialize the Integrated Gradients method
         ig = IntegratedGradients(self.forward_target)
@@ -451,7 +451,7 @@ class CrossModalPred(pl.LightningModule):
 
         # combine into a single data frame 
         df_list = []
-        layers = self.input_layers
+        layers = self.input_layers 
         for i in range(num_class):
             for j in range(len(layers)):
                 features = self.dataset.features[layers[j]]
