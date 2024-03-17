@@ -50,7 +50,8 @@ class HyperparameterTuning:
                  batch_variables = None, surv_event_var = None, surv_time_var = None, 
                  n_iter = 10, config_path = None, plot_losses = False,
                  val_size = 0.2, use_loss_weighting = True, early_stop_patience = -1,
-                 device_type = None, gnn_conv_type = None):
+                 device_type = None, gnn_conv_type = None, 
+                 input_layers = None, output_layers = None):
         self.dataset = dataset
         self.model_class = model_class
         self.target_variables = target_variables
@@ -72,6 +73,8 @@ class HyperparameterTuning:
         self.early_stop_patience = early_stop_patience
         self.use_loss_weighting = use_loss_weighting
         self.gnn_conv_type = gnn_conv_type
+        self.input_layers = input_layers
+        self.output_layers = output_layers 
         
         # If config_path is provided, use it
         if config_path:
@@ -95,6 +98,9 @@ class HyperparameterTuning:
                 "use_loss_weighting": self.use_loss_weighting, "device_type": self.device_type}
         if self.model_class.__name__ == 'DirectPredGCNN':
             model_args["gnn_conv_type"] = self.gnn_conv_type
+        if self.model_class.__name__ == 'CrossModalPred': 
+            model_args["input_layers"] = self.input_layers
+            model_args["output_layers"] = self.output_layers
             
         model = self.model_class(**model_args)
         print(params)
