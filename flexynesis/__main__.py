@@ -1,3 +1,6 @@
+from lightning import seed_everything
+# Set the seed for all the possible random number generators.
+seed_everything(42, workers=True)
 import argparse
 from typing import NamedTuple
 import os
@@ -73,9 +76,9 @@ def main():
         parser.error("Both --surv_event_var and --surv_time_var must be provided together or left as None.")
 
     # 2. Check for required variables for model classes
-    if args.model_class != "supervised_vae":
+    if args.model_class != "supervised_vae" and args.model_class != 'CrossModalPred':
         if not any([args.target_variables, args.surv_event_var, args.batch_variables]):
-            parser.error(''.join(["When selecting a model other than 'supervised_vae',",
+            parser.error(''.join(["When selecting a model other than 'supervised_vae' or 'CrossModalPred',",
                                   "you must provide at least one of --target_variables, ",
                                   "survival variables (--surv_event_var and --surv_time_var)",
                                   "or --batch_variables."]))
