@@ -1,3 +1,6 @@
+from lightning import seed_everything
+# Set the seed for all the possible random number generators.
+seed_everything(42, workers=True)
 import pandas as pd
 import numpy as np
 import torch
@@ -74,7 +77,15 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
     # Create a pandas DataFrame for easier plotting
     transformed_df = pd.DataFrame(transformed_matrix, columns=[f"{method.upper()}1", f"{method.upper()}2"])
 
-    labels = [-1 if pd.isnull(x) or x in {'nan', 'None'} else x for x in labels]
+    if color_type == 'numerical':
+        # Convert to numerical values, handling non-numeric and missing values
+        labels = np.array([float(x) if not pd.isnull(x) and x not in {'nan', 'None'} else np.nan for x in labels])
+    elif color_type == 'categorical':
+        # Convert all to strings, handling missing values distinctly if necessary
+        labels = np.array([str(x) if not pd.isnull(x) and x not in {'nan', 'None'} else 'Missing' for x in labels])
+    else:
+        raise ValueError("Invalid color_type specified. Must be 'numerical' or 'categorical'.")
+    #labels = [-1 if pd.isnull(x) or x in {'nan', 'None'} else x for x in labels]
 
     # Add the labels to the DataFrame
     transformed_df["Label"] = labels
