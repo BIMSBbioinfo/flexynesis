@@ -20,7 +20,6 @@ class DirectPred(pl.LightningModule):
                 device_type = None):
         super(DirectPred, self).__init__()
         self.config = config
-        self.dataset = dataset
         self.target_variables = target_variables
         self.surv_event_var = surv_event_var
         self.surv_time_var = surv_time_var
@@ -31,11 +30,12 @@ class DirectPred(pl.LightningModule):
         self.batch_variables = batch_variables
         self.variables = self.target_variables + batch_variables if batch_variables else self.target_variables
         self.val_size = val_size
-        self.dat_train, self.dat_val = self.prepare_data()
         self.feature_importances = {}
         self.use_loss_weighting = use_loss_weighting
-
         self.device_type = device_type
+        
+        # define data loaders
+        self.prepare_data_loaders(dataset)
         
         if self.use_loss_weighting:
             # Initialize log variance parameters for uncertainty weighting
@@ -43,21 +43,23 @@ class DirectPred(pl.LightningModule):
             for var in self.variables:
                 self.log_vars[var] = nn.Parameter(torch.zeros(1))
 
-        layers = list(dataset.dat.keys())
-        input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
+        self.variable_types = dataset.variable_types
+        self.ann = dataset.ann
+        self.layers = list(dataset.dat.keys())
+        self.input_dims = [len(dataset.features[self.layers[i]]) for i in range(len(self.layers))]
 
         self.encoders = nn.ModuleList([
-            MLP(input_dim=input_dims[i],
+            MLP(input_dim=self.input_dims[i],
                 hidden_dim=self.config['hidden_dim'],
-                output_dim=self.config['latent_dim']) for i in range(len(layers))])
+                output_dim=self.config['latent_dim']) for i in range(len(self.layers))])
 
         self.MLPs = nn.ModuleDict()  # using ModuleDict to store multiple MLPs
         for var in self.variables:
-            if self.dataset.variable_types[var] == 'numerical':
+            if self.variable_types[var] == 'numerical':
                 num_class = 1
             else:
-                num_class = len(np.unique(self.dataset.ann[var]))
-            self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(layers),
+                num_class = len(np.unique(self.ann[var]))
+            self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(self.layers),
                                  hidden_dim=self.config['hidden_dim'],
                                  output_dim=num_class)
 
@@ -95,7 +97,7 @@ class DirectPred(pl.LightningModule):
         return optimizer
     
     def compute_loss(self, var, y, y_hat):
-        if self.dataset.variable_types[var] == 'numerical':
+        if self.variable_types[var] == 'numerical':
             # Ignore instances with missing labels for numerical variables
             valid_indices = ~torch.isnan(y)
             if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
@@ -191,19 +193,23 @@ class DirectPred(pl.LightningModule):
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
 
-    
-    def prepare_data(self):
-        lt = int(len(self.dataset)*(1-self.val_size))
-        lv = len(self.dataset)-lt
-        dat_train, dat_val = random_split(self.dataset, [lt, lv], 
-                                          generator=torch.Generator().manual_seed(42))
-        return dat_train, dat_val
+    def prepare_data_loaders(self, dataset):
+        # Split the dataset
+        train_size = int(len(dataset) * (1 - self.val_size))
+        val_size = len(dataset) - train_size
+        dat_train, dat_val = random_split(dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42))
+        
+        # Create data loaders
+        self.train_loader = DataLoader(dat_train, batch_size=int(self.config['batch_size']), 
+                                       num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+        self.val_loader = DataLoader(dat_val, batch_size=int(self.config['batch_size']), 
+                                     num_workers=0, pin_memory=True, shuffle=False)
     
     def train_dataloader(self):
-        return DataLoader(self.dat_train, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+        return self.train_loader
 
     def val_dataloader(self):
-        return DataLoader(self.dat_val, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=False)
+        return self.val_loader
     
     def predict(self, dataset):
         """
@@ -223,7 +229,7 @@ class DirectPred(pl.LightningModule):
         predictions = {}
         for var in self.variables:
             y_pred = outputs[var].detach().numpy()
-            if self.dataset.variable_types[var] == 'categorical':
+            if self.variable_types[var] == 'categorical':
                 predictions[var] = np.argmax(y_pred, axis=1)
             else:
                 predictions[var] = y_pred
@@ -266,7 +272,7 @@ class DirectPred(pl.LightningModule):
             out = self.forward(x_step)
             outputs_list.append(out[target_var])
         return torch.cat(outputs_list, dim = 0)
-        
+
     def compute_feature_importance(self, target_var, steps = 5):
         """
         Compute the feature importance.
@@ -277,6 +283,7 @@ class DirectPred(pl.LightningModule):
         Returns:
             attributions (list of torch.Tensor): The feature importances for each class.
         """
+
         device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
         self.to(device)
         
@@ -330,5 +337,4 @@ class DirectPred(pl.LightningModule):
         
         # save the computed scores in the model
         self.feature_importances[target_var] = df_imp
-        
 
