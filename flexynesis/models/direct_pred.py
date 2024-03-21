@@ -273,68 +273,75 @@ class DirectPred(pl.LightningModule):
             outputs_list.append(out[target_var])
         return torch.cat(outputs_list, dim = 0)
 
-    def compute_feature_importance(self, target_var, steps = 5):
-        """
-        Compute the feature importance.
-
-        Args:
-            input_data (torch.Tensor): The input data to compute the feature importance for.
-            target_var (str): The target variable to compute the feature importance for.
-        Returns:
-            attributions (list of torch.Tensor): The feature importances for each class.
-        """
-
+    def compute_feature_importance(self, dataset, target_var, steps=5, batch_size = 64):
         device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
         self.to(device)
-        
-        print("[INFO] Computing feature importance for variable:",target_var,"on device:",device)
-        
-        # Assuming self.dataset.dat is a dictionary of tensors
-        x_list = [self.dataset.dat[x].to(device) for x in self.dataset.dat.keys()]
-                        
-        # Initialize the Integrated Gradients method
+
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         ig = IntegratedGradients(self.forward_target)
 
-        input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
-
-        # Define a baseline (you might need to adjust this depending on your actual data)
-        baseline = tuple([torch.zeros_like(data) for data in input_data])
-
-        # Get the number of classes for the target variable
-        if self.dataset.variable_types[target_var] == 'numerical':
+        if dataset.variable_types[target_var] == 'numerical':
             num_class = 1
         else:
-            num_class = len(np.unique(self.dataset.ann[target_var]))
+            num_class = len(np.unique([y[target_var] for _, y in dataset]))
 
-        # Compute the feature importance for each class
-        attributions = []
-        if num_class > 1:
-            for target_class in range(num_class):
-                attributions.append(ig.attribute(input_data, baseline, additional_forward_args=(target_var, steps), target=target_class, n_steps=steps))
-        else:
-            attributions.append(ig.attribute(input_data, baseline, additional_forward_args=(target_var, steps), n_steps=steps))
+        aggregated_attributions = [[] for _ in range(num_class)]
+        for batch in dataloader:
+            dat, _ = batch
+            x_list = [dat[x].to(device) for x in dat.keys()]
+            input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
+            baseline = tuple(torch.zeros_like(x) for x in input_data)
+            if num_class == 1:
+                # returns a tuple of tensors (one per data modality)
+                attributions = ig.attribute(input_data, baseline, 
+                                             additional_forward_args=(target_var, steps), 
+                                             n_steps=steps)
+                aggregated_attributions[0].append(attributions)
+            else:
+                for target_class in range(num_class):
+                    # returns a tuple of tensors (one per data modality)
+                    attributions = ig.attribute(input_data, baseline, 
+                                                 additional_forward_args=(target_var, steps), 
+                                                 target=target_class, n_steps=steps)
+                    aggregated_attributions[target_class].append(attributions)
 
-        # summarize feature importances
-        # Compute absolute attributions
-        # Move the processed tensors to CPU for further operations that are not supported on GPU
-        abs_attr = [[torch.abs(a).cpu() for a in attr_class] for attr_class in attributions]
+        # For each target class and for each data modality/layer, concatenate attributions accross batches 
+        layers = list(dataset.dat.keys())
+        num_layers = len(layers)
+        processed_attributions = [] 
+        # Process each class
+        for class_idx in range(len(aggregated_attributions)):
+            class_attr = aggregated_attributions[class_idx]
+            layer_attributions = []
+            # Process each layer within the class
+            for layer_idx in range(num_layers):
+                # Extract all batch tensors for this layer across all batches for the current class
+                layer_tensors = [batch_attr[layer_idx] for batch_attr in class_attr]
+                # Concatenate tensors along the batch dimension
+                attr_concat = torch.cat(layer_tensors, dim=1)
+                layer_attributions.append(attr_concat)
+            processed_attributions.append(layer_attributions)
+        
+        # compute absolute importance and move to cpu 
+        abs_attr = [[torch.abs(a).cpu() for a in attr_class] for attr_class in processed_attributions]
         # average over samples 
         imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
-
         # move the model also back to cpu (if not already on cpu)
         self.to('cpu')
-        
+
         # combine into a single data frame
         df_list = []
-        layers = list(self.dataset.dat.keys())
         for i in range(num_class):
             for j in range(len(layers)):
-                features = self.dataset.features[layers[j]]
+                features = dataset.features[layers[j]]
                 # Ensure tensors are already on CPU before converting to numpy
                 importances = imp[i][j][0].detach().numpy()
-                df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
+                df_list.append(pd.DataFrame({'target_variable': target_var, 
+                                             'target_class': i, 
+                                             'layer': layers[j], 
+                                             'name': features, 
+                                             'importance': importances}))    
         df_imp = pd.concat(df_list, ignore_index=True)
-        
         # save the computed scores in the model
         self.feature_importances[target_var] = df_imp
-
+    
