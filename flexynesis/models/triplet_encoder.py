@@ -82,22 +82,21 @@ class MultiTripletNetwork(pl.LightningModule):
         self.batch_variables = batch_variables
         self.variables = self.target_variables + batch_variables if batch_variables else self.target_variables
         self.val_size = val_size
-        self.dataset = dataset
-        self.ann = self.dataset.ann
-        self.variable_types = self.dataset.variable_types
+        self.ann = dataset.ann
+        self.variable_types = dataset.variable_types
         self.feature_importances = {}
         self.device_type = device_type
 
-        layers = list(dataset.dat.keys())
-        input_sizes = [len(dataset.features[layers[i]]) for i in range(len(layers))]
-        hidden_sizes = [config['hidden_dim'] for x in range(len(layers))]
+        self.layers = list(dataset.dat.keys())
+        input_sizes = [len(dataset.features[self.layers[i]]) for i in range(len(self.layers))]
+        hidden_sizes = [config['hidden_dim'] for x in range(len(self.layers))]
         
         
         # The first target variable is the main variable that dictates the triplets 
         # it has to be a categorical variable 
-        main_var = self.target_variables[0] 
-        if self.dataset.variable_types[main_var] == 'numerical':
-            raise ValueError("The first target variable",main_var," must be a categorical variable")
+        self.main_var = self.target_variables[0] 
+        if self.variable_types[self.main_var] == 'numerical':
+            raise ValueError("The first target variable",self.main_var," must be a categorical variable")
         
         self.use_loss_weighting = use_loss_weighting
         
@@ -107,10 +106,7 @@ class MultiTripletNetwork(pl.LightningModule):
             for loss_type in itertools.chain(self.variables, ['triplet_loss']):
                 self.log_vars[loss_type] = nn.Parameter(torch.zeros(1))
         
-        
-        # create train/validation splits and convert TripletMultiOmicDataset format
-        self.dataset = TripletMultiOmicDataset(self.dataset, main_var)
-        self.dat_train, self.dat_val = self.prepare_data() 
+        self.prepare_data_loaders(dataset)
         
         # define embedding network for data matrices 
         self.multi_embedding_network = MultiEmbeddingNetwork(input_sizes, hidden_sizes, config['latent_dim'])
@@ -122,7 +118,7 @@ class MultiTripletNetwork(pl.LightningModule):
                 num_class = 1
             else:
                 num_class = len(np.unique(self.ann[var]))
-            self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(layers),
+            self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(self.layers),
                                  hidden_dim=self.config['supervisor_hidden_dim'],
                                  output_dim=num_class)
                                                                               
@@ -259,19 +255,24 @@ class MultiTripletNetwork(pl.LightningModule):
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
     
-    def prepare_data(self):
-        lt = int(len(self.dataset)*(1-self.val_size))
-        lv = len(self.dataset)-lt
-        dat_train, dat_val = random_split(self.dataset, [lt, lv], 
+    def prepare_data_loaders(self, dataset):
+        # create train/validation splits and convert TripletMultiOmicDataset format
+        triplet_dataset = TripletMultiOmicDataset(dataset, self.main_var)
+        lt = int(len(triplet_dataset)*(1-self.val_size))
+        lv = len(triplet_dataset)-lt
+        dat_train, dat_val = random_split(triplet_dataset, [lt, lv], 
                                           generator=torch.Generator().manual_seed(42))
-        return dat_train, dat_val
-
+        self.train_loader = DataLoader(dat_train, batch_size=int(self.config['batch_size']), 
+                                       num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+        self.val_loader = DataLoader(dat_val, batch_size=int(self.config['batch_size']), 
+                                     num_workers=0, pin_memory=True, shuffle=False)    
+    
     def train_dataloader(self):
-        return DataLoader(self.dat_train, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+        return self.train_loader
 
     def val_dataloader(self):
-        return DataLoader(self.dat_val, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=False)    
-        
+        return self.val_loader
+    
     # dataset: MultiOmicDataset
     def transform(self, dataset):
         """
