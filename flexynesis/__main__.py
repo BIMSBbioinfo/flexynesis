@@ -187,7 +187,7 @@ def main():
                                             processed_dir = '_'.join(['processed', args.prefix]),
                                             string_organism=args.string_organism,
                                             string_node_name=args.string_node_name)
-    train_dataset, test_dataset = data_importer.import_data()
+    train_dataset, test_dataset = data_importer.import_data(force = True)
 
     # print feature logs to file (we use these tables to track which features are dropped/selected and why)
     feature_logs = data_importer.feature_logs
@@ -231,7 +231,7 @@ def main():
     # compute feature importance values
     print("[INFO] Computing variable importance scores")
     for var in model.target_variables:
-        model.compute_feature_importance(var, steps = 30)
+        model.compute_feature_importance(train_dataset, var, steps = 50)
     df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], 
                        ignore_index = True)
     df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)

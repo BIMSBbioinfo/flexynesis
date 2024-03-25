@@ -82,22 +82,21 @@ class MultiTripletNetwork(pl.LightningModule):
         self.batch_variables = batch_variables
         self.variables = self.target_variables + batch_variables if batch_variables else self.target_variables
         self.val_size = val_size
-        self.dataset = dataset
-        self.ann = self.dataset.ann
-        self.variable_types = self.dataset.variable_types
+        self.ann = dataset.ann
+        self.variable_types = dataset.variable_types
         self.feature_importances = {}
         self.device_type = device_type
 
-        layers = list(dataset.dat.keys())
-        input_sizes = [len(dataset.features[layers[i]]) for i in range(len(layers))]
-        hidden_sizes = [config['hidden_dim'] for x in range(len(layers))]
+        self.layers = list(dataset.dat.keys())
+        input_sizes = [len(dataset.features[self.layers[i]]) for i in range(len(self.layers))]
+        hidden_sizes = [config['hidden_dim'] for x in range(len(self.layers))]
         
         
         # The first target variable is the main variable that dictates the triplets 
         # it has to be a categorical variable 
-        main_var = self.target_variables[0] 
-        if self.dataset.variable_types[main_var] == 'numerical':
-            raise ValueError("The first target variable",main_var," must be a categorical variable")
+        self.main_var = self.target_variables[0] 
+        if self.variable_types[self.main_var] == 'numerical':
+            raise ValueError("The first target variable",self.main_var," must be a categorical variable")
         
         self.use_loss_weighting = use_loss_weighting
         
@@ -107,10 +106,7 @@ class MultiTripletNetwork(pl.LightningModule):
             for loss_type in itertools.chain(self.variables, ['triplet_loss']):
                 self.log_vars[loss_type] = nn.Parameter(torch.zeros(1))
         
-        
-        # create train/validation splits and convert TripletMultiOmicDataset format
-        self.dataset = TripletMultiOmicDataset(self.dataset, main_var)
-        self.dat_train, self.dat_val = self.prepare_data() 
+        self.prepare_data_loaders(dataset)
         
         # define embedding network for data matrices 
         self.multi_embedding_network = MultiEmbeddingNetwork(input_sizes, hidden_sizes, config['latent_dim'])
@@ -122,7 +118,7 @@ class MultiTripletNetwork(pl.LightningModule):
                 num_class = 1
             else:
                 num_class = len(np.unique(self.ann[var]))
-            self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(layers),
+            self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(self.layers),
                                  hidden_dim=self.config['supervisor_hidden_dim'],
                                  output_dim=num_class)
                                                                               
@@ -259,19 +255,24 @@ class MultiTripletNetwork(pl.LightningModule):
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
     
-    def prepare_data(self):
-        lt = int(len(self.dataset)*(1-self.val_size))
-        lv = len(self.dataset)-lt
-        dat_train, dat_val = random_split(self.dataset, [lt, lv], 
+    def prepare_data_loaders(self, dataset):
+        # create train/validation splits and convert TripletMultiOmicDataset format
+        triplet_dataset = TripletMultiOmicDataset(dataset, self.main_var)
+        lt = int(len(triplet_dataset)*(1-self.val_size))
+        lv = len(triplet_dataset)-lt
+        dat_train, dat_val = random_split(triplet_dataset, [lt, lv], 
                                           generator=torch.Generator().manual_seed(42))
-        return dat_train, dat_val
-
+        self.train_loader = DataLoader(dat_train, batch_size=int(self.config['batch_size']), 
+                                       num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+        self.val_loader = DataLoader(dat_val, batch_size=int(self.config['batch_size']), 
+                                     num_workers=0, pin_memory=True, shuffle=False)    
+    
     def train_dataloader(self):
-        return DataLoader(self.dat_train, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+        return self.train_loader
 
     def val_dataloader(self):
-        return DataLoader(self.dat_val, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=False)    
-        
+        return self.val_loader
+    
     # dataset: MultiOmicDataset
     def transform(self, dataset):
         """
@@ -339,7 +340,7 @@ class MultiTripletNetwork(pl.LightningModule):
             outputs_list.append(outputs[target_var])
         return torch.cat(outputs_list, dim = 0)
         
-    def compute_feature_importance(self, target_var, steps = 5):
+    def compute_feature_importance(self, dataset, target_var, steps = 5, batch_size = 64):
         """
         Compute the feature importance.
 
@@ -349,79 +350,99 @@ class MultiTripletNetwork(pl.LightningModule):
         Returns:
             attributions (list of torch.Tensor): The feature importances for each class.
         """
-        
+
         device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
         self.to(device)
-        
+
         print("[INFO] Computing feature importance for variable:",target_var,"on device:",device)
 
-        # self.dataset is a TripletMultiomicDataset, which has a different 
-        # structure than the MultiomicDataset. We use data loader to 
-        # read the triplets and get anchor/positive/negative tensors
-        # read the whole dataset
-        dl = DataLoader(self.dataset, batch_size=len(self.dataset))
-        it = iter(dl)
-        anchor, positive, negative, y_dict = next(it) 
-                
-        # Move tensors to the specified device
-        anchor = {k: v.to(device) for k, v in anchor.items()}
-        positive = {k: v.to(device) for k, v in positive.items()}
-        negative = {k: v.to(device) for k, v in negative.items()}
-        y_dict = {k: v.to(device) for k, v in y_dict.items()}
-                
+        # define data loader 
+        triplet_dataset = TripletMultiOmicDataset(dataset, self.main_var)
+        dataloader = DataLoader(triplet_dataset, batch_size=batch_size, shuffle=False)
         # Initialize the Integrated Gradients method
         ig = IntegratedGradients(self.forward_target)
 
-        anchor = [data.requires_grad_() for data in list(anchor.values())]
-        positive = [data.requires_grad_() for data in list(positive.values())]
-        negative = [data.requires_grad_() for data in list(negative.values())]
-        
-        # concatenate multiomic layers of each list element
-        # then stack the anchor/positive/negative 
-        # the purpose is to get a single tensor
-        input_data = torch.stack([torch.cat(sublist, dim = 1) for sublist in [anchor, positive, negative]]).unsqueeze(0)
-
-        # layer sizes will be needed to revert the concatenated tensor 
-        # anchor/positive/negative have the same shape
-        layer_sizes = [anchor[i].shape[1] for i in range(len(anchor))] 
-
-        # Define a baseline 
-        baseline = torch.zeros_like(input_data)       
-
-        # Get the number of classes for the target variable
         if self.variable_types[target_var] == 'numerical':
             num_class = 1
         else:
-            num_class = len(np.unique(self.ann[target_var]))
+            num_class = len(np.unique([y[target_var] for _, y in dataset]))
 
-        # Compute the feature importance for each class
-        attributions = []
-        if num_class > 1:
-            for target_class in range(num_class):
-                attributions.append(ig.attribute(input_data, baseline, additional_forward_args=(layer_sizes, target_var, steps), target=target_class, n_steps=steps))
-        else:
-            attributions.append(ig.attribute(input_data, baseline, additional_forward_args=(layer_sizes, target_var, steps), n_steps=steps))
+        aggregated_attributions = [[] for _ in range(num_class)]
+        for batch in dataloader:
+            # see training_step to see how elements are accessed in batches 
+            anchor, positive, negative, y_dict = batch[0], batch[1], batch[2], batch[3]        
 
-        # summarize feature importances
-        # Compute absolute attributions
-        # Move the processed tensors to CPU for further operations that are not supported on GPU
-        abs_attr = [[torch.abs(a).cpu() for a in attr_class] for attr_class in attributions]
+            # Move tensors to the specified device
+            anchor = {k: v.to(device) for k, v in anchor.items()}
+            positive = {k: v.to(device) for k, v in positive.items()}
+            negative = {k: v.to(device) for k, v in negative.items()}
+            
+            anchor = [data.requires_grad_() for data in list(anchor.values())]
+            positive = [data.requires_grad_() for data in list(positive.values())]
+            negative = [data.requires_grad_() for data in list(negative.values())]
+            
+            # concatenate multiomic layers of each list element
+            # then stack the anchor/positive/negative 
+            # the purpose is to get a single tensor
+            input_data = torch.stack([torch.cat(sublist, dim = 1) for sublist in [anchor, positive, negative]]).unsqueeze(0)
+
+            # layer sizes will be needed to revert the concatenated tensor 
+            # anchor/positive/negative have the same shape
+            layer_sizes = [anchor[i].shape[1] for i in range(len(anchor))] 
+
+            # Define a baseline 
+            baseline = torch.zeros_like(input_data)       
+
+            if num_class == 1:
+                # returns a tuple of tensors (one per data modality)
+                attributions = ig.attribute(input_data, baseline, 
+                                             additional_forward_args=(layer_sizes, target_var, steps), 
+                                             n_steps=steps)
+                attributions = attributions.split(layer_sizes, dim = 3)
+                aggregated_attributions[0].append(attributions)
+            else:
+                for target_class in range(num_class):
+                    # returns a tuple of tensors (one per data modality)
+                    attributions = ig.attribute(input_data, baseline, 
+                                                 additional_forward_args=(layer_sizes, target_var, steps), 
+                                                 target=target_class, n_steps=steps)
+                    attributions = attributions.split(layer_sizes, dim = 3)
+                    aggregated_attributions[target_class].append(attributions)
+
+        # For each target class and for each data modality/layer, concatenate attributions accross batches 
+        layers = self.layers
+        num_layers = len(layers)
+        processed_attributions = [] 
+        # Process each class
+        for class_idx in range(len(aggregated_attributions)):
+            class_attr = aggregated_attributions[class_idx]
+            layer_attributions = []
+            # Process each layer within the class
+            for layer_idx in range(num_layers):
+                # Extract all batch tensors for this layer across all batches for the current class
+                layer_tensors = [batch_attr[layer_idx] for batch_attr in class_attr]
+                # Concatenate tensors along the batch dimension
+                attr_concat = torch.cat(layer_tensors, dim=2)
+                layer_attributions.append(attr_concat)
+            processed_attributions.append(layer_attributions)
+
+        # compute absolute importance and move to cpu 
+        # notice the squeeze (due to triplets)
+        abs_attr = [[torch.abs(a.squeeze()).cpu() for a in attr_class] for attr_class in processed_attributions]
         # average over samples 
         imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
-
         # move the model also back to cpu (if not already on cpu)
         self.to('cpu')
-        
-        # combine into a single data frame 
         df_list = []
-        layers = list(self.dataset.dataset.dat.keys())  # accessing multiomicdataset within tripletmultiomic dataset here
         for i in range(num_class):
-            imp_layerwise = imp[i][0].split(layer_sizes, dim = 1)
             for j in range(len(layers)):
-                features = self.dataset.dataset.features[layers[j]] # accessing multiomicdataset within tripletmultiomic dataset here
-                importances = imp_layerwise[j][0].detach().numpy() # 0 => extract importances only for the anchor 
-                df_list.append(pd.DataFrame({'target_variable': target_var, 'target_class': i, 'layer': layers[j], 'name': features, 'importance': importances}))    
-        df_imp = pd.concat(df_list, ignore_index = True)
-        
-        # save scores in model
+                features = dataset.features[layers[j]]
+                # Ensure tensors are already on CPU before converting to numpy
+                importances = imp[i][j][0].detach().numpy() # 0 => extract importances only for the anchor
+                df_list.append(pd.DataFrame({'target_variable': target_var, 
+                                             'target_class': i, 
+                                             'layer': layers[j], 
+                                             'name': features, 
+                                             'importance': importances}))    
+        df_imp = pd.concat(df_list, ignore_index=True)
         self.feature_importances[target_var] = df_imp

@@ -32,7 +32,6 @@ class DirectPredGCNN(pl.LightningModule):
     ):
         super().__init__()
         self.config = config
-        self.dataset = dataset
         self.target_variables = target_variables
         self.surv_event_var = surv_event_var
         self.surv_time_var = surv_time_var
@@ -42,13 +41,17 @@ class DirectPredGCNN(pl.LightningModule):
             self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
         self.variables = self.target_variables + self.batch_variables if self.batch_variables else self.target_variables
+        self.variable_types = dataset.variable_types 
+        self.ann = dataset.ann 
         self.val_size = val_size
-        self.dat_train, self.dat_val = self.prepare_data()
+        
         self.feature_importances = {}
         self.use_loss_weighting = use_loss_weighting
 
         self.device_type = device_type 
         self.gnn_conv_type = gnn_conv_type
+        
+        self.prepare_data_loaders(dataset)
         
         if self.use_loss_weighting:
             # Initialize log variance parameters for uncertainty weighting
@@ -57,9 +60,9 @@ class DirectPredGCNN(pl.LightningModule):
                 self.log_vars[var] = nn.Parameter(torch.zeros(1))
 
         # Init modality encoders
-        layers = list(self.dataset.dat.keys())
+        self.layers = list(dataset.dat.keys())
         # NOTE: For now we use matrices, so number of node input features is 1.
-        input_dims = [1 for _ in range(len(layers))]
+        input_dims = [1 for _ in range(len(self.layers))]
 
         self.encoders = nn.ModuleList(
             [
@@ -70,18 +73,18 @@ class DirectPredGCNN(pl.LightningModule):
                         act = self.config['activation'],
                         conv = self.gnn_conv_type
                     )
-                    for i in range(len(layers))       
+                    for i in range(len(self.layers))       
             ])
 
         # Init output layers
         self.MLPs = nn.ModuleDict()
         for var in self.variables:
-            if self.dataset.variable_types[var] == "numerical":
+            if self.variable_types[var] == "numerical":
                 num_class = 1
             else:
-                num_class = len(np.unique(self.dataset.ann[var]))
+                num_class = len(np.unique(self.ann[var]))
             self.MLPs[var] = MLP(
-                input_dim=self.config["latent_dim"] * len(layers),
+                input_dim=self.config["latent_dim"] * len(self.layers),
                 hidden_dim=self.config["hidden_dim"],
                 output_dim=num_class,
             )
@@ -103,7 +106,7 @@ class DirectPredGCNN(pl.LightningModule):
         return optimizer
 
     def compute_loss(self, var, y, y_hat):
-        if self.dataset.variable_types[var] == "numerical":
+        if self.variable_types[var] == "numerical":
             # Ignore instances with missing labels for numerical variables
             valid_indices = ~torch.isnan(y)
             if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
@@ -186,31 +189,28 @@ class DirectPredGCNN(pl.LightningModule):
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True, batch_size=int(x_list[0].batch_size))
         return total_loss
 
-    def prepare_data(self):
-        lt = int(len(self.dataset) * (1 - self.val_size))
-        lv = len(self.dataset) - lt
-        dat_train, dat_val = random_split(self.dataset, [lt, lv], torch.Generator().manual_seed(42))
-        return dat_train, dat_val
+    def prepare_data_loaders(self, dataset):
+        # Split the dataset
+        train_size = int(len(dataset) * (1 - self.val_size))
+        val_size = len(dataset) - train_size
+        dat_train, dat_val = random_split(dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42))
+
+        # Create data loaders
+        self.train_loader = DataLoader(dat_train, batch_size=int(self.config['batch_size']), 
+                                       num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+        self.val_loader = DataLoader(dat_val, batch_size=int(self.config['batch_size']), 
+                                     num_workers=0, pin_memory=True, shuffle=False)
 
     def train_dataloader(self):
-        return DataLoader(
-            self.dat_train,
-            batch_size=int(self.config["batch_size"]),
-            num_workers=0,
-            pin_memory=True,
-            shuffle=True,
-            drop_last=True,
-        )
+        return self.train_loader
 
     def val_dataloader(self):
-        return DataLoader(
-            self.dat_val, batch_size=int(self.config["batch_size"]), num_workers=0, pin_memory=True, shuffle=False
-        )
+        return self.val_loader
 
     def predict(self, dataset):
         self.eval()
         xs = [x for x in dataset.dat.values()]
-        edge_indices = [dataset.feature_ann[k]["edge_index"] for k in self.dataset.dat.keys()]
+        edge_indices = [dataset.feature_ann[k]["edge_index"] for k in self.layers]
         inputs = []
         for x, edge_idx in zip(xs, edge_indices):
             inputs.append(
@@ -223,7 +223,7 @@ class DirectPredGCNN(pl.LightningModule):
         predictions = {}
         for var in self.variables:
             y_pred = outputs[var].detach().numpy()
-            if self.dataset.variable_types[var] == "categorical":
+            if self.variable_types[var] == "categorical":
                 predictions[var] = np.argmax(y_pred, axis=1)
             else:
                 predictions[var] = y_pred
@@ -233,7 +233,7 @@ class DirectPredGCNN(pl.LightningModule):
         self.eval()
 
         xs = [x for x in dataset.dat.values()]
-        edge_indices = [dataset.feature_ann[k]["edge_index"] for k in self.dataset.dat.keys()]
+        edge_indices = [dataset.feature_ann[k]["edge_index"] for k in self.layers]
         inputs = []
         for x, edge_idx in zip(xs, edge_indices):
             inputs.append(
@@ -269,7 +269,7 @@ class DirectPredGCNN(pl.LightningModule):
             )
         return self.forward(inputs)[target_var]
 
-    def compute_feature_importance(self, target_var, steps=5):
+    def compute_feature_importance(self, dataset, target_var, steps=5):
         # find out the device the model was trained on.
         device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
         self.to(device)
@@ -277,8 +277,8 @@ class DirectPredGCNN(pl.LightningModule):
         print("[INFO] Computing feature importance for variable:",target_var,"on device:",device)
         
         # Prepare inputs and baselines, moving them to the GPU
-        xs = [x.to(device) for x in self.dataset.dat.values()]
-        edge_indices = [self.dataset.feature_ann[k]["edge_index"].to(device) for k in self.dataset.dat.keys()]
+        xs = [x.to(device) for x in dataset.dat.values()]
+        edge_indices = [dataset.feature_ann[k]["edge_index"].to(device) for k in dataset.dat.keys()]
 
         inputs = tuple(xs)
         baselines = tuple([torch.zeros_like(x) for x in inputs])
@@ -291,10 +291,10 @@ class DirectPredGCNN(pl.LightningModule):
         ig = IntegratedGradients(self.model_forward)
 
         # Get the number of classes for the target variable
-        if self.dataset.variable_types[target_var] == "numerical":
+        if dataset.variable_types[target_var] == "numerical":
             num_class = 1
         else:
-            num_class = len(np.unique(self.dataset.ann[target_var]))
+            num_class = len(np.unique(dataset.ann[target_var]))
 
         # Compute the feature importance for each class
         attributions = []
@@ -329,10 +329,10 @@ class DirectPredGCNN(pl.LightningModule):
 
         # Combine into a single data frame
         df_list = []
-        layers = list(self.dataset.dat.keys())
+        layers = list(dataset.dat.keys())
         for i in range(num_class):
             for j in range(len(layers)):
-                features = self.dataset.features[layers[j]]
+                features = dataset.features[layers[j]]
                 importances = imp[i][j][0].detach().numpy()  # Safe to call .numpy() now, as tensors are on CPU
                 df_list.append(
                     pd.DataFrame(
