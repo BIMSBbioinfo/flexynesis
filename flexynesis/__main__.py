@@ -187,7 +187,7 @@ def main():
                                             processed_dir = '_'.join(['processed', args.prefix]),
                                             string_organism=args.string_organism,
                                             string_node_name=args.string_node_name)
-    train_dataset, test_dataset = data_importer.import_data()
+    train_dataset, test_dataset = data_importer.import_data(force = True)
 
     # print feature logs to file (we use these tables to track which features are dropped/selected and why)
     feature_logs = data_importer.feature_logs
