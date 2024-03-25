@@ -34,7 +34,6 @@ class CrossModalPred(pl.LightningModule):
                  device_type = None):
         super(CrossModalPred, self).__init__()
         self.config = config
-        self.dataset = dataset
         self.target_variables = target_variables
         self.surv_event_var = surv_event_var
         self.surv_time_var = surv_time_var
@@ -43,14 +42,17 @@ class CrossModalPred(pl.LightningModule):
         if self.surv_event_var is not None and self.surv_time_var is not None:
             self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
-        self.variables = self.target_variables + batch_variables if batch_variables else self.target_variables
+        self.variables = self.target_variables + self.batch_variables if self.batch_variables else self.target_variables
+        self.variable_types = dataset.variable_types 
+        self.ann = dataset.ann
         
         self.input_layers = input_layers if input_layers else list(dataset.dat.keys()) 
         self.output_layers = output_layers if output_layers else list(dataset.dat.keys())
         
         self.val_size = val_size
 
-        self.dat_train, self.dat_val = self.prepare_data()
+        self.prepare_data_loaders(dataset)
+        
         self.feature_importances = {}
         
         self.device_type = device_type
@@ -65,7 +67,8 @@ class CrossModalPred(pl.LightningModule):
                     
         # create a list of Encoder instances for separately encoding each input omics layer 
         input_dims = [len(dataset.features[self.input_layers[i]]) for i in range(len(self.input_layers))]
-        self.encoders = nn.ModuleList([Encoder(input_dims[i], [config['hidden_dim']], config['latent_dim']) for i in range(len(self.input_layers))])
+        self.encoders = nn.ModuleList([Encoder(input_dims[i], [config['hidden_dim']], config['latent_dim']) 
+                                       for i in range(len(self.input_layers))])
         
         # Fully connected layers for concatenated means and log_vars
         self.FC_mean = nn.Linear(len(self.input_layers) * config['latent_dim'], config['latent_dim'])
@@ -73,16 +76,17 @@ class CrossModalPred(pl.LightningModule):
         
         # list of decoders to decode the latent layer into the target/output layers  
         output_dims = [len(dataset.features[self.output_layers[i]]) for i in range(len(self.output_layers))]
-        self.decoders = nn.ModuleList([Decoder(config['latent_dim'], [config['hidden_dim']], output_dims[i]) for i in range(len(self.output_layers))])
+        self.decoders = nn.ModuleList([Decoder(config['latent_dim'], [config['hidden_dim']], output_dims[i]) 
+                                       for i in range(len(self.output_layers))])
 
         # define supervisor heads
         # using ModuleDict to store multiple MLPs
         self.MLPs = nn.ModuleDict()         
         for var in self.variables:
-            if self.dataset.variable_types[var] == 'numerical':
+            if self.variable_types[var] == 'numerical':
                 num_class = 1
             else:
-                num_class = len(np.unique(self.dataset.ann[var]))
+                num_class = len(np.unique(self.ann[var]))
             self.MLPs[var] = MLP(input_dim = config['latent_dim'], 
                                  hidden_dim = config['supervisor_hidden_dim'], 
                                  output_dim = num_class)
@@ -168,7 +172,7 @@ class CrossModalPred(pl.LightningModule):
         return optimizer
     
     def compute_loss(self, var, y, y_hat):
-        if self.dataset.variable_types[var] == 'numerical':
+        if self.variable_types[var] == 'numerical':
             # Ignore instances with missing labels for numerical variables
             valid_indices = ~torch.isnan(y)
             if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
@@ -264,18 +268,22 @@ class CrossModalPred(pl.LightningModule):
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
                                        
-    def prepare_data(self):
-        lt = int(len(self.dataset)*(1-self.val_size))
-        lv = len(self.dataset)-lt
-        dat_train, dat_val = random_split(self.dataset, [lt, lv], 
+    def prepare_data_loaders(self, dataset):
+        
+        lt = int(len(dataset)*(1-self.val_size))
+        lv = len(dataset)-lt
+        dat_train, dat_val = random_split(dataset, [lt, lv], 
                                           generator=torch.Generator().manual_seed(42))
-        return dat_train, dat_val
+        self.train_loader = DataLoader(dat_train, batch_size=int(self.config['batch_size']), 
+                                       num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+        self.val_loader = DataLoader(dat_val, batch_size=int(self.config['batch_size']), 
+                                     num_workers=0, pin_memory=True, shuffle=False)
     
     def train_dataloader(self):
-        return DataLoader(self.dat_train, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
+        return self.train_loader
 
     def val_dataloader(self):
-        return DataLoader(self.dat_val, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=False)
+        return self.val_loader 
         
     def transform(self, dataset):
         """
@@ -313,7 +321,7 @@ class CrossModalPred(pl.LightningModule):
         predictions = {}
         for var in self.variables:
             y_pred = outputs[var].detach().numpy()
-            if self.dataset.variable_types[var] == 'categorical':
+            if self.variable_types[var] == 'categorical':
                 predictions[var] = np.argmax(y_pred, axis=1)
             else:
                 predictions[var] = y_pred
@@ -419,10 +427,10 @@ class CrossModalPred(pl.LightningModule):
         ig = IntegratedGradients(self.forward_target)
 
         # Get the number of classes for the target variable
-        if self.dataset.variable_types[target_var] == 'numerical':
+        if self.variable_types[target_var] == 'numerical':
             num_class = 1
         else:
-            num_class = len(np.unique(self.dataset.ann[target_var]))
+            num_class = len(np.unique(self.ann[target_var]))
 
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
@@ -478,7 +486,7 @@ class CrossModalPred(pl.LightningModule):
         df_list = []
         for i in range(num_class):
             for j in range(len(layers)):
-                features = self.dataset.features[layers[j]]
+                features = dataset.features[layers[j]]
                 importances = imp[i][j][0].detach().numpy()
                 df_list.append(pd.DataFrame({'target_variable': target_var, 
                                              'target_class': i, 'layer': layers[j], 
