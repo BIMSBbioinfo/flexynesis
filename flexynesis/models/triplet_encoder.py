@@ -89,8 +89,7 @@ class MultiTripletNetwork(pl.LightningModule):
 
         self.layers = list(dataset.dat.keys())
         input_sizes = [len(dataset.features[self.layers[i]]) for i in range(len(self.layers))]
-        hidden_sizes = [config['hidden_dim'] for x in range(len(self.layers))]
-        
+        hidden_sizes = [int(self.config['hidden_dim_factor'] * input_sizes[i]) for i in range(len(self.layers))]
         
         # The first target variable is the main variable that dictates the triplets 
         # it has to be a categorical variable 

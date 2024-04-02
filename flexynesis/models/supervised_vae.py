@@ -78,12 +78,17 @@ class supervised_vae(pl.LightningModule):
         layers = list(dataset.dat.keys())
         input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
         # create a list of Encoder instances for separately encoding each omics layer
-        self.encoders = nn.ModuleList([Encoder(input_dims[i], [config['hidden_dim']], config['latent_dim']) for i in range(len(layers))])
+        self.encoders = nn.ModuleList([Encoder(input_dims[i], 
+                                               # define hidden_dim size as a factor of input_dim  
+                                               [int(input_dims[i] * config['hidden_dim_factor'])], 
+                                               config['latent_dim']) for i in range(len(layers))])
         # Fully connected layers for concatenated means and log_vars
         self.FC_mean = nn.Linear(len(layers) * config['latent_dim'], config['latent_dim'])
         self.FC_log_var = nn.Linear(len(layers) * config['latent_dim'], config['latent_dim'])
         # list of decoders to decode each omics layer separately 
-        self.decoders = nn.ModuleList([Decoder(config['latent_dim'], [config['hidden_dim']], input_dims[i]) for i in range(len(layers))])
+        self.decoders = nn.ModuleList([Decoder(config['latent_dim'], 
+                                               [int(input_dims[i] * config['hidden_dim_factor'])], 
+                                               input_dims[i]) for i in range(len(layers))])
 
         # define supervisor heads
         # using ModuleDict to store multiple MLPs
