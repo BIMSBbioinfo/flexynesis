@@ -86,9 +86,20 @@ class HyperparameterTuning:
         else:
             if self.config_name in search_spaces:
                 self.space = search_spaces[self.config_name]
+                # get batch sizes (a function of dataset size)
+                self.space.append(self.get_batch_space())
             else:
                 raise ValueError(f"'{self.config_name}' not found in the default config.")
 
+    def get_batch_space(self, min_size = 16, max_size = 256):
+        m = int(np.log2(len(self.dataset) * (1 - self.val_size)))
+        st = int(np.log2(min_size))
+        end = int(np.log2(max_size))
+        if m < end:
+            end = m
+        s = Categorical([np.power(2, x) for x in range(st, end+1)], name = 'batch_size')
+        return s
+    
     def objective(self, params, current_step, total_steps):
         
         # args common to all model classes 
