@@ -63,12 +63,15 @@ class DirectPredGCNN(pl.LightningModule):
         self.layers = list(dataset.dat.keys())
         # NOTE: For now we use matrices, so number of node input features is 1.
         input_dims = [1 for _ in range(len(self.layers))]
-
+        
+        # define this to be able to make hidden_dim as a factor of number of features in each layer
+        feature_counts = [len(dataset.features[x]) for x in self.layers]
+        
         self.encoders = nn.ModuleList(
             [
                 GNNs(
                         input_dim=input_dims[i],
-                        hidden_dim=int(self.config["hidden_dim"]),  # int because of pyg
+                        hidden_dim=int(self.config["hidden_dim_factor"] * feature_counts[i]),  
                         output_dim=self.config["latent_dim"],
                         act = self.config['activation'],
                         conv = self.gnn_conv_type
@@ -85,7 +88,7 @@ class DirectPredGCNN(pl.LightningModule):
                 num_class = len(np.unique(self.ann[var]))
             self.MLPs[var] = MLP(
                 input_dim=self.config["latent_dim"] * len(self.layers),
-                hidden_dim=self.config["hidden_dim"],
+                hidden_dim=self.config["supervisor_hidden_dim"],
                 output_dim=num_class,
             )
 

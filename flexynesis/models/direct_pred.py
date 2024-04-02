@@ -50,7 +50,8 @@ class DirectPred(pl.LightningModule):
 
         self.encoders = nn.ModuleList([
             MLP(input_dim=self.input_dims[i],
-                hidden_dim=self.config['hidden_dim'],
+                # define hidden_dim size relative to the input_dim size
+                hidden_dim=int(self.input_dims[i] * self.config['hidden_dim_factor']),
                 output_dim=self.config['latent_dim']) for i in range(len(self.layers))])
 
         self.MLPs = nn.ModuleDict()  # using ModuleDict to store multiple MLPs
@@ -60,7 +61,7 @@ class DirectPred(pl.LightningModule):
             else:
                 num_class = len(np.unique(self.ann[var]))
             self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(self.layers),
-                                 hidden_dim=self.config['hidden_dim'],
+                                 hidden_dim=self.config['supervisor_hidden_dim'],
                                  output_dim=num_class)
 
     def forward(self, x_list):

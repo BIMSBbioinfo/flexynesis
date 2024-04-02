@@ -67,7 +67,10 @@ class CrossModalPred(pl.LightningModule):
                     
         # create a list of Encoder instances for separately encoding each input omics layer 
         input_dims = [len(dataset.features[self.input_layers[i]]) for i in range(len(self.input_layers))]
-        self.encoders = nn.ModuleList([Encoder(input_dims[i], [config['hidden_dim']], config['latent_dim']) 
+        self.encoders = nn.ModuleList([Encoder(input_dims[i], 
+                                                # define hidden_dim size as a factor of input_dim  
+                                               [int(input_dims[i] * config['hidden_dim_factor'])], 
+                                               config['latent_dim']) 
                                        for i in range(len(self.input_layers))])
         
         # Fully connected layers for concatenated means and log_vars
@@ -76,7 +79,9 @@ class CrossModalPred(pl.LightningModule):
         
         # list of decoders to decode the latent layer into the target/output layers  
         output_dims = [len(dataset.features[self.output_layers[i]]) for i in range(len(self.output_layers))]
-        self.decoders = nn.ModuleList([Decoder(config['latent_dim'], [config['hidden_dim']], output_dims[i]) 
+        self.decoders = nn.ModuleList([Decoder(config['latent_dim'], 
+                                               [int(input_dims[i] * config['hidden_dim_factor'])], 
+                                               output_dims[i]) 
                                        for i in range(len(self.output_layers))])
 
         # define supervisor heads
