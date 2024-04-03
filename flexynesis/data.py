@@ -954,3 +954,14 @@ def split_by_median(tensor_dict):
             # If tensor is not numerical, leave it as it is
             new_dict[key] = tensor
     return new_dict
+
+
+# downsample a given MultiOmicDataset 
+def downsample(dataset, N = None):
+    idx = np.random.choice(range(0,len(dataset)), N, replace = False)
+    sub = dataset[idx]
+    
+    sub_dataset = MultiomicDataset(dat = sub[0], ann = sub[1], variable_types = dataset.variable_types, 
+                                              features = dataset.features, samples = [dataset.samples[i] for i in idx], 
+                                              label_mappings=dataset.label_mappings, feature_ann=dataset.feature_ann)
+    return sub_dataset

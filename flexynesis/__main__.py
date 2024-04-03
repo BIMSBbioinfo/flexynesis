@@ -36,6 +36,7 @@ def main():
     parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int, default = 5)
     parser.add_argument("--correlation_threshold", help="Correlation threshold to drop highly redundant features (default: 0.8; set to 1 for no redundancy filtering)", type=float, default = 0.8)
     parser.add_argument("--restrict_to_features", help="Restrict the analyis to the list of features provided by the user (default: None)", type = str, default = None)
+    parser.add_argument("--subsample", help="Downsample training set to randomly drawn N samples for training. Disabled when set to 0", type=int, default = 0)
     parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int, default = 500)
     parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float, default = 20)
     parser.add_argument("--data_types", help="(Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str, required = True)
@@ -188,6 +189,10 @@ def main():
                                             string_organism=args.string_organism,
                                             string_node_name=args.string_node_name)
     train_dataset, test_dataset = data_importer.import_data(force = True)
+    
+    if args.subsample > 0:
+        print("[INFO] Randomly drawing",args.subsample,"samples for training")
+        train_dataset = flexynesis.downsample(train_dataset, N = args.subsample)
 
     # print feature logs to file (we use these tables to track which features are dropped/selected and why)
     feature_logs = data_importer.feature_logs
@@ -245,18 +250,19 @@ def main():
     embeddings_test.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.csv'])), header=True)
     
     # also filter embeddings to remove batch-associated dims and only keep target-variable associated dims 
-    print("[INFO] Printing filtered embeddings")
-    embeddings_train_filtered = flexynesis.remove_batch_associated_variables(data = embeddings_train, 
-                                                                             batch_dict={x: train_dataset.ann[x] for x in model.batch_variables} if model.batch_variables is not None else None, 
-                                                                             target_dict={x: train_dataset.ann[x] for x in model.target_variables}, 
-                                                                             variable_types=train_dataset.variable_types)
-    # filter test embeddings to keep the same dims as the filtered training embeddings
-    embeddings_test_filtered = embeddings_test[embeddings_train_filtered.columns]
+    if args.batch_variables is not None:
+        print("[INFO] Printing filtered embeddings")
+        embeddings_train_filtered = flexynesis.remove_batch_associated_variables(data = embeddings_train, 
+                                                                                 batch_dict={x: train_dataset.ann[x] for x in model.batch_variables} if model.batch_variables is not None else None, 
+                                                                                 target_dict={x: train_dataset.ann[x] for x in model.target_variables}, 
+                                                                                 variable_types=train_dataset.variable_types)
+        # filter test embeddings to keep the same dims as the filtered training embeddings
+        embeddings_test_filtered = embeddings_test[embeddings_train_filtered.columns]
 
-    # save 
-    embeddings_train_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.filtered.csv'])), header=True)    
-    embeddings_test_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.filtered.csv'])), header=True)    
-    
+        # save 
+        embeddings_train_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.filtered.csv'])), header=True)    
+        embeddings_test_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.filtered.csv'])), header=True)    
+
     # for architectures with decoders; print decoded output layers 
     if args.model_class == 'CrossModalPred':
         print("[INFO] Printing decoded output layers")
