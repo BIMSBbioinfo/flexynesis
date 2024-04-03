@@ -257,6 +257,16 @@ def main():
     embeddings_train_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.filtered.csv'])), header=True)    
     embeddings_test_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.filtered.csv'])), header=True)    
     
+    # for architectures with decoders; print decoded output layers 
+    if args.model_class == 'CrossModalPred':
+        output_layers_train = model.decode(train_dataset)
+        output_layers_test = model.decode(test_dataset)
+        for layer in output_layers_train.keys():
+            output_layers_train[layer].to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'train_decoded', layer, 'csv'])), header=True)
+        for layer in output_layers_test.keys():
+            output_layers_test[layer].to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'test_decoded', layer, 'csv'])), header=True)
+
+    
     # evaluate off-the-shelf methods on the main target variable 
     if args.evaluate_baseline_performance == 'True':
         print("[INFO] Computing off-the-shelf method performance on first target variable:",model.target_variables[0])

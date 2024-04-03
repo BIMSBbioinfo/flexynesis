@@ -121,7 +121,7 @@ class CrossModalPred(pl.LightningModule):
         log_var = self.FC_log_var(torch.cat(log_vars, dim=1))
         return mean, log_var
     
-    def forward(self, x_list_input, x_list_output):
+    def forward(self, x_list_input):
         """
         Forward pass through the model.
 
@@ -142,7 +142,7 @@ class CrossModalPred(pl.LightningModule):
         z = self.reparameterization(mean, log_var)
 
         # decode the latent space to target output layer(s)
-        x_hat_list = [self.decoders[i](z) for i in range(len(x_list_output))]
+        x_hat_list = [self.decoders[i](z) for i in range(len(self.output_layers))]
 
         #run the supervisor heads using the latent layer as input
         outputs = {}
@@ -214,11 +214,10 @@ class CrossModalPred(pl.LightningModule):
 
         # get input omics modalities and encode them; decode them to output layers 
         x_list_input = [dat[x] for x in self.input_layers]
-        x_list_output = [dat[x] for x in self.output_layers]
-
-        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input, x_list_output)
+        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input)
         
         # compute mmd loss for the latent space + reconsruction loss for each target/output layer
+        x_list_output = [dat[x] for x in self.output_layers]
         mmd_loss_list = [self.MMD_loss(z.shape[1], z, x_hat_list[i], x_list_output[i]) for i in range(len(self.output_layers))]
         mmd_loss = torch.mean(torch.stack(mmd_loss_list))
 
@@ -248,9 +247,7 @@ class CrossModalPred(pl.LightningModule):
 
         # get input omics modalities and encode them
         x_list_input = [dat[x] for x in self.input_layers]
-        x_list_output = [dat[x] for x in self.output_layers]
-
-        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input, x_list_output)
+        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input)
         
         # compute mmd loss for the latent space + reconsruction loss for each target/output layer
         x_list_output = [dat[x] for x in self.output_layers]
@@ -304,8 +301,8 @@ class CrossModalPred(pl.LightningModule):
             pd.DataFrame: Transformed dataset as a pandas DataFrame.
         """
         self.eval()
-        x_list = [dataset.dat[x] for x in self.input_layers]
-        M = self.forward(x_list)[1].detach().numpy()
+        x_list_input = [dataset.dat[x] for x in self.input_layers]
+        M = self.forward(x_list_input)[1].detach().numpy()
         z = pd.DataFrame(M)
         z.columns = [''.join(['E', str(x)]) for x in z.columns]
         z.index = dataset.samples
@@ -323,8 +320,8 @@ class CrossModalPred(pl.LightningModule):
         """
         self.eval()
         
-        x_list = [dataset.dat[x] for x in self.input_layers]
-        X_hat, z, mean, log_var, outputs = self.forward(x_list)
+        x_list_input = [dataset.dat[x] for x in self.input_layers]
+        X_hat, z, mean, log_var, outputs = self.forward(x_list_input)
         
         predictions = {}
         for var in self.variables:
@@ -344,7 +341,7 @@ class CrossModalPred(pl.LightningModule):
         self.eval()
         x_list_input = [dataset.dat[x] for x in self.input_layers]
         x_list_output = [dataset.dat[x] for x in self.output_layers]
-        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input, x_list_output)
+        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input)
         X = {}
         for i in range(len(self.output_layers)):
             x = pd.DataFrame(x_hat_list[i].detach().numpy()).transpose()
