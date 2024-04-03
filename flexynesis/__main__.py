@@ -259,6 +259,7 @@ def main():
     
     # for architectures with decoders; print decoded output layers 
     if args.model_class == 'CrossModalPred':
+        print("[INFO] Printing decoded output layers")
         output_layers_train = model.decode(train_dataset)
         output_layers_test = model.decode(test_dataset)
         for layer in output_layers_train.keys():
