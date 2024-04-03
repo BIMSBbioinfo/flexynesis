@@ -99,7 +99,7 @@ class Decoder(nn.Module):
             x_hat (torch.Tensor): The reconstructed output tensor.
         """
         h = self.hidden_layers(x)
-        x_hat = torch.sigmoid(self.FC_output(h))
+        x_hat = torch.tanh(self.FC_output(h))
         return x_hat
     
 
