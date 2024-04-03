@@ -80,9 +80,10 @@ class CrossModalPred(pl.LightningModule):
         # list of decoders to decode the latent layer into the target/output layers  
         output_dims = [len(dataset.features[self.output_layers[i]]) for i in range(len(self.output_layers))]
         self.decoders = nn.ModuleList([Decoder(config['latent_dim'], 
-                                               [int(input_dims[i] * config['hidden_dim_factor'])], 
+                                               [int(output_dims[i] * config['hidden_dim_factor'])], 
                                                output_dims[i]) 
                                        for i in range(len(self.output_layers))])
+        print(self.decoders)
 
         # define supervisor heads
         # using ModuleDict to store multiple MLPs
@@ -121,7 +122,7 @@ class CrossModalPred(pl.LightningModule):
         log_var = self.FC_log_var(torch.cat(log_vars, dim=1))
         return mean, log_var
     
-    def forward(self, x_list):
+    def forward(self, x_list_input, x_list_output):
         """
         Forward pass through the model.
 
@@ -136,13 +137,13 @@ class CrossModalPred(pl.LightningModule):
                 - log_var (torch.Tensor): Concatenated log variance values from each encoder.
                 - y_pred (torch.Tensor): Predicted output.
         """
-        mean, log_var = self.multi_encoder(x_list)
+        mean, log_var = self.multi_encoder(x_list_input)
         
         # generate latent layer
         z = self.reparameterization(mean, log_var)
 
-        # Decode each latent variable with its corresponding Decoder
-        x_hat_list = [self.decoders[i](z) for i in range(len(x_list))]
+        # decode the latent space to target output layer(s)
+        x_hat_list = [self.decoders[i](z) for i in range(len(x_list_output))]
 
         #run the supervisor heads using the latent layer as input
         outputs = {}
@@ -212,12 +213,13 @@ class CrossModalPred(pl.LightningModule):
     def training_step(self, train_batch, batch_idx):
         dat, y_dict = train_batch
 
-        # get input omics modalities and encode them
+        # get input omics modalities and encode them; decode them to output layers 
         x_list_input = [dat[x] for x in self.input_layers]
-        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input)
+        x_list_output = [dat[x] for x in self.output_layers]
+
+        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input, x_list_output)
         
         # compute mmd loss for the latent space + reconsruction loss for each target/output layer
-        x_list_output = [dat[x] for x in self.output_layers]
         mmd_loss_list = [self.MMD_loss(z.shape[1], z, x_hat_list[i], x_list_output[i]) for i in range(len(self.output_layers))]
         mmd_loss = torch.mean(torch.stack(mmd_loss_list))
 
@@ -247,7 +249,9 @@ class CrossModalPred(pl.LightningModule):
 
         # get input omics modalities and encode them
         x_list_input = [dat[x] for x in self.input_layers]
-        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input)
+        x_list_output = [dat[x] for x in self.output_layers]
+
+        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input, x_list_output)
         
         # compute mmd loss for the latent space + reconsruction loss for each target/output layer
         x_list_output = [dat[x] for x in self.output_layers]
