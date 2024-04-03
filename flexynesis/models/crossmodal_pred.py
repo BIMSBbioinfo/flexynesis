@@ -83,7 +83,6 @@ class CrossModalPred(pl.LightningModule):
                                                [int(output_dims[i] * config['hidden_dim_factor'])], 
                                                output_dims[i]) 
                                        for i in range(len(self.output_layers))])
-        print(self.decoders)
 
         # define supervisor heads
         # using ModuleDict to store multiple MLPs
@@ -342,11 +341,18 @@ class CrossModalPred(pl.LightningModule):
         """
         Extract the decoded values of the target/output layers 
         """
-        
         self.eval()
-        x_list = [dataset.dat[x] for x in self.input_layers]
-        X_hat, z, mean, log_var, outputs = self.forward(x_list)
-        return X_hat
+        x_list_input = [dataset.dat[x] for x in self.input_layers]
+        x_list_output = [dataset.dat[x] for x in self.output_layers]
+        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input, x_list_output)
+        X = {}
+        for i in range(len(self.output_layers)):
+            x = pd.DataFrame(x_hat_list[i].detach().numpy()).transpose()
+            layer = self.output_layers[i]
+            x.columns = dataset.samples
+            x.index = dataset.features[layer] 
+            X[layer] = x
+        return X
 
     
     def compute_kernel(self, x, y):
