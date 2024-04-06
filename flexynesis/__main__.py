@@ -187,13 +187,10 @@ def main():
                                             graph=graph,
                                             processed_dir = '_'.join(['processed', args.prefix]),
                                             string_organism=args.string_organism,
-                                            string_node_name=args.string_node_name)
+                                            string_node_name=args.string_node_name, 
+                                            downsample = args.subsample)
     train_dataset, test_dataset = data_importer.import_data(force = True)
     
-    if args.subsample > 0:
-        print("[INFO] Randomly drawing",args.subsample,"samples for training")
-        train_dataset = flexynesis.downsample(train_dataset, N = args.subsample)
-
     # print feature logs to file (we use these tables to track which features are dropped/selected and why)
     feature_logs = data_importer.feature_logs
     for key in feature_logs.keys():

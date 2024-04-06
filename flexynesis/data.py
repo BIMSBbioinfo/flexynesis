@@ -98,7 +98,7 @@ class DataImporter:
 
     def __init__(self, path, data_types, processed_dir="processed", log_transform = False, concatenate = False, restrict_to_features = None, min_features=None,
                  top_percentile=20, correlation_threshold = 0.9, variance_threshold=1e-5, na_threshold=0.1,
-                 graph=None, string_organism=9606, string_node_name="gene_name", transform=None):
+                 graph=None, string_organism=9606, string_node_name="gene_name", transform=None, downsample=0):
         self.path = path
         self.data_types = data_types
         self.processed_dir = os.path.join(self.path, processed_dir)
@@ -115,6 +115,7 @@ class DataImporter:
         self.scalers = None
         # initialize data transformers
         self.transformers = None
+        self.downsample = downsample
 
         self.graph = graph
         if self.graph is not None:
@@ -179,6 +180,10 @@ class DataImporter:
         train_dat = self.read_data(training_path)
         test_dat = self.read_data(testing_path)
         
+        if self.downsample > 0:
+            print("[INFO] Randomly drawing",self.downsample,"samples for training")
+            train_dat = self.subsample(train_dat, self.downsample)
+
         if self.restrict_to_features is not None:
             train_dat = self.filter_by_features(train_dat, self.restrict_to_features)
             test_dat = self.filter_by_features(test_dat, self.restrict_to_features)
@@ -287,6 +292,14 @@ class DataImporter:
             print(f"[INFO] Importing {file_path}...")
             data[file_name] = pd.read_csv(file_path, index_col=0)
         return data
+    
+    # randomly draw N samples; return subset of dat (output of read_data)
+    def subsample(self, dat, N):
+        clin = dat['clin'].sample(N)
+        dat_sub = {x: dat[x][clin.index] for x in self.data_types}
+        dat_sub['clin'] = clin
+        return dat_sub
+
 
     def filter_by_features(self, dat, features):
         """
@@ -954,14 +967,3 @@ def split_by_median(tensor_dict):
             # If tensor is not numerical, leave it as it is
             new_dict[key] = tensor
     return new_dict
-
-
-# downsample a given MultiOmicDataset 
-def downsample(dataset, N = None):
-    idx = np.random.choice(range(0,len(dataset)), N, replace = False)
-    sub = dataset[idx]
-    
-    sub_dataset = MultiomicDataset(dat = sub[0], ann = sub[1], variable_types = dataset.variable_types, 
-                                              features = dataset.features, samples = [dataset.samples[i] for i in idx], 
-                                              label_mappings=dataset.label_mappings, feature_ann=dataset.feature_ann)
-    return sub_dataset
