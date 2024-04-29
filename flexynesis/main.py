@@ -213,6 +213,93 @@ class HyperparameterTuning:
         return search_space_user
 
 
+from torch.utils.data import DataLoader, random_split
+from sklearn.model_selection import KFold
+import numpy as np
+import random, copy
+
+class FineTuner(pl.LightningModule):
+    def __init__(self, 
+                 model, 
+                 dataset, 
+                 n_splits=5, 
+                 subset_size=None, 
+                 batch_size=32, 
+                 freeze_encoders = False, 
+                 freeze_supervisors = False, 
+                 freeze_loss_weights = False):
+        super().__init__()
+        
+        self.model = copy.deepcopy(model)
+        
+        if freeze_encoders:
+            self.freeze_encoders()
+        if freeze_supervisors:
+            self.freeze_supervisors()
+        if freeze_loss_weights:
+            self.freeze_loss_weights()
+        
+        self.dataset = dataset
+        self.n_splits = n_splits
+        self.subset_size = subset_size if subset_size is not None else len(dataset)
+        self.learning_rate = learning_rate
+        self.batch_size = batch_size
+        self.kfold = KFold(n_splits=self.n_splits, shuffle=True)
+        self.subset_indices = None
+
+    def freeze_encoders(self):
+        # Freeze parameters in encoders
+        for encoder in self.model.encoders:
+            for param in encoder.parameters():
+                param.requires_grad = False
+                
+    def freeze_supervisors(self):
+        # Freeze MLPs in ModuleDict
+        for mlp in self.model.MLPs.values():
+            for param in mlp.parameters():
+                param.requires_grad = False
+
+    def freeze_loss_weights(self):
+        # Freeze parameters in log_vars
+        for param in self.model.log_vars.parameters():
+                param.requires_grad = False 
+
+    def prepare_data(self):
+        # Randomly sample subset_size elements from the dataset to form a subset
+        if self.subset_size < len(self.dataset):
+            self.subset_indices = random.sample(range(len(self.dataset)), self.subset_size)
+        else:
+            self.subset_indices = list(range(len(self.dataset)))
+
+    def setup(self, stage=None):
+        # This method is called on each GPU separately, setting up data for each fold
+        if stage == 'fit' or stage is None:
+            # Subset the dataset before splitting into folds
+            if self.subset_indices is None:
+                self.prepare_data()
+            self.folds_data = list(self.kfold.split(self.subset_indices))
+
+    def train_dataloader(self):
+        # Override to load data for the current fold
+        train_idx, val_idx = self.folds_data[self.current_fold]
+        train_subset = torch.utils.data.Subset(self.dataset, train_idx)
+        return DataLoader(train_subset, batch_size=self.batch_size, shuffle=True)
+
+    def val_dataloader(self):
+        # Override to load validation data for the current fold
+        train_idx, val_idx = self.folds_data[self.current_fold]
+        val_subset = torch.utils.data.Subset(self.dataset, val_idx)
+        return DataLoader(val_subset, batch_size=self.batch_size)
+
+    def training_step(self, batch, batch_idx):
+        return self.model.training_step(batch, batch_idx)
+
+    def validation_step(self, batch, batch_idx):
+        return self.model.validation_step(batch, batch_idx)
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=self.learning_rate)
+    
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 from lightning import Callback
