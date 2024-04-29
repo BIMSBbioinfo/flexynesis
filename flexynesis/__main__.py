@@ -1,6 +1,7 @@
 from lightning import seed_everything
 # Set the seed for all the possible random number generators.
 seed_everything(42, workers=True)
+import lightning as pl
 import argparse
 from typing import NamedTuple
 import os
@@ -34,6 +35,7 @@ def main():
     parser.add_argument('--config_path', type=str, default=None, help='Optional path to an external hyperparameter configuration file in YAML format.')
     parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"], default = 'intermediate')
     parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int, default = 5)
+    parser.add_argument("--finetuning_samples", help="Number of samples from the test dataset to use for fine-tuning the model. Set to 0 to disable fine-tuning", type=int, default = 0)
     parser.add_argument("--correlation_threshold", help="Correlation threshold to drop highly redundant features (default: 0.8; set to 1 for no redundancy filtering)", type=float, default = 0.8)
     parser.add_argument("--restrict_to_features", help="Restrict the analyis to the list of features provided by the user (default: None)", type = str, default = None)
     parser.add_argument("--subsample", help="Downsample training set to randomly drawn N samples for training. Disabled when set to 0", type=int, default = 0)
@@ -218,6 +220,26 @@ def main():
     # do a hyperparameter search training multiple models and get the best_configuration 
     model, best_params = tuner.perform_tuning()
         
+    # if fine-tuning is enabled; fine tune the model on a portion of test samples 
+    if args.finetuning_samples > 0:
+        finetuneSampleN = args.finetuning_samples
+        print("[INFO] Finetuning the model on ",finetuneSampleN,"test samples")
+        finetuner = flexynesis.FineTuner(model, 
+                                         test_dataset, 
+                                         subset_size=finetuneSampleN,
+                                         freeze_encoders=False)
+        for i in range(finetuner.n_splits):
+            trainer = pl.Trainer(max_epochs=10, devices = 1, accelerator = 'cpu')
+                                # , logger=False, 
+                                # enable_checkpointing=False,
+                                # devices=1, accelerator=device_type)
+            finetuner.current_fold = i
+            print(f"[INFO] Finetuning ... training fold {i+1}")
+            trainer.fit(finetuner)
+            
+        # update the model to finetuned model 
+        model = finetuner.model 
+    
     # evaluate predictions 
     print("[INFO] Computing model evaluation metrics")
     metrics_df = flexynesis.evaluate_wrapper(model.predict(test_dataset), test_dataset, 
