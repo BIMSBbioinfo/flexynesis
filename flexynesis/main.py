@@ -242,7 +242,7 @@ class FineTuner(pl.LightningModule):
         self.dataset = dataset
         self.n_splits = n_splits
         self.subset_size = subset_size if subset_size is not None else len(dataset)
-        self.learning_rate = learning_rate
+        self.learning_rate = model.config['lr']/10 # set to 1/10th of the learning rate used to train the model 
         self.batch_size = batch_size
         self.kfold = KFold(n_splits=self.n_splits, shuffle=True)
         self.subset_indices = None
@@ -292,10 +292,10 @@ class FineTuner(pl.LightningModule):
         return DataLoader(val_subset, batch_size=self.batch_size)
 
     def training_step(self, batch, batch_idx):
-        return self.model.training_step(batch, batch_idx)
+        return self.model.training_step(batch, batch_idx, log=False)
 
     def validation_step(self, batch, batch_idx):
-        return self.model.validation_step(batch, batch_idx)
+        return self.model.validation_step(batch, batch_idx, log=False)
 
     def configure_optimizers(self):
         return torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=self.learning_rate)
