@@ -13,6 +13,8 @@ import flexynesis
 from flexynesis.models import *
 import warnings
 import time
+from lightning.pytorch.callbacks import EarlyStopping
+
 
 def main():
     parser = argparse.ArgumentParser(description="Flexynesis - Your PyTorch model training interface", 
@@ -229,10 +231,12 @@ def main():
                                          subset_size=finetuneSampleN,
                                          freeze_encoders=False)
         for i in range(finetuner.n_splits):
-            trainer = pl.Trainer(max_epochs=10, devices = 1, accelerator = 'cpu')
-                                # , logger=False, 
-                                # enable_checkpointing=False,
-                                # devices=1, accelerator=device_type)
+            trainer = pl.Trainer(max_epochs = 10, 
+                                 #devices = 1, 
+                                 #accelerator = device_type,
+                                 default_root_dir="./", 
+                                 logger=False, 
+                                 enable_checkpointing=False)
             finetuner.current_fold = i
             print(f"[INFO] Finetuning ... training fold {i+1}")
             trainer.fit(finetuner)
