@@ -623,6 +623,23 @@ class MultiomicDataset(Dataset):
         """
         return len(self.samples)
     
+    def subset(self, indices):
+            """Create a new dataset object containing only the specified indices.
+
+            Args:
+                indices (list of int): The indices of the samples to include in the subset.
+
+            Returns:
+                MultiomicDataset: A new dataset object with the same structure but only containing the selected samples.
+            """
+            subset_dat = {x: self.dat[x][indices] for x in self.dat.keys()}
+            subset_ann = {x: self.ann[x][indices] for x in self.ann.keys()}
+            subset_samples = [self.samples[idx] for idx in indices]
+
+            # Create a new dataset object
+            return MultiomicDataset(subset_dat, subset_ann, self.variable_types, self.features, 
+                                    subset_samples, self.label_mappings, self.feature_ann)
+    
     def get_feature_subset(self, feature_df):
         """Get a subset of data matrices corresponding to specified features and concatenate them into a pandas DataFrame.
 
