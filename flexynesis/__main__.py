@@ -2,17 +2,12 @@ from lightning import seed_everything
 # Set the seed for all the possible random number generators.
 seed_everything(42, workers=True)
 import lightning as pl
-import argparse
 from typing import NamedTuple
-import os
+import os, yaml, torch, time, random, warnings, argparse 
 os.environ["OMP_NUM_THREADS"] = "1"
-import yaml
-import torch
 import pandas as pd
 import flexynesis
 from flexynesis.models import *
-import warnings
-import time
 from lightning.pytorch.callbacks import EarlyStopping
 
 
@@ -226,10 +221,18 @@ def main():
     if args.finetuning_samples > 0:
         finetuneSampleN = args.finetuning_samples
         print("[INFO] Finetuning the model on ",finetuneSampleN,"test samples")
+        # split test dataset into finetuning and holdout datasets 
+        all_indices = range(len(test_dataset))
+        finetune_indices = random.sample(all_indices, finetuneSampleN)
+        holdout_indices = list(set(all_indices) - set(finetune_indices))
+        finetune_dataset = test_dataset.subset(finetune_indices)
+        holdout_dataset = test_dataset.subset(holdout_indices)
+        
+        # fine tune on the finetuning dataset; freeze the encoders 
         finetuner = flexynesis.FineTuner(model, 
-                                         test_dataset, 
-                                         subset_size=finetuneSampleN,
-                                         freeze_encoders=False)
+                                         finetune_dataset, 
+                                         freeze_encoders=True)
+        
         for i in range(finetuner.n_splits):
             trainer = pl.Trainer(max_epochs = 10, 
                                  #devices = 1, 
@@ -243,6 +246,8 @@ def main():
             
         # update the model to finetuned model 
         model = finetuner.model 
+        # update the test dataset to exclude finetuning samples
+        test_dataset = holdout_dataset 
     
     # evaluate predictions 
     print("[INFO] Computing model evaluation metrics")
