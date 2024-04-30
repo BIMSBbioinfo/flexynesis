@@ -215,7 +215,7 @@ class supervised_vae(pl.LightningModule):
         return total_loss
 
     
-    def training_step(self, train_batch, batch_idx):
+    def training_step(self, train_batch, batch_idx, log = True):
         dat, y_dict = train_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
@@ -244,10 +244,11 @@ class supervised_vae(pl.LightningModule):
         total_loss = self.compute_total_loss(losses)
         # add total loss for logging 
         losses['train_loss'] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
+        if log:
+            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
     
-    def validation_step(self, val_batch, batch_idx):
+    def validation_step(self, val_batch, batch_idx, log = True):
         dat, y_dict = val_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
@@ -274,7 +275,8 @@ class supervised_vae(pl.LightningModule):
             
         total_loss = sum(losses.values())
         losses['val_loss'] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
+        if log:
+            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
                                        
     def prepare_data(self):
