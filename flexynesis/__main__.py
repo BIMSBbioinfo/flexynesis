@@ -231,12 +231,12 @@ def main():
         # fine tune on the finetuning dataset; freeze the encoders 
         finetuner = flexynesis.FineTuner(model, 
                                          finetune_dataset, 
-                                         freeze_encoders=True)
+                                         freeze_encoders=False)
         
         for i in range(finetuner.n_splits):
             trainer = pl.Trainer(max_epochs = 10, 
-                                 #devices = 1, 
-                                 #accelerator = device_type,
+                                 devices = 1, 
+                                 accelerator = device_type,
                                  default_root_dir="./", 
                                  logger=False, 
                                  enable_checkpointing=False)
