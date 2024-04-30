@@ -14,6 +14,7 @@ from tqdm import tqdm
 from skopt import Optimizer
 from skopt.utils import use_named_args
 from .config import search_spaces
+from .data import TripletMultiOmicDataset
 
 import numpy as np
 
@@ -240,6 +241,11 @@ class FineTuner(pl.LightningModule):
             self.freeze_loss_weights()
         
         self.dataset = dataset
+        
+        if model.__class__.__name__ == 'MultiTripletNetwork':
+            # modify dataset structure to accommodate TripletNetworks
+            self.dataset = TripletMultiOmicDataset(dataset, model.main_var)
+        
         self.n_splits = n_splits
         self.subset_size = subset_size if subset_size is not None else len(dataset)
         self.learning_rate = model.config['lr']/10 # set to 1/10th of the learning rate used to train the model 
