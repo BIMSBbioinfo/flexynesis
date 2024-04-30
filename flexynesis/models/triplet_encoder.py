@@ -17,45 +17,6 @@ from ..data import TripletMultiOmicDataset
 from captum.attr import IntegratedGradients
 
 
-class MultiEmbeddingNetwork(nn.Module):
-    """
-    A neural network module that computes multiple embeddings and fuses them into a single representation.
-
-    Attributes:
-        embedding_networks (nn.ModuleList): A list of EmbeddingNetwork instances for each input feature.
-    """
-    def __init__(self, input_sizes, hidden_sizes, output_size):
-        """
-        Initialize the MultiEmbeddingNetwork with the given input sizes, hidden sizes, and output size.
-
-        Args:
-            input_sizes (list of int): A list of input sizes for each EmbeddingNetwork instance.
-            hidden_sizes (list of int): A list of hidden sizes for each EmbeddingNetwork instance.
-            output_size (int): The size of the fused embedding output.
-        """
-        super(MultiEmbeddingNetwork, self).__init__()
-        self.embedding_networks = nn.ModuleList([
-            EmbeddingNetwork(input_size, hidden_size, output_size)
-            for input_size, hidden_size in zip(input_sizes, hidden_sizes)
-        ])
-
-    def forward(self, x):
-        """
-        Compute the forward pass of the MultiEmbeddingNetwork and return the fused embedding.
-
-        Args:
-            x (dict): A dictionary containing the input tensors for each EmbeddingNetwork.
-                      Keys should correspond to the feature names and values to the input tensors.
-        
-        Returns:
-            torch.Tensor: The fused embedding tensor resulting from the concatenation of individual embeddings.
-        """
-        embeddings = [
-            embedding_network(x[key])
-            for key, embedding_network in zip(x.keys(), self.embedding_networks)
-        ]
-        fused_embedding = torch.cat((embeddings), dim=-1)
-        return fused_embedding
 
 class MultiTripletNetwork(pl.LightningModule):
     """
@@ -86,11 +47,6 @@ class MultiTripletNetwork(pl.LightningModule):
         self.variable_types = dataset.variable_types
         self.feature_importances = {}
         self.device_type = device_type
-
-        self.layers = list(dataset.dat.keys())
-        input_sizes = [len(dataset.features[self.layers[i]]) for i in range(len(self.layers))]
-        hidden_sizes = [int(self.config['hidden_dim_factor'] * input_sizes[i]) for i in range(len(self.layers))]
-        
         # The first target variable is the main variable that dictates the triplets 
         # it has to be a categorical variable 
         self.main_var = self.target_variables[0] 
@@ -106,10 +62,16 @@ class MultiTripletNetwork(pl.LightningModule):
                 self.log_vars[loss_type] = nn.Parameter(torch.zeros(1))
         
         self.prepare_data_loaders(dataset)
-        
-        # define embedding network for data matrices 
-        self.multi_embedding_network = MultiEmbeddingNetwork(input_sizes, hidden_sizes, config['latent_dim'])
 
+        self.layers = list(dataset.dat.keys())
+        self.input_dims = [len(dataset.features[self.layers[i]]) for i in range(len(self.layers))]
+
+        self.encoders = nn.ModuleList([
+            MLP(input_dim=self.input_dims[i],
+                # define hidden_dim size relative to the input_dim size
+                hidden_dim=int(self.input_dims[i] * self.config['hidden_dim_factor']),
+                output_dim=self.config['latent_dim']) for i in range(len(self.layers))])
+        
         # define supervisor heads for both target and batch variables 
         self.MLPs = nn.ModuleDict() # using ModuleDict to store multiple MLPs
         for var in self.variables:
@@ -120,23 +82,32 @@ class MultiTripletNetwork(pl.LightningModule):
             self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(self.layers),
                                  hidden_dim=self.config['supervisor_hidden_dim'],
                                  output_dim=num_class)
-                                                                              
+    
+    def concat_embeddings(self, dat):
+        embeddings_list = []
+        x_list = [dat[x] for x in dat.keys()]
+        # Process each input matrix with its corresponding Encoder
+        for i, x in enumerate(x_list):
+            embeddings_list.append(self.encoders[i](x))
+        embeddings_concat = torch.cat(embeddings_list, dim=1)
+        return embeddings_concat
+        
     def forward(self, anchor, positive, negative):
         """
         Compute the forward pass of the MultiTripletNetwork and return the embeddings and predictions.
 
         Args:
-            anchor (dict): A dictionary containing the anchor input tensors for each EmbeddingNetwork.
-            positive (dict): A dictionary containing the positive input tensors for each EmbeddingNetwork.
-            negative (dict): A dictionary containing the negative input tensors for each EmbeddingNetwork.
+            anchor (dict): A dictionary containing the anchor input tensors
+            positive (dict): A dictionary containing the positive input tensors
+            negative (dict): A dictionary containing the negative input tensors
 
         Returns:
             tuple: A tuple containing the anchor, positive, and negative embeddings and the predicted class labels.
         """
         # triplet encoding
-        anchor_embedding = self.multi_embedding_network(anchor)
-        positive_embedding = self.multi_embedding_network(positive)
-        negative_embedding = self.multi_embedding_network(negative)
+        anchor_embedding = self.concat_embeddings(anchor)
+        positive_embedding = self.concat_embeddings(positive)
+        negative_embedding = self.concat_embeddings(negative)
         
         #run the supervisor heads using the anchor embeddings as input
         outputs = {}
@@ -205,7 +176,7 @@ class MultiTripletNetwork(pl.LightningModule):
             total_loss = sum(losses.values())
         return total_loss
 
-    def training_step(self, train_batch, batch_idx):
+    def training_step(self, train_batch, batch_idx, log = True):
         anchor, positive, negative, y_dict = train_batch[0], train_batch[1], train_batch[2], train_batch[3]
         anchor_embedding, positive_embedding, negative_embedding, outputs = self.forward(anchor, positive, negative)
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
@@ -227,10 +198,11 @@ class MultiTripletNetwork(pl.LightningModule):
         total_loss = self.compute_total_loss(losses)
         # add total loss for logging 
         losses['train_loss'] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
+        if log:
+            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
     
-    def validation_step(self, val_batch, batch_idx):
+    def validation_step(self, val_batch, batch_idx, log = True):
         anchor, positive, negative, y_dict = val_batch[0], val_batch[1], val_batch[2], val_batch[3]
         anchor_embedding, positive_embedding, negative_embedding, outputs = self.forward(anchor, positive, negative)
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
@@ -251,7 +223,8 @@ class MultiTripletNetwork(pl.LightningModule):
         
         total_loss = sum(losses.values())
         losses['val_loss'] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
+        if log:
+            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
     
     def prepare_data_loaders(self, dataset):
@@ -286,7 +259,7 @@ class MultiTripletNetwork(pl.LightningModule):
         """
         self.eval()
         # get anchor embeddings 
-        z = pd.DataFrame(self.multi_embedding_network(dataset.dat).detach().numpy())
+        z = pd.DataFrame(self.concat_embeddings(dataset.dat).detach().numpy())
         z.columns = [''.join(['E', str(x)]) for x in z.columns]
         z.index = dataset.samples
         return z
@@ -303,7 +276,7 @@ class MultiTripletNetwork(pl.LightningModule):
         """
         self.eval()
         # get anchor embedding
-        anchor_embedding = self.multi_embedding_network(dataset.dat)
+        anchor_embedding = self.concat_embeddings(dataset.dat)
         # get MLP outputs for each var
         outputs = {}
         for var, mlp in self.MLPs.items():

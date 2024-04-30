@@ -6,7 +6,7 @@ from torch_geometric.nn import aggr, GCNConv, GATConv, SAGEConv, GraphConv, \
     global_mean_pool as gmeanp, global_max_pool as gmaxp, global_add_pool as gap
 
 
-__all__ = ["Encoder", "Decoder", "MLP", "EmbeddingNetwork", "GNNs", "cox_ph_loss"]
+__all__ = ["Encoder", "Decoder", "MLP", "GNNs", "cox_ph_loss"]
 
 
 class Encoder(nn.Module):
@@ -141,43 +141,6 @@ class MLP(nn.Module):
         x = self.relu(x)
         x = self.dropout(x)
         x = self.layer_out(x)
-        return x
-
-
-class EmbeddingNetwork(nn.Module):
-    """
-    A simple feed-forward neural network for generating embeddings.
-    
-    The EmbeddingNetwork class is a straightforward feed-forward network
-    that can be used to generate embeddings from input data.
-    """
-    def __init__(self, input_size, hidden_size, output_size):
-        """
-        Initializes the EmbeddingNetwork class with the given input size, hidden layer size, and output size.
-        
-        Args:
-            input_size (int): The size of the input data.
-            hidden_size (int): The size of the hidden layer.
-            output_size (int): The size of the output layer, representing the dimensionality of the embeddings.
-        """
-        super(EmbeddingNetwork, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_size, output_size)
-
-    def forward(self, x):
-        """
-        Performs a forward pass through the EmbeddingNetwork.
-        
-        Args:
-            x (torch.Tensor): The input data tensor.
-            
-        Returns:
-            x (torch.Tensor): The output tensor representing the generated embeddings.
-        """
-        x = self.fc1(x)
-        x = self.relu(x)
-        x = self.fc2(x)
         return x
     
 
