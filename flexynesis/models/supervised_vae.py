@@ -43,7 +43,7 @@ class supervised_vae(pl.LightningModule):
 
     """
     def __init__(self,  config, dataset, target_variables, batch_variables = None, 
-                 surv_event_var = None, surv_time_var = None, val_size = 0.2, use_loss_weighting = True,
+                 surv_event_var = None, surv_time_var = None, use_loss_weighting = True,
                  device_type = None):
         super(supervised_vae, self).__init__()
         self.config = config
@@ -57,9 +57,6 @@ class supervised_vae(pl.LightningModule):
             self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
         self.variables = self.target_variables + batch_variables if batch_variables else self.target_variables
-        self.val_size = val_size
-
-        self.dat_train, self.dat_val = self.prepare_data()
         self.feature_importances = {}
         
         # sometimes the model may have exploding/vanishing gradients leading to NaN values
@@ -279,19 +276,6 @@ class supervised_vae(pl.LightningModule):
             self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
                                        
-    def prepare_data(self):
-        lt = int(len(self.dataset)*(1-self.val_size))
-        lv = len(self.dataset)-lt
-        dat_train, dat_val = random_split(self.dataset, [lt, lv], 
-                                          generator=torch.Generator().manual_seed(42))
-        return dat_train, dat_val
-    
-    def train_dataloader(self):
-        return DataLoader(self.dat_train, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
-
-    def val_dataloader(self):
-        return DataLoader(self.dat_val, batch_size=int(self.config['batch_size']), num_workers=0, pin_memory=True, shuffle=False)
-        
     def transform(self, dataset):
         """
         Transform the input dataset to latent representation.

@@ -37,7 +37,7 @@ class HyperparameterTuning:
         config_name: Name of the configuration for tuning parameters.
         n_iter: Number of iterations for the tuning process.
         plot_losses: Boolean flag to plot losses during training.
-        val_size: Validation set size as a fraction of the dataset.
+        cv_splits: Number of cross-validation folds.
         use_loss_weighting: Flag to use loss weighting during training.
         early_stop_patience: Number of epochs to wait for improvement before stopping.
         device_type: Str (cpu, gpu)
@@ -50,10 +50,11 @@ class HyperparameterTuning:
     def __init__(self, dataset, model_class, config_name, target_variables, 
                  batch_variables = None, surv_event_var = None, surv_time_var = None, 
                  n_iter = 10, config_path = None, plot_losses = False,
-                 val_size = 0.2, use_loss_weighting = True, early_stop_patience = -1,
+                 cv_splits = 5, use_loss_weighting = True, early_stop_patience = -1,
                  device_type = None, gnn_conv_type = None, 
                  input_layers = None, output_layers = None):
-        self.dataset = dataset
+        self.dataset = dataset # dataset for model initiation
+        self.loader_dataset = dataset # dataset for defining data loaders (this can be model specific)
         self.model_class = model_class
         self.target_variables = target_variables
         self.device_type = device_type
@@ -65,7 +66,7 @@ class HyperparameterTuning:
         self.config_name = config_name
         self.n_iter = n_iter
         self.plot_losses = plot_losses # Whether to show live loss plots (useful in interactive mode)
-        self.val_size = val_size
+        self.n_splits = cv_splits
         self.progress_bar = RichProgressBar(
                                 theme = RichProgressBarTheme(
                                     progress_bar = 'green1',
@@ -76,6 +77,9 @@ class HyperparameterTuning:
         self.gnn_conv_type = gnn_conv_type
         self.input_layers = input_layers
         self.output_layers = output_layers 
+        
+        if self.model_class.__name__ == 'MultiTripletNetwork':
+            self.loader_dataset = TripletMultiOmicDataset(self.dataset, self.target_variables[0])
         
         # If config_path is provided, use it
         if config_path:
@@ -93,7 +97,7 @@ class HyperparameterTuning:
                 raise ValueError(f"'{self.config_name}' not found in the default config.")
 
     def get_batch_space(self, min_size = 16, max_size = 256):
-        m = int(np.log2(len(self.dataset) * (1 - self.val_size)))
+        m = int(np.log2(len(self.dataset) * 0.8))
         st = int(np.log2(min_size))
         end = int(np.log2(max_size))
         if m < end:
@@ -101,78 +105,117 @@ class HyperparameterTuning:
         s = Categorical([np.power(2, x) for x in range(st, end+1)], name = 'batch_size')
         return s
     
-    def objective(self, params, current_step, total_steps):
-        
-        # args common to all model classes 
-        model_args = {"config": params, "dataset": self.dataset, "target_variables": self.target_variables,
-               "batch_variables": self.batch_variables, "surv_event_var": self.surv_event_var, 
-               "surv_time_var": self.surv_time_var, "val_size": self.val_size, 
-                "use_loss_weighting": self.use_loss_weighting, "device_type": self.device_type}
-        if self.model_class.__name__ == 'DirectPredGCNN':
-            model_args["gnn_conv_type"] = self.gnn_conv_type
-        if self.model_class.__name__ == 'CrossModalPred': 
-            model_args["input_layers"] = self.input_layers
-            model_args["output_layers"] = self.output_layers
-            
-        model = self.model_class(**model_args)
-        print(params)
-        
+    def setup_trainer(self, params, current_step, total_steps, full_train = False):
+        # Configure callbacks and trainer for the current fold
         mycallbacks = [self.progress_bar]
-        # for interactive usage, only show loss plots 
         if self.plot_losses:
-            mycallbacks = [LiveLossPlot(hyperparams=params, current_step=current_step, total_steps=total_steps)]
-        
-        if self.early_stop_patience > 0:
-            mycallbacks.append(self.init_early_stopping())
-            
-        trainer = pl.Trainer(max_epochs=int(params['epochs']), log_every_n_steps=5, 
-                            callbacks = mycallbacks, default_root_dir="./", logger=False, 
-                             enable_checkpointing=False,
-                            devices=1, accelerator=self.device_type) 
-        
-        # Create a new Trainer instance for validation, ensuring single-device processing
-        validation_trainer = pl.Trainer(
-            logger=False, 
+            mycallbacks.append(LiveLossPlot(hyperparams=params, current_step=current_step, total_steps=total_steps))
+        # when training on a full dataset; no cross-validation or no validation splits; 
+        # we don't do early stopping
+        early_stop_callback = None
+        if self.early_stop_patience > 0 and full_train == False:
+            early_stop_callback = self.init_early_stopping()
+            mycallbacks.append(early_stop_callback)
+
+        trainer = pl.Trainer(
+            max_epochs=int(params['epochs']),
+            log_every_n_steps=5,
+            callbacks=mycallbacks,
+            default_root_dir="./",
+            logger=False,
             enable_checkpointing=False,
-            devices=1,  # make sure to a single device for validation
+            devices=1,
             accelerator=self.device_type
         )
+        return trainer, early_stop_callback
+    
+    def objective(self, params, current_step, total_steps, full_train = False):
+        # Unpack or construct specific model arguments
+        model_args = {
+            "config": params,
+            "dataset": self.dataset,
+            "target_variables": self.target_variables,
+            "batch_variables": self.batch_variables,
+            "surv_event_var": self.surv_event_var,
+            "surv_time_var": self.surv_time_var,
+            "use_loss_weighting": self.use_loss_weighting,
+            "device_type": self.device_type,
+        }
         
-        try:
-            # Train the model
-            trainer.fit(model)
-            # Validate the model
-            val_loss = validation_trainer.validate(model)[0]['val_loss']
-        except ValueError as e:
-            print(str(e))
-            val_loss = float('inf')  # or some other value indicating failure
-        return val_loss, model    
+        if self.model_class.__name__ == 'DirectPredGCNN':
+            model_args['gnn_conv_type'] = self.gnn_conv_type
+        if self.model_class.__name__ == 'CrossModalPred':
+            model_args['input_layers'] = self.input_layers
+            model_args['output_layers'] = self.output_layers
+
+        if full_train:
+            # Train on the full dataset
+            full_loader = DataLoader(self.loader_dataset, batch_size=int(params['batch_size']), shuffle=True)
+            model = self.model_class(**model_args)
+            trainer, _ = self.setup_trainer(params, current_step, total_steps, full_train = True)
+            trainer.fit(model, train_dataloaders=full_loader)
+            return model  # Return the trained model
+
+        else:
+            # Perform k-fold cross-validation
+            validation_losses = []
+            kf = KFold(n_splits=self.n_splits, shuffle=True)
+            i = 1 
+            epochs = [] # number of epochs per fold 
+            for train_index, val_index in kf.split(self.loader_dataset):
+                print(f"[INFO] training cross-validation fold {i}")
+                train_subset = torch.utils.data.Subset(self.loader_dataset, train_index)
+                val_subset = torch.utils.data.Subset(self.loader_dataset, val_index)
+                train_loader = DataLoader(train_subset, batch_size=int(params['batch_size']), shuffle=True)
+                val_loader = DataLoader(val_subset, batch_size=int(params['batch_size']))
+
+                model = self.model_class(**model_args)
+                trainer, early_stop_callback = self.setup_trainer(params, current_step, total_steps)
+                trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+                if early_stop_callback.stopped_epoch:
+                    epochs.append(early_stop_callback.stopped_epoch)
+                else:
+                    epochs.append(int(params['epochs']))
+                validation_result = trainer.validate(model, dataloaders=val_loader)
+                val_loss = validation_result[0]['val_loss']
+                validation_losses.append(val_loss)
+                i += 1
+
+            # Calculate average validation loss across all folds
+            avg_val_loss = np.mean(validation_losses)
+            avg_epochs = int(np.mean(epochs))
+            return avg_val_loss, avg_epochs
     
     def perform_tuning(self):
         opt = Optimizer(dimensions=self.space, n_initial_points=10, acq_func="gp_hedge", acq_optimizer="auto")
 
         best_loss = np.inf
         best_params = None
-        best_model = None 
-
+        best_epochs = 0
+        
         with tqdm(total=self.n_iter, desc='Tuning Progress') as pbar:
             for i in range(self.n_iter):
                 np.int = int
                 suggested_params_list = opt.ask()
                 suggested_params_dict = {param.name: value for param, value in zip(self.space, suggested_params_list)}
-                loss, model = self.objective(suggested_params_dict, current_step=i+1, total_steps=self.n_iter)
+                loss, avg_epochs = self.objective(suggested_params_dict, current_step=i+1, total_steps=self.n_iter)
+                print(f"[INFO] average 5-fold cross-validation loss {loss} for params: {suggested_params_dict}")
                 opt.tell(suggested_params_list, loss)
 
                 if loss < best_loss:
                     best_loss = loss
                     best_params = suggested_params_list
-                    best_model = model
+                    best_epochs = avg_epochs 
 
                 # Print result of each iteration
                 pbar.set_postfix({'Iteration': i+1, 'Best Loss': best_loss})
                 pbar.update(1)
         # convert best params to dict 
         best_params_dict = {param.name: value for param, value in zip(self.space, best_params)}
+        best_params_dict['epochs'] = avg_epochs
+        # build a final model based on best params
+        print(f"[INFO] Building a final model using best params: {best_params_dict}")
+        best_model = self.objective(best_params_dict, current_step=0, total_steps=1, full_train=True)        
         return best_model, best_params_dict
     
     def init_early_stopping(self):
@@ -180,7 +223,7 @@ class HyperparameterTuning:
         return EarlyStopping(
             monitor='val_loss',
             patience=self.early_stop_patience,
-            verbose=True,
+            verbose=False,
             mode='min'
         )
 
@@ -296,9 +339,9 @@ class FineTuner(pl.LightningModule):
                     )
                     trainer = pl.Trainer(max_epochs=self.max_epoch, devices=1, accelerator='auto', logger=False, enable_checkpointing=False, 
                                         enable_progress_bar = False, enable_model_summary=False, callbacks=[early_stopping])
-                    trainer.fit(self)
+                    trainer.fit(self, train_dataloaders=self.train_dataloader(), val_dataloaders=self.val_dataloader())
                     stopped_epoch = early_stopping.stopped_epoch
-                    val_loss = trainer.validate(self.model, verbose = False)
+                    val_loss = trainer.validate(self, dataloaders = self.val_dataloader(), verbose = False)
                     fold_losses.append(val_loss[0]['val_loss'])  # Adjust based on your validation output format
                     epochs.append(stopped_epoch)
                     #print(f"[INFO] Finetuning ... training fold: {fold}, learning rate: {lr}, val_loss: {val_loss}, freeze {config}")
