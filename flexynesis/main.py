@@ -53,7 +53,8 @@ class HyperparameterTuning:
                  cv_splits = 5, use_loss_weighting = True, early_stop_patience = -1,
                  device_type = None, gnn_conv_type = None, 
                  input_layers = None, output_layers = None):
-        self.dataset = dataset
+        self.dataset = dataset # dataset for model initiation
+        self.loader_dataset = dataset # dataset for defining data loaders (this can be model specific)
         self.model_class = model_class
         self.target_variables = target_variables
         self.device_type = device_type
@@ -76,6 +77,9 @@ class HyperparameterTuning:
         self.gnn_conv_type = gnn_conv_type
         self.input_layers = input_layers
         self.output_layers = output_layers 
+        
+        if self.model_class.__name__ == 'MultiTripletNetwork':
+            self.loader_dataset = TripletMultiOmicDataset(self.dataset, self.target_variables[0])
         
         # If config_path is provided, use it
         if config_path:
@@ -146,7 +150,7 @@ class HyperparameterTuning:
 
         if full_train:
             # Train on the full dataset
-            full_loader = DataLoader(self.dataset, batch_size=int(params['batch_size']), shuffle=True)
+            full_loader = DataLoader(self.loader_dataset, batch_size=int(params['batch_size']), shuffle=True)
             model = self.model_class(**model_args)
             trainer, _ = self.setup_trainer(params, current_step, total_steps, full_train = True)
             trainer.fit(model, train_dataloaders=full_loader)
@@ -158,10 +162,10 @@ class HyperparameterTuning:
             kf = KFold(n_splits=self.n_splits, shuffle=True)
             i = 1 
             epochs = [] # number of epochs per fold 
-            for train_index, val_index in kf.split(self.dataset):
+            for train_index, val_index in kf.split(self.loader_dataset):
                 print(f"[INFO] training cross-validation fold {i}")
-                train_subset = torch.utils.data.Subset(self.dataset, train_index)
-                val_subset = torch.utils.data.Subset(self.dataset, val_index)
+                train_subset = torch.utils.data.Subset(self.loader_dataset, train_index)
+                val_subset = torch.utils.data.Subset(self.loader_dataset, val_index)
                 train_loader = DataLoader(train_subset, batch_size=int(params['batch_size']), shuffle=True)
                 val_loader = DataLoader(val_subset, batch_size=int(params['batch_size']))
 
