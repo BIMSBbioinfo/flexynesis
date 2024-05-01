@@ -237,6 +237,10 @@ class FineTuner(pl.LightningModule):
                     {'encoders': False, 'supervisors': False}
                 ]
         
+        if model.__class__.__name__ == 'MultiTripletNetwork':
+            # modify dataset structure to accommodate TripletNetworks
+            self.dataset = TripletMultiOmicDataset(dataset, model.main_var)
+    
     def apply_freeze_config(self, config):
         # Freeze or unfreeze encoders
         for encoder in self.model.encoders:
@@ -265,7 +269,7 @@ class FineTuner(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         # Call the model's validation step without logging
-        val_loss = self.model.validation_step(batch, batch_idx, log=False)  # Assuming you can disable logging
+        val_loss = self.model.validation_step(batch, batch_idx, log=False)  
         self.log("val_loss", val_loss, on_epoch=True, prog_bar=True)
         return val_loss
     
