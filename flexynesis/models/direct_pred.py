@@ -129,7 +129,7 @@ class DirectPred(pl.LightningModule):
             total_loss = sum(losses.values())
         return total_loss
 
-    def training_step(self, train_batch, batch_idx):
+    def training_step(self, train_batch, batch_idx, log = True):
         """
         Perform a single training step.
         Args:
@@ -159,10 +159,11 @@ class DirectPred(pl.LightningModule):
         total_loss = self.compute_total_loss(losses)
         # add train loss for logging
         losses['train_loss'] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
+        if log:
+            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
     
-    def validation_step(self, val_batch, batch_idx):
+    def validation_step(self, val_batch, batch_idx, log = True):
         """
         Perform a single validation step.
 
@@ -191,7 +192,8 @@ class DirectPred(pl.LightningModule):
             losses[var] = loss
         total_loss = sum(losses.values())
         losses['val_loss'] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
+        if log:
+            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
 
     def prepare_data_loaders(self, dataset):

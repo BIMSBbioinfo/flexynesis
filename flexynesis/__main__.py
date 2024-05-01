@@ -1,17 +1,15 @@
 from lightning import seed_everything
 # Set the seed for all the possible random number generators.
 seed_everything(42, workers=True)
-import argparse
+import lightning as pl
 from typing import NamedTuple
-import os
+import os, yaml, torch, time, random, warnings, argparse 
 os.environ["OMP_NUM_THREADS"] = "1"
-import yaml
-import torch
 import pandas as pd
 import flexynesis
 from flexynesis.models import *
-import warnings
-import time
+from lightning.pytorch.callbacks import EarlyStopping
+
 
 def main():
     parser = argparse.ArgumentParser(description="Flexynesis - Your PyTorch model training interface", 
@@ -34,6 +32,7 @@ def main():
     parser.add_argument('--config_path', type=str, default=None, help='Optional path to an external hyperparameter configuration file in YAML format.')
     parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"], default = 'intermediate')
     parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int, default = 5)
+    parser.add_argument("--finetuning_samples", help="Number of samples from the test dataset to use for fine-tuning the model. Set to 0 to disable fine-tuning", type=int, default = 0)
     parser.add_argument("--correlation_threshold", help="Correlation threshold to drop highly redundant features (default: 0.8; set to 1 for no redundancy filtering)", type=float, default = 0.8)
     parser.add_argument("--restrict_to_features", help="Restrict the analyis to the list of features provided by the user (default: None)", type = str, default = None)
     parser.add_argument("--subsample", help="Downsample training set to randomly drawn N samples for training. Disabled when set to 0", type=int, default = 0)
@@ -218,6 +217,27 @@ def main():
     # do a hyperparameter search training multiple models and get the best_configuration 
     model, best_params = tuner.perform_tuning()
         
+    # if fine-tuning is enabled; fine tune the model on a portion of test samples 
+    if args.finetuning_samples > 0:
+        finetuneSampleN = args.finetuning_samples
+        print("[INFO] Finetuning the model on ",finetuneSampleN,"test samples")
+        # split test dataset into finetuning and holdout datasets 
+        all_indices = range(len(test_dataset))
+        finetune_indices = random.sample(all_indices, finetuneSampleN)
+        holdout_indices = list(set(all_indices) - set(finetune_indices))
+        finetune_dataset = test_dataset.subset(finetune_indices)
+        holdout_dataset = test_dataset.subset(holdout_indices)
+        
+        # fine tune on the finetuning dataset; freeze the encoders 
+        finetuner = flexynesis.FineTuner(model, 
+                                         finetune_dataset)
+        finetuner.run_experiments()
+            
+        # update the model to finetuned model 
+        model = finetuner.model 
+        # update the test dataset to exclude finetuning samples
+        test_dataset = holdout_dataset 
+    
     # evaluate predictions 
     print("[INFO] Computing model evaluation metrics")
     metrics_df = flexynesis.evaluate_wrapper(model.predict(test_dataset), test_dataset, 
