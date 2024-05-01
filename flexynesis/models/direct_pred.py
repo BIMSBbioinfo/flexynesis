@@ -16,7 +16,7 @@ from ..modules import *
 
 class DirectPred(pl.LightningModule):
     def __init__(self, config, dataset, target_variables, batch_variables = None, 
-                 surv_event_var = None, surv_time_var = None, val_size = 0.2, use_loss_weighting = True,
+                 surv_event_var = None, surv_time_var = None, use_loss_weighting = True,
                 device_type = None):
         super(DirectPred, self).__init__()
         self.config = config
@@ -29,13 +29,9 @@ class DirectPred(pl.LightningModule):
             self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
         self.variables = self.target_variables + batch_variables if batch_variables else self.target_variables
-        self.val_size = val_size
         self.feature_importances = {}
         self.use_loss_weighting = use_loss_weighting
         self.device_type = device_type
-        
-        # define data loaders
-        self.prepare_data_loaders(dataset)
         
         if self.use_loss_weighting:
             # Initialize log variance parameters for uncertainty weighting
@@ -196,24 +192,6 @@ class DirectPred(pl.LightningModule):
             self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
 
-    def prepare_data_loaders(self, dataset):
-        # Split the dataset
-        train_size = int(len(dataset) * (1 - self.val_size))
-        val_size = len(dataset) - train_size
-        dat_train, dat_val = random_split(dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42))
-        
-        # Create data loaders
-        self.train_loader = DataLoader(dat_train, batch_size=int(self.config['batch_size']), 
-                                       num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
-        self.val_loader = DataLoader(dat_val, batch_size=int(self.config['batch_size']), 
-                                     num_workers=0, pin_memory=True, shuffle=False)
-    
-    def train_dataloader(self):
-        return self.train_loader
-
-    def val_dataloader(self):
-        return self.val_loader
-    
     def predict(self, dataset):
         """
         Evaluate the DirectPred model on a given dataset.
