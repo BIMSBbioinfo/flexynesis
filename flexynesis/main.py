@@ -217,11 +217,12 @@ class HyperparameterTuning:
 from torch.utils.data import DataLoader, random_split
 from sklearn.model_selection import KFold
 import numpy as np
-import random, copy
+import random, copy, logging
 
 class FineTuner(pl.LightningModule):
-    def __init__(self, model, dataset, n_splits=5, batch_size=32, learning_rates=None, max_epoch = 50):
+    def __init__(self, model, dataset, n_splits=5, batch_size=32, learning_rates=None, max_epoch = 50, freeze_configs = None):
         super().__init__()
+        logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
         self.original_model = model 
         self.dataset = dataset  # Use the entire dataset
         self.n_splits = n_splits
@@ -230,6 +231,22 @@ class FineTuner(pl.LightningModule):
         self.learning_rates = learning_rates if learning_rates else [model.config['lr'], model.config['lr']/10, model.config['lr']/100]
         self.folds_data = list(self.kfold.split(np.arange(len(self.dataset))))            
         self.max_epoch = max_epoch
+        self.freeze_configs = freeze_configs if freeze_configs else [
+                    {'encoders': True, 'supervisors': False},
+                    {'encoders': False, 'supervisors': True},
+                    {'encoders': False, 'supervisors': False}
+                ]
+        
+    def apply_freeze_config(self, config):
+        # Freeze or unfreeze encoders
+        for encoder in self.model.encoders:
+            for param in encoder.parameters():
+                param.requires_grad = not config['encoders']
+                
+        # Freeze or unfreeze supervisors
+        for mlp in self.model.MLPs.values():
+            for param in mlp.parameters():
+                param.requires_grad = not config['supervisors']
 
     def train_dataloader(self):
         # Override to load data for the current fold
@@ -256,41 +273,48 @@ class FineTuner(pl.LightningModule):
         return torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=self.learning_rate)
 
     def run_experiments(self):
-        logging.getLogger("lightning.pytorch").setLevel(logging.INFO)
         val_loss_results = []
         for lr in self.learning_rates:
-            fold_losses = []
-            for fold in range(self.n_splits):
-                model_copy = copy.deepcopy(self.original_model)  # Deep copy the model for each fold
-                self.model = model_copy
-                self.current_fold = fold
-                self.learning_rate = lr
-                early_stopping = EarlyStopping(
-                    monitor='val_loss',
-                    patience=5,
-                    verbose=True,
-                    mode='min'
-                )
-                trainer = pl.Trainer(max_epochs=self.max_epoch, devices=1, accelerator='auto', logger=False, enable_checkpointing=False, 
-                                    enable_progress_bar = False, enable_model_summary=False, callbacks=[early_stopping])
-                trainer.fit(self)
-                val_loss = trainer.validate(self.model, verbose = False)
-                fold_losses.append(val_loss[0]['val_loss'])  # Adjust based on your validation output format
-                print(f"[INFO] Finetuning ... training fold: {fold}, learning rate: {lr}, val_loss: {val_loss}")
-            avg_val_loss = np.mean(fold_losses)
-            print(f"[INFO] average validation loss {avg_val_loss} for learning rate: {lr}")
-            val_loss_results.append({'learning_rate': lr, 'average_val_loss': avg_val_loss})
+            for config in self.freeze_configs:
+                fold_losses = []
+                epochs = [] # record how many epochs the training happened
+                for fold in range(self.n_splits):
+                    model_copy = copy.deepcopy(self.original_model)  # Deep copy the model for each fold
+                    self.model = model_copy
+                    self.apply_freeze_config(config) # try freezing different components 
+                    self.current_fold = fold
+                    self.learning_rate = lr
+                    early_stopping = EarlyStopping(
+                        monitor='val_loss',
+                        patience=3,
+                        verbose=False,
+                        mode='min'
+                    )
+                    trainer = pl.Trainer(max_epochs=self.max_epoch, devices=1, accelerator='auto', logger=False, enable_checkpointing=False, 
+                                        enable_progress_bar = False, enable_model_summary=False, callbacks=[early_stopping])
+                    trainer.fit(self)
+                    stopped_epoch = early_stopping.stopped_epoch
+                    val_loss = trainer.validate(self.model, verbose = False)
+                    fold_losses.append(val_loss[0]['val_loss'])  # Adjust based on your validation output format
+                    epochs.append(stopped_epoch)
+                    #print(f"[INFO] Finetuning ... training fold: {fold}, learning rate: {lr}, val_loss: {val_loss}, freeze {config}")
+                avg_val_loss = np.mean(fold_losses)
+                avg_epochs = int(np.mean(epochs))
+                print(f"[INFO] average 5-fold cross-validation loss {avg_val_loss} for learning rate: {lr} freeze {config}, average epochs {avg_epochs}")
+                val_loss_results.append({'learning_rate': lr, 'average_val_loss': avg_val_loss, 'freeze': config, 'epochs': avg_epochs})
 
         # Find the best configuration based on validation loss
         best_config = min(val_loss_results, key=lambda x: x['average_val_loss'])
-        print(f"Best learning rate: {best_config['learning_rate']} with average validation loss: {best_config['average_val_loss']}")
+        print(f"Best learning rate: {best_config['learning_rate']} and freeze {best_config['freeze']}", 
+              f"with average validation loss: {best_config['average_val_loss']} and average epochs: {best_config['epochs']}")
 
         # build a final model using the best setup on all samples
         final_model = copy.deepcopy(self.model)
         self.model = final_model
         self.learning_rate = best_config['learning_rate']
+        self.apply_freeze_config(best_config['freeze']) 
         dl = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True)
-        final_trainer = pl.Trainer(max_epochs=self.max_epoch, devices=1, accelerator='auto', logger=False, enable_checkpointing=False)
+        final_trainer = pl.Trainer(max_epochs=best_config['epochs'], devices=1, accelerator='auto', logger=False, enable_checkpointing=False)
         final_trainer.fit(self, train_dataloaders=dl)
         
         
