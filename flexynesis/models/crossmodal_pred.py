@@ -30,7 +30,7 @@ class CrossModalPred(pl.LightningModule):
     def __init__(self,  config, dataset, target_variables = None, batch_variables = None, 
                  surv_event_var = None, surv_time_var = None, 
                  input_layers = None, output_layers = None,
-                 val_size = 0.2, use_loss_weighting = True,
+                 use_loss_weighting = True,
                  device_type = None):
         super(CrossModalPred, self).__init__()
         self.config = config
@@ -48,10 +48,6 @@ class CrossModalPred(pl.LightningModule):
         
         self.input_layers = input_layers if input_layers else list(dataset.dat.keys()) 
         self.output_layers = output_layers if output_layers else list(dataset.dat.keys())
-        
-        self.val_size = val_size
-
-        self.prepare_data_loaders(dataset)
         
         self.feature_importances = {}
         
@@ -209,7 +205,7 @@ class CrossModalPred(pl.LightningModule):
         return total_loss
 
     
-    def training_step(self, train_batch, batch_idx):
+    def training_step(self, train_batch, batch_idx, log = True):
         dat, y_dict = train_batch
 
         # get input omics modalities and encode them; decode them to output layers 
@@ -239,10 +235,11 @@ class CrossModalPred(pl.LightningModule):
         total_loss = self.compute_total_loss(losses)
         # add total loss for logging 
         losses['train_loss'] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
+        if log:
+            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
     
-    def validation_step(self, val_batch, batch_idx):
+    def validation_step(self, val_batch, batch_idx, log = True):
         dat, y_dict = val_batch
 
         # get input omics modalities and encode them
@@ -270,26 +267,10 @@ class CrossModalPred(pl.LightningModule):
             
         total_loss = sum(losses.values())
         losses['val_loss'] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
+        if log:
+            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True)
         return total_loss
-                                       
-    def prepare_data_loaders(self, dataset):
-        
-        lt = int(len(dataset)*(1-self.val_size))
-        lv = len(dataset)-lt
-        dat_train, dat_val = random_split(dataset, [lt, lv], 
-                                          generator=torch.Generator().manual_seed(42))
-        self.train_loader = DataLoader(dat_train, batch_size=int(self.config['batch_size']), 
-                                       num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
-        self.val_loader = DataLoader(dat_val, batch_size=int(self.config['batch_size']), 
-                                     num_workers=0, pin_memory=True, shuffle=False)
-    
-    def train_dataloader(self):
-        return self.train_loader
-
-    def val_dataloader(self):
-        return self.val_loader 
-        
+                                               
     def transform(self, dataset):
         """
         Transform the input dataset to latent representation.
