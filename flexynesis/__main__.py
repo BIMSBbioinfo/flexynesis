@@ -230,19 +230,8 @@ def main():
         
         # fine tune on the finetuning dataset; freeze the encoders 
         finetuner = flexynesis.FineTuner(model, 
-                                         finetune_dataset, 
-                                         freeze_encoders=False)
-        
-        for i in range(finetuner.n_splits):
-            trainer = pl.Trainer(max_epochs = 10, 
-                                 devices = 1, 
-                                 accelerator = device_type,
-                                 default_root_dir="./", 
-                                 logger=False, 
-                                 enable_checkpointing=False)
-            finetuner.current_fold = i
-            print(f"[INFO] Finetuning ... training fold {i+1}")
-            trainer.fit(finetuner)
+                                         finetune_dataset)
+        finetuner.run_experiments()
             
         # update the model to finetuned model 
         model = finetuner.model 
