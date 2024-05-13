@@ -53,6 +53,8 @@ def main():
     parser.add_argument("--prefix", help="Job prefix to use for output files", type=str, default = 'job')
     parser.add_argument("--log_transform", help="whether to apply log-transformation to input data matrices", type=str, choices=['True', 'False'], default = 'False')
     parser.add_argument("--early_stop_patience", help="How many epochs to wait when no improvements in validation loss is observed (default: 10; set to -1 to disable early stopping)", type=int, default = 10)
+    parser.add_argument("--use_cv", action="store_true", 
+                        help="(Optional) If set, the a 5-fold cross-validation training will be done. Otherwise, a single trainign on 80% of the dataset is done.")
     parser.add_argument("--use_loss_weighting", help="whether to apply loss-balancing using uncertainty weights method", type=str, choices=['True', 'False'], default = 'True')
     parser.add_argument("--evaluate_baseline_performance", help="whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset", type=str, choices=['True', 'False'], default = 'True')
     parser.add_argument("--threads", help="(Optional) How many threads to use when using CPU (default: 4)", type=int, default = 4)
@@ -208,6 +210,7 @@ def main():
                                             config_path = args.config_path,
                                             n_iter=int(args.hpo_iter),
                                             use_loss_weighting = args.use_loss_weighting == 'True',
+                                            use_cv = args.use_cv, 
                                             early_stop_patience = int(args.early_stop_patience), 
                                             device_type = device_type,
                                             gnn_conv_type = gnn_conv_type,
