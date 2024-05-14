@@ -25,7 +25,6 @@ class DirectPredGCNN(pl.LightningModule):
         batch_variables=None,
         surv_event_var=None,
         surv_time_var=None,
-        val_size=0.2,
         use_loss_weighting=True,
         device_type = None,
         gnn_conv_type = None 
@@ -43,16 +42,13 @@ class DirectPredGCNN(pl.LightningModule):
         self.variables = self.target_variables + self.batch_variables if self.batch_variables else self.target_variables
         self.variable_types = dataset.variable_types 
         self.ann = dataset.ann 
-        self.val_size = val_size
         
         self.feature_importances = {}
         self.use_loss_weighting = use_loss_weighting
 
         self.device_type = device_type 
         self.gnn_conv_type = gnn_conv_type
-        
-        self.prepare_data_loaders(dataset)
-        
+                
         if self.use_loss_weighting:
             # Initialize log variance parameters for uncertainty weighting
             self.log_vars = nn.ParameterDict()
@@ -192,23 +188,6 @@ class DirectPredGCNN(pl.LightningModule):
         self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True, batch_size=int(x_list[0].batch_size))
         return total_loss
 
-    def prepare_data_loaders(self, dataset):
-        # Split the dataset
-        train_size = int(len(dataset) * (1 - self.val_size))
-        val_size = len(dataset) - train_size
-        dat_train, dat_val = random_split(dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42))
-
-        # Create data loaders
-        self.train_loader = DataLoader(dat_train, batch_size=int(self.config['batch_size']), 
-                                       num_workers=0, pin_memory=True, shuffle=True, drop_last=True)
-        self.val_loader = DataLoader(dat_val, batch_size=int(self.config['batch_size']), 
-                                     num_workers=0, pin_memory=True, shuffle=False)
-
-    def train_dataloader(self):
-        return self.train_loader
-
-    def val_dataloader(self):
-        return self.val_loader
 
     def predict(self, dataset):
         self.eval()

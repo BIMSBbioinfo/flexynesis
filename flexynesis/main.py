@@ -3,6 +3,7 @@ from lightning import seed_everything
 seed_everything(42, workers=True)
 import torch 
 from torch.utils.data import DataLoader, random_split
+import torch_geometric
 
 import lightning as pl
 from lightning.pytorch.callbacks import RichProgressBar
@@ -81,9 +82,14 @@ class HyperparameterTuning:
         self.input_layers = input_layers
         self.output_layers = output_layers 
         
+        self.DataLoader = DataLoader # use torch data loader by default
+        
         if self.model_class.__name__ == 'MultiTripletNetwork':
             self.loader_dataset = TripletMultiOmicDataset(self.dataset, self.target_variables[0])
-        
+        if self.model_class.__name__ == 'DirectPredGCNN':
+             # use torch_geometric data loader for GCNN class
+            self.DataLoader = torch_geometric.loader.DataLoader
+
         # If config_path is provided, use it
         if config_path:
             external_config = self.load_and_convert_config(config_path)
@@ -153,7 +159,7 @@ class HyperparameterTuning:
 
         if full_train:
             # Train on the full dataset
-            full_loader = DataLoader(self.loader_dataset, batch_size=int(params['batch_size']), 
+            full_loader = self.DataLoader(self.loader_dataset, batch_size=int(params['batch_size']), 
                                      shuffle=True, pin_memory=True, drop_last=True)
             model = self.model_class(**model_args)
             trainer, _ = self.setup_trainer(params, current_step, total_steps, full_train = True)
@@ -180,8 +186,8 @@ class HyperparameterTuning:
                 print(f"[INFO] {'training cross-validation fold' if self.use_cv else 'training validation split'} {i}")
                 train_subset = torch.utils.data.Subset(self.loader_dataset, train_index)
                 val_subset = torch.utils.data.Subset(self.loader_dataset, val_index)
-                train_loader = DataLoader(train_subset, batch_size=int(params['batch_size']), pin_memory=True, shuffle=True, drop_last=True)
-                val_loader = DataLoader(val_subset, batch_size=int(params['batch_size']), pin_memory=True, shuffle=False)
+                train_loader = self.DataLoader(train_subset, batch_size=int(params['batch_size']), pin_memory=True, shuffle=True, drop_last=True)
+                val_loader = self.DataLoader(val_subset, batch_size=int(params['batch_size']), pin_memory=True, shuffle=False)
 
                 model = self.model_class(**model_args)
                 trainer, early_stop_callback = self.setup_trainer(params, current_step, total_steps)
