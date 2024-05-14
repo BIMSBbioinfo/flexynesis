@@ -38,6 +38,6 @@ search_spaces = {
         Real(0.0001, 0.01, prior="log-uniform", name="lr"),
         Categorical(epochs, name="epochs"),
         Integer(16, 128, name='supervisor_hidden_dim'),
-        Categorical(['relu', 'sigmoid', 'tanh', 'gelu'], name="activation")
+        Categorical(['relu'], name="activation")
     ]
 }
