@@ -191,7 +191,7 @@ class CNN(nn.Module):
     
 class GNNs(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, 
-                 conv='GC', act = None):
+                 conv='GC', act = 'relu'):
         super().__init__()
         
         act_options = {
@@ -218,16 +218,16 @@ class GNNs(nn.Module):
         
         self.conv = conv_options[conv]
         self.layer_1 = self.conv(input_dim, hidden_dim)
-        self.relu_1 = nn.ReLU()
+        self.act_1 = self.activation
         self.layer_2 = self.conv(hidden_dim, output_dim)
-        self.relu_2 = nn.ReLU()
+        self.act_2 = self.activation
         self.aggregation = aggr.SumAggregation()
 
     def forward(self, x, edge_index, batch):
         x = self.layer_1(x, edge_index)
-        x = self.relu_1(x)
+        x = self.act_1(x)
         x = self.layer_2(x, edge_index)
-        x = self.relu_2(x)
+        x = self.act_2(x)
         x = self.aggregation(x, batch)
         return x
     
