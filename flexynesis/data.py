@@ -789,12 +789,13 @@ class MultiOmicPYGDataset(PYGDataset):
 
     def get(self, idx):
         data = torch.load(os.path.join(self.processed_dir, f"data_{idx}.pt"))
-        return data, idx
+        # return data, idx
+        return data
 
     def get_dataset_stats(self):
         stats = {}
-        stats |= {"feature_count in: " + k: v.x.size(0) for k, v in self[0][0][0].items()}
-        stats |= {"n_edges in: " + k: v.edge_index.size(1) for k, v in self[0][0][0].items()}
+        stats |= {"feature_count in: " + k: v.x.size(0) for k, v in self[0][0].items()}
+        stats |= {"n_edges in: " + k: v.edge_index.size(1) for k, v in self[0][0].items()}
         stats["sample_count"] = len(self)
         return stats
 
