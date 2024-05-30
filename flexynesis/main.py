@@ -208,17 +208,20 @@ class HyperparameterTuning:
             avg_epochs = int(np.mean(epochs))
             return avg_val_loss, avg_epochs, model 
     
-    def perform_tuning(self):
+    def perform_tuning(self, hpo_patience = 0):
         opt = Optimizer(dimensions=self.space, n_initial_points=10, acq_func="gp_hedge", acq_optimizer="auto")
 
         best_loss = np.inf
         best_params = None
         best_epochs = 0
         best_model = None
-        
+
+        # keep track of the streak of HPO iterations without improvement 
+        no_improvement_count = 0
+
         with tqdm(total=self.n_iter, desc='Tuning Progress') as pbar:
             for i in range(self.n_iter):
-                np.int = int
+                np.int = int  # Ensure int type is correctly handled
                 suggested_params_list = opt.ask()
                 suggested_params_dict = {param.name: value for param, value in zip(self.space, suggested_params_list)}
                 loss, avg_epochs, model = self.objective(suggested_params_dict, current_step=i+1, total_steps=self.n_iter)
@@ -229,21 +232,31 @@ class HyperparameterTuning:
                 if loss < best_loss:
                     best_loss = loss
                     best_params = suggested_params_list
-                    best_epochs = avg_epochs 
+                    best_epochs = avg_epochs
                     best_model = model
+                    no_improvement_count = 0  # Reset the no improvement counter
+                else:
+                    no_improvement_count += 1  # Increment the no improvement counter
 
                 # Print result of each iteration
                 pbar.set_postfix({'Iteration': i+1, 'Best Loss': best_loss})
                 pbar.update(1)
-        # convert best params to dict 
+
+                # Early stopping condition
+                if no_improvement_count >= hpo_patience & hpo_patience > 0:
+                    print(f"No improvement in best loss for {hpo_patience} iterations, stopping hyperparameter optimisation early.")
+                    break  # Break out of the loop
+
+        # Convert best parameters from list to dictionary and include epochs
         best_params_dict = {param.name: value for param, value in zip(self.space, best_params)}
-        best_params_dict['epochs'] = avg_epochs
+        best_params_dict['epochs'] = best_epochs
+
         if self.use_cv:
-            # build a final model based on best params if a cross-validation 
+            # Build a final model based on best parameters if using cross-validation
             print(f"[INFO] Building a final model using best params: {best_params_dict}")
-            best_model = self.objective(best_params_dict, current_step=0, total_steps=1, full_train=True)        
-        return best_model, best_params_dict
-    
+            best_model = self.objective(best_params_dict, current_step=0, total_steps=1, full_train=True)
+
+        return best_model, best_params_dict    
     def init_early_stopping(self):
         """Initialize the early stopping callback."""
         return EarlyStopping(
