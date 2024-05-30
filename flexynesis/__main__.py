@@ -33,11 +33,12 @@ def main():
     parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"], default = 'intermediate')
     parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int, default = 5)
     parser.add_argument("--finetuning_samples", help="Number of samples from the test dataset to use for fine-tuning the model. Set to 0 to disable fine-tuning", type=int, default = 0)
+    parser.add_argument("--variance_threshold", help="Variance threshold (as percentile) to drop low variance features (default: 1; set to 0 for no variance filtering)", type=float, default = 1)
     parser.add_argument("--correlation_threshold", help="Correlation threshold to drop highly redundant features (default: 0.8; set to 1 for no redundancy filtering)", type=float, default = 0.8)
     parser.add_argument("--restrict_to_features", help="Restrict the analyis to the list of features provided by the user (default: None)", type = str, default = None)
     parser.add_argument("--subsample", help="Downsample training set to randomly drawn N samples for training. Disabled when set to 0", type=int, default = 0)
     parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int, default = 500)
-    parser.add_argument("--features_top_percentile", help="Top percentile features to retain after feature selection", type=float, default = 20)
+    parser.add_argument("--features_top_percentile", help="Top percentile features (among the features remaining after variance filtering and data cleanup to retain after feature selection", type=float, default = 20)
     parser.add_argument("--data_types", help="(Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str, required = True)
     parser.add_argument("--input_layers", 
                         help="If model_class is set to CrossModalPred, choose which data types to use as input/encoded layers"
@@ -182,6 +183,7 @@ def main():
                                             data_types = datatypes,
                                             concatenate = concatenate, 
                                             log_transform = args.log_transform == 'True',
+                                            variance_threshold = args.variance_threshold/100,  
                                             correlation_threshold = args.correlation_threshold,
                                             restrict_to_features = args.restrict_to_features,
                                             min_features= args.features_min, 

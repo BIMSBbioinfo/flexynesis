@@ -97,7 +97,7 @@ class DataImporter:
     """
 
     def __init__(self, path, data_types, processed_dir="processed", log_transform = False, concatenate = False, restrict_to_features = None, min_features=None,
-                 top_percentile=20, correlation_threshold = 0.9, variance_threshold=1e-5, na_threshold=0.1,
+                 top_percentile=20, correlation_threshold = 0.9, variance_threshold=0.01, na_threshold=0.1,
                  graph=None, string_organism=9606, string_node_name="gene_name", transform=None, downsample=0):
         self.path = path
         self.data_types = data_types
@@ -350,9 +350,9 @@ class DataImporter:
             
             # Filter based on both variance and NA percentage thresholds
             # Identify features that meet both criteria
-            df = df.loc[(feature_variances > self.variance_threshold) & (na_percentages < self.na_threshold)]
+            df = df.loc[(feature_variances > feature_variances.quantile(self.variance_threshold)) & (na_percentages < self.na_threshold)]
             # set selected features to True
-            log_df['selected'] = (log_df['variance'] > self.variance_threshold) & (log_df['na_percent'] < self.na_threshold)
+            log_df['selected'] = (log_df['variance'] > feature_variances.quantile(self.variance_threshold)) & (log_df['na_percent'] < self.na_threshold)
             feature_logs[key] = log_df
             
             # Step 3: Fill NA values with the median of the feature
