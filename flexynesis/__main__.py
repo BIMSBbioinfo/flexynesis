@@ -242,25 +242,26 @@ def main():
         # update the test dataset to exclude finetuning samples
         test_dataset = holdout_dataset 
     
-    # evaluate predictions 
-    print("[INFO] Computing model evaluation metrics")
-    metrics_df = flexynesis.evaluate_wrapper(model.predict(test_dataset), test_dataset, 
-                                             surv_event_var=model.surv_event_var, 
-                                             surv_time_var=model.surv_time_var)
-    metrics_df.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
-    
-    # print known/predicted labels 
-    predicted_labels = pd.concat([flexynesis.get_predicted_labels(model.predict(train_dataset), train_dataset, 'train'),
-                                  flexynesis.get_predicted_labels(model.predict(test_dataset), test_dataset, 'test')], 
-                                ignore_index=True)
-    predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
-    # compute feature importance values
-    print("[INFO] Computing variable importance scores")
-    for var in model.target_variables:
-        model.compute_feature_importance(train_dataset, var, steps = 50)
-    df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], 
-                       ignore_index = True)
-    df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
+    # evaluate predictions;  (if any supervised learning happened)
+    if any([args.target_variables, args.surv_event_var, args.batch_variables]):
+        print("[INFO] Computing model evaluation metrics sdfadf")
+        metrics_df = flexynesis.evaluate_wrapper(model.predict(test_dataset), test_dataset, 
+                                                 surv_event_var=model.surv_event_var, 
+                                                 surv_time_var=model.surv_time_var)
+        metrics_df.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
+
+        # print known/predicted labels 
+        predicted_labels = pd.concat([flexynesis.get_predicted_labels(model.predict(train_dataset), train_dataset, 'train'),
+                                      flexynesis.get_predicted_labels(model.predict(test_dataset), test_dataset, 'test')], 
+                                    ignore_index=True)
+        predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
+        # compute feature importance values
+        print("[INFO] Computing variable importance scores")
+        for var in model.target_variables:
+            model.compute_feature_importance(train_dataset, var, steps = 50)
+        df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], 
+                           ignore_index = True)
+        df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
 
     # get sample embeddings and save 
     print("[INFO] Extracting sample embeddings")
