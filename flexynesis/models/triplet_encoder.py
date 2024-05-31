@@ -390,8 +390,10 @@ class MultiTripletNetwork(pl.LightningModule):
                 features = dataset.features[layers[j]]
                 # Ensure tensors are already on CPU before converting to numpy
                 importances = imp[i][j][0].detach().numpy() # 0 => extract importances only for the anchor
+                target_class_label = dataset.label_mappings[target_var].get(i) if target_var in dataset.label_mappings else ''
                 df_list.append(pd.DataFrame({'target_variable': target_var, 
                                              'target_class': i, 
+                                             'target_class_label': target_class_label,
                                              'layer': layers[j], 
                                              'name': features, 
                                              'importance': importances}))    

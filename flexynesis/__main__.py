@@ -246,7 +246,7 @@ def main():
     
     # evaluate predictions;  (if any supervised learning happened)
     if any([args.target_variables, args.surv_event_var, args.batch_variables]):
-        print("[INFO] Computing model evaluation metrics sdfadf")
+        print("[INFO] Computing model evaluation metrics")
         metrics_df = flexynesis.evaluate_wrapper(model.predict(test_dataset), test_dataset, 
                                                  surv_event_var=model.surv_event_var, 
                                                  surv_time_var=model.surv_time_var)

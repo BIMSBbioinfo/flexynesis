@@ -468,9 +468,12 @@ class supervised_vae(pl.LightningModule):
             for j in range(len(layers)):
                 features = self.dataset.features[layers[j]]
                 importances = imp[i][j][0].detach().numpy()
+                target_class_label = dataset.label_mappings[target_var].get(i) if target_var in dataset.label_mappings else ''
                 df_list.append(pd.DataFrame({'target_variable': target_var, 
-                                             'target_class': i, 'layer': layers[j], 
-                                             'name': features, 'importance': importances}))    
+                                             'target_class': i, 
+                                             'target_class_label': target_class_label,
+                                             'layer': layers[j], 
+                                             'name': features, 'importance': importances}))  
         df_imp = pd.concat(df_list, ignore_index = True)
         
         # save scores in model
