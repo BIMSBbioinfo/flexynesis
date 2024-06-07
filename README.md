@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img alt="logo" src="img/logo.png" width="50%" height="50%">
+  <img alt="logo" src="https://github.com/BIMSBbioinfo/flexynesis/raw/main/img/logo.png" width="50%" height="50%">
 </p>
 
 ![tests](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tests.yml/badge.svg)
@@ -19,7 +19,7 @@ patient-derived xenografts), cancer subtype prediction, or any other clinically 
 that can be formulated as a regression or classification problem. 
 
 <p align="center">
-  <img alt="workflow" src="img/graphical_abstract.jpg">
+  <img alt="workflow" src="https://github.com/BIMSBbioinfo/flexynesis/raw/main/img/graphical_abstract.jpg">
 </p>
 
 # Documentation
