@@ -1,6 +1,4 @@
 from lightning import seed_everything
-# Set the seed for all the possible random number generators.
-seed_everything(42, workers=True)
 import pandas as pd
 import numpy as np
 import torch
