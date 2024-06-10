@@ -4,16 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flexynesis"
-version = "0.1.3"
+version = "0.1.4"
 authors = [
     {name = "Bora Uyar", email = "bora.uyar@mdc-berlin.de"},
     {name = "Taras Savchyn", email = "Taras.Savchyn@mdc-berlin.de"},
     {name = "Ricardo Wurmus", email = "Ricardo.Wurmus@mdc-berlin.de" },
     {name = "Ahmet Sarigun", email = "Ahmet.Sariguen@mdc-berlin.de"}
 ]
-description = """A deep-learning based multi-omics bulk sequencing
-    data integration suite with a focus on (pre-)clinical endpoint
-    prediction."""
+description = "A deep-learning based multi-omics bulk sequencing data integration suite with a focus on (pre-)clinical endpoint prediction."
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 classifiers=[
