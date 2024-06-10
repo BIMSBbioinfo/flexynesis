@@ -15,6 +15,7 @@ from umap import UMAP
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.cm
 from sklearn.decomposition import PCA
 from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report
 from sklearn.metrics import mean_squared_error
