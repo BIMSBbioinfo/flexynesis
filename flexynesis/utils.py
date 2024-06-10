@@ -15,7 +15,6 @@ from umap import UMAP
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib
-import matplotlib.cm
 from sklearn.decomposition import PCA
 from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report
 from sklearn.metrics import mean_squared_error
@@ -91,7 +90,7 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
 
     if color_type == 'categorical':
         unique_labels = sorted(set(labels))
-        colormap = matplotlib.cm.get_cmap("tab20", len(unique_labels))
+        colormap = plt.get_cmap("tab20", len(unique_labels))
         
         for i, label in enumerate(unique_labels):
             plt.scatter(
