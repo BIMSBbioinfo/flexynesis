@@ -7,7 +7,6 @@
 ![License: CC BY-NC-ND 4.0](https://img.shields.io/badge/License-CC_BY--NC--ND_4.0-lightgrey.svg)
 ![benchmarks](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/benchmarks.yml/badge.svg)
 ![tutorials](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tutorials.yml/badge.svg)
-![tests](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tests.yml/badge.svg)
 
 # flexynesis
 A deep-learning based multi-omics bulk sequencing data integration suite with a focus on (pre-)clinical 
@@ -226,20 +225,6 @@ The output from papermill can be converted to an html file as follows:
 ```
 jupyter nbconvert --to html brca_subtypes.ipynb 
 ```
-
-
-# Testing
-
-Run unit tests
-```python
-pytest -vvv tests/unit
-```
-
-This will run all the unit tests in the tests directory.
-
-# Contributing
-If you would like to contribute to the project, please open an issue or a pull request on the GitHub repository.
-
 
 # Documentation
 
