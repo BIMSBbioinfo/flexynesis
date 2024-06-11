@@ -60,6 +60,8 @@ def main():
     parser.add_argument("--threads", help="(Optional) How many threads to use when using CPU (default is 4)", type=int, default = 4)
     parser.add_argument("--use_gpu", action="store_true", 
                         help="(Optional) If set, the system will attempt to use CUDA/GPU if available.")
+    parser.add_argument("--disable_marker_finding", action="store_true", 
+                        help="(Optional) If set, marker discovery after model training is disabled.")
     # DirectPredGCNN args.
     parser.add_argument("--graph", help="Graph to use, name of the database or path to the edge list on the disk.", type=str,  default="STRING")
     parser.add_argument("--string_organism", help="STRING DB organism id.", type=int, default=9606)
@@ -255,13 +257,15 @@ def main():
                                       flexynesis.get_predicted_labels(model.predict(test_dataset), test_dataset, 'test')], 
                                     ignore_index=True)
         predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
-        # compute feature importance values
-        print("[INFO] Computing variable importance scores")
-        for var in model.target_variables:
-            model.compute_feature_importance(train_dataset, var, steps = 50)
-        df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], 
-                           ignore_index = True)
-        df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
+        
+        if not args.disable_marker_finding: # unless marker discovery is disabled
+            # compute feature importance values
+            print("[INFO] Computing variable importance scores")
+            for var in model.target_variables:
+                model.compute_feature_importance(train_dataset, var, steps = 50)
+            df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], 
+                               ignore_index = True)
+            df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
 
     # get sample embeddings and save 
     print("[INFO] Extracting sample embeddings")
