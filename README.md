@@ -24,7 +24,7 @@ that can be formulated as a regression or classification problem.
 
 # Documentation
 
-A detailed documentation of classes and functions in this repository can be found [here](https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/docs/flexynesis/index.html).
+A detailed documentation of classes and functions in this repository can be found [here](https://flexynesis.readthedocs.io/).
 
 # Benchmarks
 
