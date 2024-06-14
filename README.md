@@ -228,8 +228,11 @@ jupyter nbconvert --to html brca_subtypes.ipynb
 
 # Documentation
 
+Documentation generated using [mkdocs](https://mkdocstrings.github.io/) 
+
 ```
-pdoc --html --output-dir docs --force flexynesis 
+pip install mkdocstrings
+mkdocs build 
 ```
 
 
