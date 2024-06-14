@@ -24,7 +24,7 @@ that can be formulated as a regression or classification problem.
 
 # Documentation
 
-A detailed documentation of classes and functions in this repository can be found [here](https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/docs/flexynesis/index.html).
+A detailed documentation of classes and functions in this repository can be found [here](https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/site/index.html).
 
 # Benchmarks
 
@@ -38,14 +38,12 @@ The code for the benchmarking pipeline is at: https://github.com/BIMSBbioinfo/fl
 ## Install 
 
 ```
-git clone https://github.com/BIMSBbioinfo/flexynesis.git
-cd flexynesis
 # create an environment with python 3.11 
-conda create --name flexynesisenv --file spec-file.txt
-      # => alternatively: conda create --name flexynesisenv python==3.11
-# activate environment and install dependencies
-conda activate flexynesisenv 
-pip install -e .
+conda create --name flexynesisenv python==3.11
+conda activate flexynesisenv
+# install latest version from pypi (https://pypi.org/project/flexynesis)
+# make sure to use python3.11*
+python -m pip install flexynesis --upgrade  
 ```
 
 ## Options
@@ -228,8 +226,11 @@ jupyter nbconvert --to html brca_subtypes.ipynb
 
 # Documentation
 
+Documentation generated using [mkdocs](https://mkdocstrings.github.io/) 
+
 ```
-pdoc --html --output-dir docs --force flexynesis 
+pip install mkdocstrings
+mkdocs build 
 ```
 
 
