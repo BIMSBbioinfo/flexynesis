@@ -1,6 +1,6 @@
 site_name: Flexynesis Documentation
 theme:
-  name: mkdocs
+  name: readthedocs
 
 
 nav:
