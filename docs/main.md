@@ -1,3 +1,3 @@
-# Main
+# Training
 
 ::: flexynesis.main

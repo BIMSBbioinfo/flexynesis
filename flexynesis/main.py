@@ -40,10 +40,14 @@ class HyperparameterTuning:
         use_loss_weighting: Flag to use loss weighting during training.
         early_stop_patience: Number of epochs to wait for improvement before stopping.
         device_type: Str (cpu, gpu)
+    
     Methods:
         objective(params, current_step, total_steps): Evaluates a set of parameters.
+    
         perform_tuning(): Executes the hyperparameter tuning process.
+        
         init_early_stopping(): Initializes early stopping mechanism.
+        
         load_and_convert_config(config_path): Loads and converts a configuration file.
     """
     def __init__(self, dataset, model_class, config_name, target_variables, 
