@@ -1,0 +1,13 @@
+site_name: My Docs
+theme:
+  name: mkdocs
+
+
+nav:
+  - Home: index.md
+  - Code Reference:
+    - main: main.md
+
+plugins:
+  - search
+  - mkdocstrings
