@@ -1,0 +1,19 @@
+site_name: Flexynesis Documentation
+theme:
+  name: mkdocs
+
+
+nav:
+  - Home: index.md
+  - Command Line Interface: commandline.md
+  - Code API:
+      - Model Classes: models.md
+      - Network modules: modules.md
+      - Data Importer: data.md 
+      - Feature Selection: feature_selection.md
+      - Training: main.md
+
+
+plugins:
+  - search
+  - mkdocstrings
