@@ -509,7 +509,7 @@ def subset_assays_by_features(dataset, features_dict):
     concatenated_df = pd.concat(df_list, axis=1)
     return concatenated_df    
 
-# Accepts as input a MultiomicDataset object and prints summary stats per variable 
+# Accepts as input a MultiOmicDataset object and prints summary stats per variable
 def print_summary_stats(dataset):
     for var, tensor in dataset.ann.items():
         print(f"Summary for variable: {var}")

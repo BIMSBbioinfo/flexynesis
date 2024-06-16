@@ -471,7 +471,7 @@ class DataImporter:
         # Convert DataFrame to tensor
         ann = {col: torch.from_numpy(ann[col].values) for col in ann.columns}
         if self.graph is None:
-            return MultiomicDataset(dat, ann, variable_types, features, samples, label_mappings)
+            return MultiOmicDataset(dat, ann, variable_types, features, samples, label_mappings)
         else:
             if subset is None:
                 raise ValueError("train and test subsets cannot be stored in a same location!")
@@ -577,7 +577,7 @@ class DataImporter:
             print("[INFO] Data structure is valid with no errors or warnings.")       
             
 
-class MultiomicDataset(Dataset):
+class MultiOmicDataset(Dataset):
     """A PyTorch dataset for multiomic data.
 
     Args:
@@ -630,14 +630,14 @@ class MultiomicDataset(Dataset):
                 indices (list of int): The indices of the samples to include in the subset.
 
             Returns:
-                MultiomicDataset: A new dataset object with the same structure but only containing the selected samples.
+                MultiOmicDataset: A new dataset object with the same structure but only containing the selected samples.
             """
             subset_dat = {x: self.dat[x][indices] for x in self.dat.keys()}
             subset_ann = {x: self.ann[x][indices] for x in self.ann.keys()}
             subset_samples = [self.samples[idx] for idx in indices]
 
             # Create a new dataset object
-            return MultiomicDataset(subset_dat, subset_ann, self.variable_types, self.features, 
+            return MultiOmicDataset(subset_dat, subset_ann, self.variable_types, self.features,
                                     subset_samples, self.label_mappings, self.feature_ann)
     
     def get_feature_subset(self, feature_df):
