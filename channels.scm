@@ -3,7 +3,7 @@
        (url "https://git.savannah.gnu.org/git/guix.git")
        (branch "master")
        (commit
-        "2c5293afffa39d5d4aaec248a1973c7f62b1a0b4")
+        "acb6cdc2990df2373707393d55da6827353862a8")
        (introduction
         (make-channel-introduction
          "9edb3f66fd807b096b48283debdcddccfea34bad"
@@ -14,7 +14,7 @@
        (url "https://github.com/guix-science/guix-science-nonfree.git")
        (branch "master")
        (commit
-        "2492cda73c2091108fc43494338117e7d7dd92e5")
+        "5942e5a6370ce1a83872a824ee7056cad40cabd2")
        (introduction
         (make-channel-introduction
          "58661b110325fd5d9b40e6f0177cc486a615817e"
@@ -25,7 +25,7 @@
        (url "https://gitlab.inria.fr/guix-hpc/guix-past")
        (branch "master")
        (commit
-        "d60a388678098e6de60ca1a65806903b5739da29")
+        "aab6148759476f0270bbe098919a978da45d7a2d")
        (introduction
         (make-channel-introduction
          "0c119db2ea86a389769f4d2b9c6f5c41c027e336"
@@ -36,7 +36,7 @@
        (url "https://github.com/guix-science/guix-science.git")
        (branch "master")
        (commit
-        "0b3d4a2f6d72c24f169bd5bf663f920ede5a8ae9")
+        "12eba5aa0c5cbf357c476ef7872e0d562d054eff")
        (introduction
         (make-channel-introduction
          "b1fe5aaff3ab48e798a4cce02f0212bc91f423dc"
