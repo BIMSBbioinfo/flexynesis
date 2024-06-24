@@ -9,7 +9,7 @@ import torch
 from torch import nn
 
 from . import models, utils
-from .data import DataImporter, MultiomicDataset, MultiomicPYGDataset
+from .data import DataImporter, MultiOmicDataset, MultiOmicPYGDataset
 from .main import HyperparameterTuning
 from .models import *
 
@@ -273,7 +273,7 @@ def import_data(
     use_graph: bool = False,
     node_name: str = "gene_name",
     transform: Optional[Any] = None,
-) -> Union[tuple[MultiomicDataset, MultiomicDataset], tuple[MultiomicPYGDataset, MultiomicPYGDataset]]:
+) -> Union[tuple[MultiOmicDataset, MultiOmicDataset], tuple[MultiOmicPYGDataset, MultiOmicPYGDataset]]:
     # Set use_graph var
     use_graph = True if config_name == "DirectPredGCNN" else False
     # Set concatenate to True to use early fusion, otherwise it will run intermediate fusion
@@ -293,7 +293,7 @@ def import_data(
 
 
 def tune(
-    train_dataset: Union[MultiomicDataset, MultiomicPYGDataset],
+    train_dataset: Union[MultiOmicDataset, MultiOmicPYGDataset],
     model_class: Type,
     target_variables: list[str],
     batch_variables: list[str],
@@ -324,7 +324,7 @@ def tune(
     return tuner.perform_tuning()
 
 
-def predict(model: nn.Module, test_dataset: Union[MultiomicDataset, MultiomicPYGDataset]) -> dict[str, np.array]:
+def predict(model: nn.Module, test_dataset: Union[MultiOmicDataset, MultiOmicPYGDataset]) -> dict[str, np.array]:
     # make predictions on the test dataset
     return model.predict(test_dataset)
 
@@ -343,8 +343,8 @@ def compute_feature_importance(model: nn.Module, outdir: str, prefix: str) -> No
 
 def get_sample_embeddings(
     model: nn.Module,
-    train_dataset: Union[MultiomicDataset, MultiomicPYGDataset],
-    test_dataset: Union[MultiomicDataset, MultiomicPYGDataset],
+    train_dataset: Union[MultiOmicDataset, MultiOmicPYGDataset],
+    test_dataset: Union[MultiOmicDataset, MultiOmicPYGDataset],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     embeddings_train = model.transform(train_dataset)
     embeddings_test = model.transform(test_dataset)
@@ -397,8 +397,8 @@ def save_filtered_sample_embeddings(
 
 def run_baselines(
     eval_baseline_performance: bool,
-    train_dataset: Union[MultiomicDataset, MultiomicPYGDataset],
-    test_dataset: Union[MultiomicDataset, MultiomicPYGDataset],
+    train_dataset: Union[MultiOmicDataset, MultiOmicPYGDataset],
+    test_dataset: Union[MultiOmicDataset, MultiOmicPYGDataset],
     target_variables: list[str],
     outdir: str,
     prefix: str,
