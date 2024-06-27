@@ -173,6 +173,24 @@ class CrossModalPred(pl.LightningModule):
         return optimizer
     
     def compute_loss(self, var, y, y_hat):
+        """
+        Computes the loss for a specific variable based on whether the variable is numerical or categorical.
+        Handles missing labels by excluding them from the loss calculation.
+    
+        Args:
+            var (str): The name of the variable for which the loss is being calculated.
+            y (torch.Tensor): The true labels or values for the variable.
+            y_hat (torch.Tensor): The predicted labels or values output by the model.
+    
+        Returns:
+            torch.Tensor: The calculated loss tensor for the variable. If there are no valid labels or values
+                          to compute the loss (all are missing), returns a zero loss tensor with gradient enabled.
+    
+        The method first checks the type of the variable (`var`) from `variable_types`. If the variable is
+        numerical, it computes the mean squared error loss. For categorical variables, it calculates the
+        cross-entropy loss. The method ensures to ignore any instances where the labels are missing (NaN for
+        numerical or -1 for categorical as assumed missing value encoding) when calculating the loss.
+        """
         if self.variable_types[var] == 'numerical':
             # Ignore instances with missing labels for numerical variables
             valid_indices = ~torch.isnan(y)
@@ -195,6 +213,26 @@ class CrossModalPred(pl.LightningModule):
         return loss
     
     def compute_total_loss(self, losses):
+        """
+        Computes the total loss from a dictionary of individual losses. This method can compute
+        either weighted or unweighted total loss based on the model configuration. If loss weighting
+        is enabled and there are multiple loss components, it uses uncertainty-based weighting.
+        See Kendall A. et al, https://arxiv.org/abs/1705.07115.
+        
+        Args:
+            losses (dict of torch.Tensor): A dictionary where each key is a variable name and
+                                           each value is the loss tensor associated with that variable.
+    
+        Returns:
+            torch.Tensor: The total loss computed across all inputs, either weighted or unweighted.
+        
+        The method checks if loss weighting is used (`use_loss_weighting`) and if there are multiple
+        losses to weight. If so, it computes the weighted sum of losses, where the weight involves
+        the exponential of the negative log variance (acting as precision) associated with each loss,
+        added to the log variance itself. This approach helps in balancing the contribution of each
+        loss component based on its uncertainty. If loss weighting is not used, or there is only one
+        loss component, it sums up the losses directly.
+        """
         if self.use_loss_weighting and len(losses) > 1:
             # Compute weighted loss for each loss 
             # Weighted loss = precision * loss + log-variance
@@ -206,6 +244,24 @@ class CrossModalPred(pl.LightningModule):
 
     
     def training_step(self, train_batch, batch_idx, log = True):
+        """
+        Executes one training step using a single batch of data from a cross-modality prediction model.
+    
+        Args:
+            train_batch (tuple): The batch data containing input features and target labels.
+            batch_idx (int): The index of the current batch.
+            log (bool, optional): Flag to determine if logging should occur at each step. Defaults to True.
+    
+        Returns:
+            torch.Tensor: The total loss for the current training batch, combining MMD loss for latent space regularization,
+                          reconstruction losses for each output layer, and losses from supervisor heads for specified target variables.
+    
+        This method processes the batch by encoding input features from specified layers, decoding them to reconstruct the
+        output layers, and calculating the Maximum Mean Discrepancy (MMD) loss for latent space regularization. It computes
+        the reconstruction loss for each target/output layer. Additional losses are computed for other target variables in the
+        dataset, particularly handling survival analysis if applicable. All losses are aggregated to compute a total loss,
+        which is logged and returned.
+        """
         dat, y_dict = train_batch
 
         # get input omics modalities and encode them; decode them to output layers 
@@ -240,6 +296,25 @@ class CrossModalPred(pl.LightningModule):
         return total_loss
     
     def validation_step(self, val_batch, batch_idx, log = True):
+        """
+        Executes one validation step using a single batch of data, assessing the model's performance on the validation set.
+    
+        Args:
+            val_batch (tuple): The batch data containing input features and target labels for validation.
+            batch_idx (int): The index of the current batch in the validation process.
+            log (bool, optional): Indicates whether to log the validation losses during this step. Defaults to True.
+    
+        Returns:
+            torch.Tensor: The total loss for the current validation batch, calculated by combining MMD loss, reconstruction
+                          losses, and losses from supervisor heads for specified target variables.
+    
+        In this method, the model processes input data by encoding it through specified input layers and decoding it to
+        targeted output layers. It computes the Maximum Mean Discrepancy (MMD) loss to measure the divergence between
+        the model's latent representations and a predefined distribution, along with reconstruction losses for output layers.
+        Additionally, it calculates losses for other target variables in the dataset, handling complex scenarios like survival
+        analysis where applicable. The aggregated losses are then summed up to form the total validation loss, which is logged
+        and returned.
+        """
         dat, y_dict = val_batch
 
         # get input omics modalities and encode them
@@ -404,13 +479,23 @@ class CrossModalPred(pl.LightningModule):
         
     def compute_feature_importance(self, dataset, target_var, steps = 5, batch_size = 64):
         """
-        Compute the feature importance.
-
+        Computes the feature importance for each variable in the dataset using the Integrated Gradients method.
+        This method measures the importance of each feature by attributing the prediction output to each input feature.
+    
         Args:
-            input_data (torch.Tensor): The input data to compute the feature importance for.
-            target_var (str): The target variable to compute the feature importance for.
+            dataset: The dataset object containing the features and data.
+            target_var (str): The target variable for which feature importance is calculated.
+            steps (int, optional): The number of steps to use for integrated gradients approximation. Defaults to 5.
+            batch_size (int, optional): The size of the batch to process the dataset. Defaults to 64.
+    
         Returns:
-            attributions (list of torch.Tensor): The feature importances for each class.
+            pd.DataFrame: A DataFrame containing feature importances across different variables and data modalities.
+                          Columns include 'target_variable', 'target_class', 'target_class_label', 'layer', 'name',
+                          and 'importance'.
+    
+        This function adjusts the device setting based on the availability of GPUs and performs the computation using
+        Integrated Gradients. It processes batches of data, aggregates results across batches, and formats the output
+        into a readable DataFrame which is then stored in the model's attribute for later use or analysis.
         """
         device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
         self.to(device)
