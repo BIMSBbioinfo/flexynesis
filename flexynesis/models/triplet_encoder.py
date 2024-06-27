@@ -20,16 +20,25 @@ from captum.attr import IntegratedGradients
 
 class MultiTripletNetwork(pl.LightningModule):
     """
+    A PyTorch Lightning module that implements a multi-triplet network architecture for handling
+    both categorical and numerical target variables,using triplet loss for learning
+    discriminative embeddings. The network can also handle survival analysis variables and implements
+    loss weighting to manage uncertainty.
+
+    Attributes:
+        config (dict): Configuration settings for model parameters such as learning rates, dimensions, etc.
+        dataset: The dataset object that contains the data and metadata.
+        target_variables (list): A list of the names of the target variables that the model will predict.
+        batch_variables (list, optional): A list of batch variable names used for batch effect correction.
+        surv_event_var (str, optional): The name of the survival event variable.
+        surv_time_var (str, optional): The name of the survival time variable.
+        use_loss_weighting (bool): Flag indicating whether loss weighting is used to handle uncertainty.
+        device_type (str, optional): Type of device ('gpu' or 'cpu') on which the model will be run.
     """
+
     def __init__(self, config, dataset, target_variables, batch_variables = None, 
                  surv_event_var = None, surv_time_var = None, use_loss_weighting = True, 
                  device_type = None):
-        """
-        Initialize the MultiTripletNetwork with the given parameters.
-
-        Args:
-            TODO
-        """
         super(MultiTripletNetwork, self).__init__()
         
         self.config = config
@@ -141,6 +150,24 @@ class MultiTripletNetwork(pl.LightningModule):
         return losses.mean()    
 
     def compute_loss(self, var, y, y_hat):
+        """
+        Computes the loss for a specific variable based on whether the variable is numerical or categorical.
+        Handles missing labels by excluding them from the loss calculation.
+    
+        Args:
+            var (str): The name of the variable for which the loss is being calculated.
+            y (torch.Tensor): The true labels or values for the variable.
+            y_hat (torch.Tensor): The predicted labels or values output by the model.
+    
+        Returns:
+            torch.Tensor: The calculated loss tensor for the variable. If there are no valid labels or values
+                          to compute the loss (all are missing), returns a zero loss tensor with gradient enabled.
+    
+        The method first checks the type of the variable (`var`) from `variable_types`. If the variable is
+        numerical, it computes the mean squared error loss. For categorical variables, it calculates the
+        cross-entropy loss. The method ensures to ignore any instances where the labels are missing (NaN for
+        numerical or -1 for categorical as assumed missing value encoding) when calculating the loss.
+        """
         if self.variable_types[var] == 'numerical':
             # Ignore instances with missing labels for numerical variables
             valid_indices = ~torch.isnan(y)
@@ -164,6 +191,26 @@ class MultiTripletNetwork(pl.LightningModule):
         return loss
     
     def compute_total_loss(self, losses):
+        """
+        Computes the total loss from a dictionary of individual losses. This method can compute
+        either weighted or unweighted total loss based on the model configuration. If loss weighting
+        is enabled and there are multiple loss components, it uses uncertainty-based weighting.
+        See Kendall A. et al, https://arxiv.org/abs/1705.07115.
+        
+        Args:
+            losses (dict of torch.Tensor): A dictionary where each key is a variable name and
+                                           each value is the loss tensor associated with that variable.
+    
+        Returns:
+            torch.Tensor: The total loss computed across all inputs, either weighted or unweighted.
+        
+        The method checks if loss weighting is used (`use_loss_weighting`) and if there are multiple
+        losses to weight. If so, it computes the weighted sum of losses, where the weight involves
+        the exponential of the negative log variance (acting as precision) associated with each loss,
+        added to the log variance itself. This approach helps in balancing the contribution of each
+        loss component based on its uncertainty. If loss weighting is not used, or there is only one
+        loss component, it sums up the losses directly.
+        """
         if self.use_loss_weighting and len(losses) > 1:
             # Compute weighted loss for each loss 
             # Weighted loss = precision * loss + log-variance
@@ -174,6 +221,22 @@ class MultiTripletNetwork(pl.LightningModule):
         return total_loss
 
     def training_step(self, train_batch, batch_idx, log = True):
+        """
+        Perform a training step using a single batch of data, including triplet components and target labels.
+    
+        Args:
+            train_batch (tuple): The batch containing data tuples (anchor, positive, negative) and a dictionary of labels.
+            batch_idx (int): The index of the current batch.
+            log (bool, optional): Flag to determine if logging should occur at each step. Defaults to True.
+    
+        Returns:
+            torch.Tensor: The total loss for the current training batch, which includes triplet loss and any additional
+                          losses from supervisor heads.
+    
+        This method computes the embedding for the anchor, positive, and negative samples and calculates the triplet loss.
+        Additional losses are computed for other target variables in the dataset, particularly handling survival analysis
+        if applicable. All losses are combined to compute a total loss, which is logged and returned.
+        """
         anchor, positive, negative, y_dict = train_batch[0], train_batch[1], train_batch[2], train_batch[3]
         anchor_embedding, positive_embedding, negative_embedding, outputs = self.forward(anchor, positive, negative)
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
@@ -200,6 +263,22 @@ class MultiTripletNetwork(pl.LightningModule):
         return total_loss
     
     def validation_step(self, val_batch, batch_idx, log = True):
+        """
+        Perform a validation step using a single batch of data, including triplet components and target labels.
+    
+        Args:
+            val_batch (tuple): The batch containing data tuples (anchor, positive, negative) and a dictionary of labels.
+            batch_idx (int): The index of the current batch.
+            log (bool, optional): Flag to determine if logging should occur at each step. Defaults to True.
+    
+        Returns:
+            torch.Tensor: The total loss for the current validation batch, which includes triplet loss and any additional
+                          losses from supervisor heads.
+    
+        Similar to the training step, this method computes the embedding for the anchor, positive, and negative samples
+        and calculates the triplet loss. It computes additional losses for other target variables in the dataset, aggregates
+        all losses, and returns the total loss. The losses are logged if specified.
+        """
         anchor, positive, negative, y_dict = val_batch[0], val_batch[1], val_batch[2], val_batch[3]
         anchor_embedding, positive_embedding, negative_embedding, outputs = self.forward(anchor, positive, negative)
         triplet_loss = self.triplet_loss(anchor_embedding, positive_embedding, negative_embedding)
@@ -293,13 +372,23 @@ class MultiTripletNetwork(pl.LightningModule):
         
     def compute_feature_importance(self, dataset, target_var, steps = 5, batch_size = 64):
         """
-        Compute the feature importance.
-
+        Computes the feature importance for each variable in the dataset using the Integrated Gradients method.
+        This method measures the importance of each feature by attributing the prediction output to each input feature.
+    
         Args:
-            input_data (torch.Tensor): The input data to compute the feature importance for.
-            target_var (str): The target variable to compute the feature importance for.
+            dataset: The dataset object containing the features and data.
+            target_var (str): The target variable for which feature importance is calculated.
+            steps (int, optional): The number of steps to use for integrated gradients approximation. Defaults to 5.
+            batch_size (int, optional): The size of the batch to process the dataset. Defaults to 64.
+    
         Returns:
-            attributions (list of torch.Tensor): The feature importances for each class.
+            pd.DataFrame: A DataFrame containing feature importances across different variables and data modalities.
+                          Columns include 'target_variable', 'target_class', 'target_class_label', 'layer', 'name',
+                          and 'importance'.
+    
+        This function adjusts the device setting based on the availability of GPUs and performs the computation using
+        Integrated Gradients. It processes batches of data, aggregates results across batches, and formats the output
+        into a readable DataFrame which is then stored in the model's attribute for later use or analysis.
         """
 
         device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
