@@ -230,7 +230,7 @@ Documentation generated using [mkdocs](https://mkdocstrings.github.io/)
 
 ```
 pip install mkdocstrings[python]
-mkdocs build 
+mkdocs build --clean
 ```
 
 
