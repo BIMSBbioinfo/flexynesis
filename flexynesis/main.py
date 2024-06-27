@@ -23,33 +23,53 @@ from skopt.space import Integer, Categorical, Real
             
 class HyperparameterTuning:
     """
-    Hyperparameter Tuning class for optimizing model parameters.
-
-    This class provides functionalities to perform hyperparameter tuning using Bayesian optimization.
-    It supports various features like live loss plotting, early stopping, and custom configuration loading.
+    A class dedicated to performing hyperparameter tuning using Bayesian optimization for various types of models.
+    It supports both cross-validation and single validation set approaches, incorporates early stopping, and allows
+    for live loss plotting during the training process for interactive usage. 
+    Configuration for the hyperparameter space can be loaded from
+    external configuration files in yam format. 
+    The class is designed to handle both GPU and CPU environments.
 
     Attributes:
-        dataset: Dataset used for training and validation.
-        model_class: The class of the model to be tuned.
-        target_variables: List of target variables for the model.
-        batch_variables: List of batch variables, if applicable.
-        config_name: Name of the configuration for tuning parameters.
-        n_iter: Number of iterations for the tuning process.
-        plot_losses: Boolean flag to plot losses during training.
-        cv_splits: Number of cross-validation folds.
-        use_loss_weighting: Flag to use loss weighting during training.
-        early_stop_patience: Number of epochs to wait for improvement before stopping.
-        device_type: Str (cpu, gpu)
-    
+        dataset: Dataset used for model training and validation.
+        model_class: Class of the model for which hyperparameters are being tuned.
+        target_variables: List of target variables the model predicts.
+        batch_variables: List of batch variables used in model training, if applicable.
+        config_name: Configuration name which specifies the hyperparameter search space.
+        n_iter: Number of iterations for the Bayesian optimization process.
+        plot_losses: Boolean indicating whether to plot losses during training.
+        cv_splits: Number of cross-validation splits (if user requested cross-validation)
+        use_loss_weighting: Boolean indicating whether to use loss weighting in the model.
+        early_stop_patience: Number of epochs with no improvement after which training will be stopped early.
+        device_type: Type of device ('gpu' or 'cpu') to be used for training.
+        gnn_conv_type: Specific convolution type if using Graph Neural Networks, otherwise None.
+        input_layers: Specific input layers for models that require detailed layer setup.
+        output_layers: Specific output layers for models that require detailed layer setup.
+
     Methods:
-        objective(params, current_step, total_steps): Evaluates a set of parameters.
-    
-        perform_tuning(): Executes the hyperparameter tuning process.
-        
-        init_early_stopping(): Initializes early stopping mechanism.
-        
-        load_and_convert_config(config_path): Loads and converts a configuration file.
+        __init__(dataset, model_class, config_name, target_variables, batch_variables=None, surv_event_var=None,
+                 surv_time_var=None, n_iter=10, config_path=None, plot_losses=False, val_size=0.2, use_cv=False,
+                 cv_splits=5, use_loss_weighting=True, early_stop_patience=-1, device_type=None, gnn_conv_type=None,
+                 input_layers=None, output_layers=None): Initializes the hyperparameter tuner with specific settings.
+
+        get_batch_space(min_size=16, max_size=256): Determines the batch size search space based on the dataset size.
+
+        setup_trainer(params, current_step, total_steps, full_train=False): Sets up the trainer with appropriate callbacks
+            and configurations for either full training or validation based training.
+
+        objective(params, current_step, total_steps, full_train=False): Evaluates a set of parameters to determine the
+            performance of the model using the specified parameters.
+
+        perform_tuning(hpo_patience=0): Executes the hyperparameter tuning process, optionally with patience for early
+            stopping based on no improvement in performance.
+
+        init_early_stopping(): Initializes the early stopping mechanism to stop training when validation loss does not
+            improve for a specified number of epochs.
+
+        load_and_convert_config(config_path): Loads a configuration file and converts it into a format suitable for
+            specifying search spaces in Bayesian optimization.
     """
+
     def __init__(self, dataset, model_class, config_name, target_variables, 
                  batch_variables = None, surv_event_var = None, surv_time_var = None, 
                  n_iter = 10, config_path = None, plot_losses = False,
