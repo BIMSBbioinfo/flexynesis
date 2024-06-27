@@ -177,6 +177,24 @@ class supervised_vae(pl.LightningModule):
         return optimizer
     
     def compute_loss(self, var, y, y_hat):
+        """
+        Computes the loss for a specific variable based on whether the variable is numerical or categorical.
+        Handles missing labels by excluding them from the loss calculation.
+    
+        Args:
+            var (str): The name of the variable for which the loss is being calculated.
+            y (torch.Tensor): The true labels or values for the variable.
+            y_hat (torch.Tensor): The predicted labels or values output by the model.
+    
+        Returns:
+            torch.Tensor: The calculated loss tensor for the variable. If there are no valid labels or values
+                          to compute the loss (all are missing), returns a zero loss tensor with gradient enabled.
+    
+        The method first checks the type of the variable (`var`) from `variable_types`. If the variable is
+        numerical, it computes the mean squared error loss. For categorical variables, it calculates the
+        cross-entropy loss. The method ensures to ignore any instances where the labels are missing (NaN for
+        numerical or -1 for categorical as assumed missing value encoding) when calculating the loss.
+        """
         if self.dataset.variable_types[var] == 'numerical':
             # Ignore instances with missing labels for numerical variables
             valid_indices = ~torch.isnan(y)
