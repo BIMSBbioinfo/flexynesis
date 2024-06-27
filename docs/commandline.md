@@ -1,3 +1,3 @@
 # Command-line Interface
 
-::: flexynesis.__main__
+::: flexynesis.__main__.main

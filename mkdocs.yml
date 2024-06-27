@@ -1,19 +1,31 @@
 site_name: Flexynesis Documentation
 theme:
-  name: readthedocs
-
+  name: readthedocs #mkdocs
+  highlightjs: true
+  hljs_languages:
+    - yaml
 
 nav:
   - Home: index.md
   - Command Line Interface: commandline.md
-  - Code API:
-      - Model Classes: models.md
-      - Network modules: modules.md
-      - Data Importer: data.md 
-      - Feature Selection: feature_selection.md
-      - Training: main.md
+  - API: 
+    - Model Classes: 
+      - DirectPred: models.direct_pred.md 
+      - Supervised VAE: models.supervised_vae.md 
+      - MultiTripletNetwork: models.triplet_encoder.md
+      - CrossModalPred: models.crossmodel_pred.md 
+    - Network modules: modules.md
+    - Data Importer: data.md 
+    - Feature Selection: feature_selection.md
+    - Training: main.md
 
 
 plugins:
   - search
-  - mkdocstrings
+  - mkdocstrings:
+      handlers:
+        python:
+          selection:
+            docstring_style: "google"
+          rendering:
+            show_source: true
