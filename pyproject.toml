@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flexynesis"
-version = "0.1.7"
+version = "0.1.9"
 authors = [
     {name = "Bora Uyar", email = "bora.uyar@mdc-berlin.de"},
     {name = "Taras Savchyn", email = "Taras.Savchyn@mdc-berlin.de"},
