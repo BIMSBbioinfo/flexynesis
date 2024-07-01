@@ -7,7 +7,7 @@ import pandas as pd
 import flexynesis
 from flexynesis.models import *
 from lightning.pytorch.callbacks import EarlyStopping
-
+from .data import STRING, MultiOmicGeometricDataset
 
 def main():
     """
@@ -57,7 +57,7 @@ def main():
     
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, 
-                        choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred"], required = True)
+                        choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "GNNEarly"], required = True)
     parser.add_argument("--gnn_conv_type", help="If model_class is set to DirectPredGCNN, choose which graph convolution type to use", type=str, 
                         choices=["GC", "GCN", "GAT", "SAGE"])
     parser.add_argument("--target_variables", 
@@ -157,10 +157,10 @@ def main():
         torch.set_num_threads(args.threads)
 
     # 5. check GNN arguments
-    if args.model_class == 'DirectPredGCNN':
+    if args.model_class == 'DirectPredGCNN' or args.model_class == 'GNNEarly':
         if not args.gnn_conv_type:
             warning_message = "\n".join([
-                "\n\n!!! When running DirectPredGCNN, a convolution type can be set",
+                "\n\n!!! When running DirectPredGCNN or GNNEarly, a convolution type can be set",
                 "with the --gnn_conv_type flag. See `flexynesis -h` for full set of options.",
                 "Falling back on the default convolution type: GC !!!\n\n"
             ])
@@ -202,7 +202,8 @@ def main():
         MultiTripletNetwork: tuple[MultiTripletNetwork, str] = MultiTripletNetwork, "MultiTripletNetwork"
         DirectPredGCNN: tuple[DirectPredGCNN, str] = DirectPredGCNN, "DirectPredGCNN"
         CrossModalPred: tuple[CrossModalPred, str] = CrossModalPred, "CrossModalPred"
-
+        GNNEarly: tuple[GNNEarly, str] = GNNEarly, "GNNEarly"
+        
     available_models = AvailableModels()
     model_class = getattr(available_models, args.model_class, None)
     if model_class is None:
@@ -236,6 +237,15 @@ def main():
                                             string_node_name=args.string_node_name, 
                                             downsample = args.subsample)
     train_dataset, test_dataset = data_importer.import_data(force = True)
+    
+    if args.model_class == 'GNNEarly': 
+        # overlay datasets with network info 
+        # this is a temporary solution 
+        print("[INFO] Overlaying the dataset with network data from STRINGDB")
+        obj = STRING(".", "9606", "gene_name")
+        train_dataset = MultiOmicGeometricDataset(train_dataset, obj.graph_df)
+        test_dataset = MultiOmicGeometricDataset(test_dataset, obj.graph_df)
+        
     
     # print feature logs to file (we use these tables to track which features are dropped/selected and why)
     feature_logs = data_importer.feature_logs

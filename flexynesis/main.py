@@ -13,12 +13,13 @@ from tqdm import tqdm
 from skopt import Optimizer
 from skopt.utils import use_named_args
 from .config import search_spaces
-from .data import TripletMultiOmicDataset
+from .data import TripletMultiOmicDataset, MultiOmicGeometricDataset
 
 import numpy as np
 
 import os, yaml
 from skopt.space import Integer, Categorical, Real
+from .data import STRING
 
             
 class HyperparameterTuning:
@@ -108,6 +109,8 @@ class HyperparameterTuning:
         
         if self.model_class.__name__ == 'MultiTripletNetwork':
             self.loader_dataset = TripletMultiOmicDataset(self.dataset, self.target_variables[0])
+        if self.model_class.__name__ == 'GNNEarly':
+            self.DataLoader = torch_geometric.loader.DataLoader
         if self.model_class.__name__ == 'DirectPredGCNN':
              # use torch_geometric data loader for GCNN class
             self.DataLoader = torch_geometric.loader.DataLoader
@@ -173,7 +176,7 @@ class HyperparameterTuning:
             "device_type": self.device_type,
         }
         
-        if self.model_class.__name__ == 'DirectPredGCNN':
+        if self.model_class.__name__ == 'DirectPredGCNN' or self.model_class.__name__ == 'GNNEarly':
             model_args['gnn_conv_type'] = self.gnn_conv_type
         if self.model_class.__name__ == 'CrossModalPred':
             model_args['input_layers'] = self.input_layers
