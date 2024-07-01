@@ -200,7 +200,7 @@ class DataImporter:
                 initial_edge_list = graph_df.to_numpy().tolist()
             # Read STRING by default.
             elif isinstance(self.graph, STRING):
-                graph_df = self.graph.df
+                graph_df = self.graph.graph_df
                 available_features = np.unique(graph_df[["protein1", "protein2"]].to_numpy()).tolist()
                 initial_edge_list = stringdb_links_to_list(graph_df)
             else:
@@ -735,6 +735,7 @@ class MultiOmicGeometricDataset(Dataset):
         self.variable_types = self.multiomic_dataset.variable_types 
         self.ann = self.multiomic_dataset.ann 
         self.samples = self.multiomic_dataset.samples 
+        self.label_mappings = self.multiomic_dataset.label_mappings
                 
         # Make sure to call the superclass constructor with 'root' which is expected by PyG Dataset
         super(MultiOmicGeometricDataset, self).__init__()
