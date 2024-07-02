@@ -43,12 +43,16 @@ class GNNEarly(pl.LightningModule):
         self.variables = self.target_variables + self.batch_variables if self.batch_variables else self.target_variables
         self.variable_types = dataset.multiomic_dataset.variable_types 
         self.ann = dataset.multiomic_dataset.ann 
+        self.edge_index = dataset.edge_index
         
         self.feature_importances = {}
         self.use_loss_weighting = use_loss_weighting
 
         self.device_type = device_type 
         self.gnn_conv_type = gnn_conv_type
+        
+        device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
+        self.edge_index = self.edge_index.to(device) # edge index is re-used across samples, so we keep it in device
                 
         if self.use_loss_weighting:
             # Initialize log variance parameters for uncertainty weighting
@@ -56,7 +60,7 @@ class GNNEarly(pl.LightningModule):
             for var in self.variables:
                 self.log_vars[var] = nn.Parameter(torch.zeros(1))
         
-        node_features = dataset[0].x.shape[1] # number of node features
+        node_features = dataset[0][0].shape[1] # number of node features
         hidden_dim = int(self.config["hidden_dim_factor"] * node_features)
         self.encoders = GNNs(
                         input_dim=node_features,
@@ -79,8 +83,8 @@ class GNNEarly(pl.LightningModule):
                 output_dim=num_class
             )
             
-    def forward(self, data):       
-        embeddings = self.encoders(data.x, data.edge_index, data.batch)
+    def forward(self, x, edge_index): 
+        embeddings = self.encoders(x, edge_index)
         outputs = {}
         for var, mlp in self.MLPs.items():
             outputs[var] = mlp(embeddings)
@@ -88,8 +92,8 @@ class GNNEarly(pl.LightningModule):
 
             
     def training_step(self, batch):
-        outputs = self.forward(batch)
-        y_dict = batch.y_dict 
+        x, y_dict = batch
+        outputs = self.forward(x, self.edge_index)
 
         losses = {}
         for var in self.variables:
@@ -110,9 +114,8 @@ class GNNEarly(pl.LightningModule):
         return total_loss
 
     def validation_step(self, batch):
-        outputs = self.forward(batch)
-        y_dict = batch.y_dict 
-
+        x, y_dict = batch
+        outputs = self.forward(x, self.edge_index)
         losses = {}
         for var in self.variables:
             if var == self.surv_event_var:
@@ -132,7 +135,8 @@ class GNNEarly(pl.LightningModule):
         return total_loss
             
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
+        #optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
+        optimizer = torch.optim.SGD(self.parameters(), lr=self.config["lr"])
         return optimizer
 
     def compute_loss(self, var, y, y_hat):
@@ -172,7 +176,8 @@ class GNNEarly(pl.LightningModule):
     def predict(self, dataset):
         self.eval()
         dataloader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
-        outputs = self.forward(next(iter(dataloader)))
+        x, yict = next(iter(dataloader))
+        outputs = self.forward(x, dataset.edge_index.to(x.device))
 
         predictions = {}
         for var in self.variables:
@@ -188,8 +193,8 @@ class GNNEarly(pl.LightningModule):
         self.eval()
         
         dataloader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
-        data = next(iter(dataloader))
-        embeddings = self.encoders(data.x, data.edge_index, data.batch)
+        x, y_dict = next(iter(dataloader))
+        embeddings = self.encoders(x, dataset.edge_index.to(x.device))
 
         # Converting tensor to numpy array and then to DataFrame
         embeddings_df = pd.DataFrame(
@@ -198,3 +203,6 @@ class GNNEarly(pl.LightningModule):
             columns=[f"E{dim}" for dim in range(embeddings.shape[1])],
         )
         return embeddings_df
+
+    def optimizer_zero_grad(self, epoch, batch_idx, optimizer):
+        optimizer.zero_grad(set_to_none=True)
