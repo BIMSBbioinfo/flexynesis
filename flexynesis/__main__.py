@@ -239,6 +239,7 @@ def main():
         print("[INFO] Overlaying the dataset with network data from STRINGDB")
         obj = STRING('STRING', "9606", "gene_name")
         train_dataset = MultiOmicDatasetNW(train_dataset, obj.graph_df)
+        train_dataset.print_stats()
         test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df)
         
     
