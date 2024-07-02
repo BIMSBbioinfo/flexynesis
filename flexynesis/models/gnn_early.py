@@ -8,9 +8,7 @@ from torch.utils.data import random_split
 
 import lightning as pl
 
-from torch_geometric.data import Data, Batch
-from torch_geometric.loader import DataLoader
-
+from torch.utils.data import DataLoader
 
 from captum.attr import IntegratedGradients
 
@@ -61,10 +59,10 @@ class GNNEarly(pl.LightningModule):
                 self.log_vars[var] = nn.Parameter(torch.zeros(1))
         
         node_features = dataset[0][0].shape[1] # number of node features
-        hidden_dim = int(self.config["hidden_dim_factor"] * node_features)
+        node_count = dataset[0][0].shape[0] #number of nodes
         self.encoders = GNNs(
                         input_dim=node_features,
-                        hidden_dim=hidden_dim,  
+                        hidden_dim=int(self.config["hidden_dim_factor"] * node_count),  
                         output_dim=self.config["latent_dim"],
                         act = self.config['activation'],
                         conv = self.gnn_conv_type
