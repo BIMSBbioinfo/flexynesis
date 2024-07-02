@@ -175,14 +175,15 @@ class GNNs(nn.Module):
         self.act_1 = self.activation
         self.layer_2 = self.conv(hidden_dim, output_dim)
         self.act_2 = self.activation
-        self.aggregation = aggr.SumAggregation()
 
-    def forward(self, x, edge_index, batch):
+    def forward(self, x, edge_index):
         x = self.layer_1(x, edge_index)
         x = self.act_1(x)
         x = self.layer_2(x, edge_index)
         x = self.act_2(x)
-        x = self.aggregation(x, batch)
+        # mean pooling to get sample embeddings (we use a single graph across samples)
+        # Perform mean pooling across the node dimension
+        x = x.mean(dim=1)  
         return x
     
 def cox_ph_loss(outputs, durations, events):
