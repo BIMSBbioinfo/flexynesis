@@ -679,6 +679,7 @@ class MultiOmicDataset(Dataset):
         stats = {': '.join(['feature_count in', x]): self.dat[x].shape[1] for x in self.dat.keys()}
         stats['sample_count'] = len(self.samples)
         return(stats)
+    
 
 # given a MultiOmicDataset object, convert to Triplets (anchor,positive,negative)
 class TripletMultiOmicDataset(Dataset):
@@ -714,34 +715,19 @@ class TripletMultiOmicDataset(Dataset):
                              for label in labels_set}
         return labels_set, label_to_indices
 
-    
-import torch
-from torch_geometric.data import Dataset, Data
-import pandas as pd
-import numpy as np
-from tqdm import tqdm
-
-# Dataset class for early integration GNNs 
-class MultiOmicGeometricDataset(Dataset):
+# multiomic dataset with network (NW) integration
+class MultiOmicDatasetNW(Dataset):
     def __init__(self, multiomic_dataset, interaction_df):
-        # Initialize properties specific to this class before calling super().__init__()
         self.multiomic_dataset = multiomic_dataset
         self.interaction_df = interaction_df
         self.common_features = self.find_common_features()
         self.gene_to_index = {gene: idx for idx, gene in enumerate(self.common_features)}
-        self.index_to_gene = {idx: gene for gene, idx in self.gene_to_index.items()}
         self.edge_index = self.create_edge_index()
-        self.sample_to_index = {sample: idx for idx, sample in enumerate(self.multiomic_dataset.samples)}
+        self.samples = self.multiomic_dataset.samples 
         self.variable_types = self.multiomic_dataset.variable_types 
         self.ann = self.multiomic_dataset.ann 
         self.samples = self.multiomic_dataset.samples 
         self.label_mappings = self.multiomic_dataset.label_mappings
-                
-        # Make sure to call the superclass constructor with 'root' which is expected by PyG Dataset
-        super(MultiOmicGeometricDataset, self).__init__()
-        
-        # Call process to ensure data is ready
-        # self.process()
 
     def find_common_features(self):
         common_features = set.intersection(*(set(features) for features in self.multiomic_dataset.features.values()))
@@ -749,157 +735,51 @@ class MultiOmicGeometricDataset(Dataset):
         return list(common_features.intersection(interaction_genes))
 
     def create_edge_index(self):
-        """Creates the edge index from the interaction DataFrame for the common features,
-        filtering out singletons."""
         filtered_df = self.interaction_df[
             (self.interaction_df['protein1'].isin(self.common_features)) & 
             (self.interaction_df['protein2'].isin(self.common_features))
         ]
-
-        # Temporary dictionary to count connectivity
-        connectivity_count = {gene: 0 for gene in self.common_features}
-
-        # Initial collection of edges
-        temp_edges = []
-        for index, row in filtered_df.iterrows():
-            start_idx = self.gene_to_index[row['protein1']]
-            end_idx = self.gene_to_index[row['protein2']]
-            temp_edges.append((start_idx, end_idx))
-            connectivity_count[row['protein1']] += 1
-            connectivity_count[row['protein2']] += 1
-
-        # Filter out singletons: nodes that appear in the edge index but are connected only once
-        # and that single connection is not reciprocated
-        final_edges = [edge for edge in temp_edges if connectivity_count[self.index_to_gene[edge[0]]] > 1 and connectivity_count[self.index_to_gene[edge[1]]] > 1]
-
-        return final_edges
-
-    
-    def check_graph(self):
-        interactions_dict = {i: [] for i in range(len(self.common_features))}
-        for start, end in self.edge_index:
-            interactions_dict[start].append(end)
-
-        data = []
-        for gene, idx in self.gene_to_index.items():
-            feature_data = {
-                data_type: self.multiomic_dataset.dat[data_type][:, self.multiomic_dataset.features[data_type].get_loc(gene)].numpy()
-                for data_type in self.multiomic_dataset.dat
-                if gene in self.multiomic_dataset.features[data_type]
-            }
-            row = {
-                "gene_name": gene,
-                "node_index": idx,
-                "interaction_indices": interactions_dict[idx]
-            }
-            row.update(feature_data)
-            data.append(row)
-
-        return pd.DataFrame(data)
-    
-    def get_edges_for_node(self, node_index):
-        relevant_edges = [edge for edge in self.edge_index if node_index in edge]
-
-        # Print gene names for each edge
-        edge_descriptions = []
-        for edge in relevant_edges:
-            gene_names = (self.index_to_gene[edge[0]], self.index_to_gene[edge[1]])
-            print("Edge between {} and {}".format(*gene_names))
-            edge_descriptions.append((gene_names[0], gene_names[1]))
-
-        return edge_descriptions
-        
-    @property
-    def raw_file_names(self):
-        # NOTE: Skip for now. DataImport is in charge of data/graph preprocessing.
-        return [""]
-
-    @property
-    def processed_file_names(self):
-        fnames = [f"data_{i}.pt" for i in range(len(self.multiomic_dataset.samples))]
-        return fnames 
-    
-    def download(self):
-        # NOTE: We skip download step. This is done before the dataset creation.
-        pass
-
-    def process(self):
-        if isinstance(self.edge_index, list):
-            self.edge_index = torch.tensor(self.edge_index, dtype=torch.long).t()
-
-        # Iterate over each sample in the dataset
-        for sample_id in tqdm(self.multiomic_dataset.samples, desc="Processing Samples"):
-            sample_index = self.sample_to_index[sample_id]  # Get the index of the sample
-            node_features = []
-
-            # Gather node features for each gene across all data modalities
-            for gene in self.common_features:
-                gene_features = []
-                for data_type, data_matrix in self.multiomic_dataset.dat.items():
-                    feature_index = self.multiomic_dataset.features[data_type].get_loc(gene)
-                    # Extract the feature for this gene from the data matrix
-                    gene_feature = data_matrix[sample_index, feature_index]
-                    gene_features.append(gene_feature)
-
-                # Combine all features from all modalities for this gene into a single feature vector
-                node_features.append(torch.tensor(gene_features, dtype=torch.float))
-
-            # Convert list of tensors to a single tensor
-            node_features_tensor = torch.stack(node_features)
-
-            targets = {target_name: labels[sample_index].unsqueeze(0)  # Ensure it remains a tensor
-                       for target_name, labels in self.multiomic_dataset.ann.items()}
-
-            data = Data(x=node_features_tensor, edge_index=self.edge_index, y_dict = targets) 
-            #for label_name, label_value in targets.items():
-             #   setattr(data, label_name, label_value)
-            
-            # Save the Data object
-            file_path = os.path.join(self.processed_dir, f'data_{sample_index}.pt')
-            torch.save(data, file_path)
-        self.print_stats()
+        edge_list = [(self.gene_to_index[row['protein1']], self.gene_to_index[row['protein2']]) for index, row in filtered_df.iterrows()]
+        return torch.tensor(edge_list, dtype=torch.long).t()
 
     def __getitem__(self, idx):
-        if isinstance(idx, int):  # Single item access
-            data = torch.load(os.path.join(self.processed_dir, f'data_{idx}.pt'))
-            return data
-        elif isinstance(idx, slice):  # Handle slicing
-            # Convert slice object to range and process each index
-            indices = range(*idx.indices(len(self)))  # Convert slice to range based on dataset length
-            batch_data = [self.__getitem__(i) for i in indices] # Recursively call __getitem__ for each index
-            return batch_data
-        else:
-            raise NotImplementedError("Indexing type not supported yet.")
+        sample_id = self.samples[idx]
+        node_features = []
+
+        # Gather node features for each gene
+        for gene in self.common_features:
+            gene_features = []
+            for data_type, data_matrix in self.multiomic_dataset.dat.items():
+                if gene in self.multiomic_dataset.features[data_type]:
+                    feature_index = self.multiomic_dataset.features[data_type].get_loc(gene)
+                    gene_feature = data_matrix[idx, feature_index]
+                    gene_features.append(gene_feature)
+
+            # Convert all features from all modalities for this gene into a single feature vector
+            node_features.append(torch.tensor(gene_features, dtype=torch.float))
+
+        # Convert list of tensors to a single tensor
+        node_features_tensor = torch.stack(node_features)
+        
+        y_dict = {target_name: labels[idx]
+           for target_name, labels in self.multiomic_dataset.ann.items()}
+
+        return node_features_tensor, y_dict
 
     def __len__(self):
-        return len(self.multiomic_dataset.samples)
+        return len(self.samples)
 
-    def get(self, idx):
-        file_path = os.path.join(self.processed_dir, f'data_{idx}.pt')
-        data = torch.load(file_path)
-        return data   
+    @property
+    def edge_index(self):
+        return self._edge_index
+
+    @edge_index.setter
+    def edge_index(self, value):
+        self._edge_index = value
     
     def print_stats(self):
-        # Assuming node features are consistently formatted across samples
-        sample_data = next(iter(self))  # Get any sample data tensor
-        
-        # Number of edges
-        num_edges = sample_data.edge_index.shape[1]  # Assuming edge_index is a tensor of shape [2, num_edges]
-        num_nodes = sample_data.x.shape[0]  # Number of nodes corresponds to the number of rows
-        num_node_features = sample_data.x.shape[1]  # Number of features corresponds to the number of columns
-        
-        edge_counts = torch.zeros(num_nodes, dtype=torch.int)
-
-        # Count edges for each node
-        edge_counts.index_add_(0, sample_data.edge_index[0], torch.ones(sample_data.edge_index.shape[1], dtype=torch.int))
-        edge_counts.index_add_(0, sample_data.edge_index[1], torch.ones(sample_data.edge_index.shape[1], dtype=torch.int))
-
-        # Calculating stats
-        num_singletons = (edge_counts == 0).sum().item()  # Nodes with zero connections
-        mean_edges_per_node = edge_counts[edge_counts > 0].float().mean().item() if edge_counts[edge_counts > 0].numel() > 0 else 0
-        median_edges_per_node = edge_counts[edge_counts > 0].float().median().item() if edge_counts[edge_counts > 0].numel() > 0 else 0
-        max_edges = edge_counts.max().item()
-
+    """
+    TODO
         print("Dataset Statistics:")
         print(f"Number of nodes: {num_nodes}")
         print(f"Total number of edges: {num_edges}")
@@ -908,6 +788,7 @@ class MultiOmicGeometricDataset(Dataset):
         print(f"Mean number of edges per node (excluding singletons): {mean_edges_per_node}")
         print(f"Median number of edges per node (excluding singletons): {median_edges_per_node}")
         print(f"Max number of edges per node: {max_edges}")
+    """
 
 class MultiOmicPYGDataset(PYGDataset):
     required = ["variable_types", "features", "samples", "label_mappings", "feature_ann"]
@@ -1050,13 +931,29 @@ def read_user_graph(fpath, sep=" ", header=None, **pd_read_csv_kw):
     return pd.read_csv(fpath, sep=sep, header=header, **pd_read_csv_kw)
 
 
-def read_stringdb_links(fname):
+def read_stringdb_links_ori(fname):
     df = pd.read_csv(fname, header=0, sep=" ")
     df = df[df.combined_score > 400]
     df = df[df.combined_score > df.combined_score.quantile(0.9)]
     df[["protein1", "protein2"]] = df[["protein1", "protein2"]].map(lambda a: a.split(".")[-1])
     return df
 
+def read_stringdb_links(fname):
+    df = pd.read_csv(fname, header=0, sep=" ")
+    df = df[df.combined_score > 800]
+    df = df[df.combined_score > df.combined_score.quantile(0.9)]
+    df_expanded = pd.concat([
+        df.rename(columns={'protein1': 'protein', 'protein2': 'partner'}),
+        df.rename(columns={'protein2': 'protein', 'protein1': 'partner'})
+    ])
+    # Sort the expanded DataFrame by 'combined_score' in descending order
+    df_expanded_sorted = df_expanded.sort_values(by='combined_score', ascending=False)
+        # Reduce to unique interactions to avoid counting duplicates
+    df_expanded_unique = df_expanded_sorted.drop_duplicates(subset=['protein', 'partner'])
+    top_interactions = df_expanded_unique.groupby('protein').head(5)
+    df = top_interactions.rename(columns={'protein': 'protein1', 'partner': 'protein2'})
+    df[["protein1", "protein2"]] = df[["protein1", "protein2"]].map(lambda a: a.split(".")[-1])
+    return df
 
 def read_stringdb_aliases(fname: str, node_name: str) -> dict[str, str]:
     if node_name == "gene_id":
