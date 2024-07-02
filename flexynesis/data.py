@@ -715,19 +715,28 @@ class TripletMultiOmicDataset(Dataset):
                              for label in labels_set}
         return labels_set, label_to_indices
 
-# multiomic dataset with network (NW) integration
 class MultiOmicDatasetNW(Dataset):
     def __init__(self, multiomic_dataset, interaction_df):
         self.multiomic_dataset = multiomic_dataset
         self.interaction_df = interaction_df
+        
+        # Precompute common features and edge index
         self.common_features = self.find_common_features()
         self.gene_to_index = {gene: idx for idx, gene in enumerate(self.common_features)}
         self.edge_index = self.create_edge_index()
-        self.samples = self.multiomic_dataset.samples 
-        self.variable_types = self.multiomic_dataset.variable_types 
-        self.ann = self.multiomic_dataset.ann 
-        self.samples = self.multiomic_dataset.samples 
+        self.samples = self.multiomic_dataset.samples
+        self.variable_types = self.multiomic_dataset.variable_types
         self.label_mappings = self.multiomic_dataset.label_mappings
+        self.ann = self.multiomic_dataset.ann
+        
+        # Precompute all node features for all samples
+        self.node_features_tensor = self.precompute_node_features()
+        
+        # Store labels for all samples
+        self.labels = {target_name: labels for target_name, labels in self.multiomic_dataset.ann.items()}
+        
+        # Store sample identifiers
+        self.samples = self.multiomic_dataset.samples
 
     def find_common_features(self):
         common_features = set.intersection(*(set(features) for features in self.multiomic_dataset.features.values()))
@@ -742,54 +751,65 @@ class MultiOmicDatasetNW(Dataset):
         edge_list = [(self.gene_to_index[row['protein1']], self.gene_to_index[row['protein2']]) for index, row in filtered_df.iterrows()]
         return torch.tensor(edge_list, dtype=torch.long).t()
 
-    def __getitem__(self, idx):
-        sample_id = self.samples[idx]
-        node_features = []
+    def precompute_node_features(self):
+        # Find indices of common features in each data matrix
+        feature_indices = {data_type: [self.multiomic_dataset.features[data_type].get_loc(gene) 
+                                        for gene in self.common_features if gene in self.multiomic_dataset.features[data_type]]
+                           for data_type in self.multiomic_dataset.dat}
+        # Create a tensor to store all features [num_samples, num_nodes, num_data_types]
+        num_samples = len(self.samples)
+        num_nodes = len(self.common_features)
+        num_data_types = len(self.multiomic_dataset.dat)
+        all_features = torch.empty((num_samples, num_nodes, num_data_types), dtype=torch.float)
 
-        # Gather node features for each gene
-        for gene in self.common_features:
-            gene_features = []
-            for data_type, data_matrix in self.multiomic_dataset.dat.items():
-                if gene in self.multiomic_dataset.features[data_type]:
-                    feature_index = self.multiomic_dataset.features[data_type].get_loc(gene)
-                    gene_feature = data_matrix[idx, feature_index]
-                    gene_features.append(gene_feature)
-
-            # Convert all features from all modalities for this gene into a single feature vector
-            node_features.append(torch.tensor(gene_features, dtype=torch.float))
-
-        # Convert list of tensors to a single tensor
-        node_features_tensor = torch.stack(node_features)
+        # Extract features for each data type and place them in the tensor
+        for i, data_type in enumerate(self.multiomic_dataset.dat):
+            # Get the data matrix
+            data_matrix = self.multiomic_dataset.dat[data_type]
+            # Use advanced indexing to extract features for all samples at once
+            indices = feature_indices[data_type]
+            if indices:  # Ensure there are common features in this data type
+                all_features[:, :, i] = data_matrix[:, indices]
+                print(data_matrix[:, indices])
+        return all_features
         
-        y_dict = {target_name: labels[idx]
-           for target_name, labels in self.multiomic_dataset.ann.items()}
-
+    def __getitem__(self, idx):
+        node_features_tensor = self.node_features_tensor[idx]
+        y_dict = {target_name: self.labels[target_name][idx] for target_name in self.labels}
         return node_features_tensor, y_dict
 
     def __len__(self):
         return len(self.samples)
-
-    @property
-    def edge_index(self):
-        return self._edge_index
-
-    @edge_index.setter
-    def edge_index(self, value):
-        self._edge_index = value
     
     def print_stats(self):
-    """
-    TODO
+        """
+        Prints various statistics about the graph.
+        """
+        num_nodes = len(self.common_features)
+        num_edges = self.edge_index.size(1)
+        num_node_features = self.node_features_tensor.size(2)
+
+        # Calculate degree for each node
+        degrees = torch.zeros(num_nodes, dtype=torch.long)
+        degrees.index_add_(0, self.edge_index[0], torch.ones_like(self.edge_index[0]))
+        degrees.index_add_(0, self.edge_index[1], torch.ones_like(self.edge_index[1]))  # For undirected graphs
+
+        num_singletons = torch.sum(degrees == 0).item()
+        non_singletons = degrees[degrees > 0]
+
+        mean_edges_per_node = non_singletons.float().mean().item() if len(non_singletons) > 0 else 0
+        median_edges_per_node = non_singletons.median().item() if len(non_singletons) > 0 else 0
+        max_edges = degrees.max().item()
+
         print("Dataset Statistics:")
         print(f"Number of nodes: {num_nodes}")
         print(f"Total number of edges: {num_edges}")
         print(f"Number of node features per node: {num_node_features}")
         print(f"Number of singletons (nodes with no edges): {num_singletons}")
-        print(f"Mean number of edges per node (excluding singletons): {mean_edges_per_node}")
+        print(f"Mean number of edges per node (excluding singletons): {mean_edges_per_node:.2f}")
         print(f"Median number of edges per node (excluding singletons): {median_edges_per_node}")
         print(f"Max number of edges per node: {max_edges}")
-    """
-
+        
 class MultiOmicPYGDataset(PYGDataset):
     required = ["variable_types", "features", "samples", "label_mappings", "feature_ann"]
 
@@ -931,14 +951,14 @@ def read_user_graph(fpath, sep=" ", header=None, **pd_read_csv_kw):
     return pd.read_csv(fpath, sep=sep, header=header, **pd_read_csv_kw)
 
 
-def read_stringdb_links_ori(fname):
+def read_stringdb_links(fname):
     df = pd.read_csv(fname, header=0, sep=" ")
     df = df[df.combined_score > 400]
     df = df[df.combined_score > df.combined_score.quantile(0.9)]
     df[["protein1", "protein2"]] = df[["protein1", "protein2"]].map(lambda a: a.split(".")[-1])
     return df
 
-def read_stringdb_links(fname):
+def read_stringdb_links_test(fname):
     df = pd.read_csv(fname, header=0, sep=" ")
     df = df[df.combined_score > 800]
     df = df[df.combined_score > df.combined_score.quantile(0.9)]

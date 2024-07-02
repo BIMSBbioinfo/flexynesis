@@ -7,7 +7,7 @@ import pandas as pd
 import flexynesis
 from flexynesis.models import *
 from lightning.pytorch.callbacks import EarlyStopping
-from .data import STRING, MultiOmicGeometricDataset
+from .data import STRING, MultiOmicDatasetNW
 
 def main():
     """
@@ -108,11 +108,6 @@ def main():
     parser.add_argument("--graph", help="Graph to use, name of the database or path to the edge list on the disk.", type=str,  default="STRING")
     parser.add_argument("--string_organism", help="STRING DB organism id.", type=int, default=9606)
     parser.add_argument("--string_node_name", help="Type of node name.", type=str, choices=["gene_name", "gene_id"], default="gene_name")
-
-
-    warnings.filterwarnings("ignore", ".*does not have many workers.*")
-    warnings.filterwarnings("ignore", "has been removed as a dependency of the")
-    warnings.filterwarnings("ignore", "The `srun` command is available on your system but is not used")
 
     args = parser.parse_args()
     
@@ -242,9 +237,9 @@ def main():
         # overlay datasets with network info 
         # this is a temporary solution 
         print("[INFO] Overlaying the dataset with network data from STRINGDB")
-        obj = STRING(".", "9606", "gene_name")
-        train_dataset = MultiOmicGeometricDataset(train_dataset, obj.graph_df)
-        test_dataset = MultiOmicGeometricDataset(test_dataset, obj.graph_df)
+        obj = STRING('STRING', "9606", "gene_name")
+        train_dataset = MultiOmicDatasetNW(train_dataset, obj.graph_df)
+        test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df)
         
     
     # print feature logs to file (we use these tables to track which features are dropped/selected and why)
