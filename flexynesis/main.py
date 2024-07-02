@@ -21,6 +21,7 @@ import os, yaml
 from skopt.space import Integer, Categorical, Real
 from .data import STRING
 
+torch.set_float32_matmul_precision("medium")
             
 class HyperparameterTuning:
     """
@@ -130,7 +131,7 @@ class HyperparameterTuning:
             else:
                 raise ValueError(f"'{self.config_name}' not found in the default config.")
 
-    def get_batch_space(self, min_size = 16, max_size = 256):
+    def get_batch_space(self, min_size = 32, max_size = 256):
         m = int(np.log2(len(self.dataset) * 0.8))
         st = int(np.log2(min_size))
         end = int(np.log2(max_size))
@@ -150,8 +151,9 @@ class HyperparameterTuning:
         if self.early_stop_patience > 0 and full_train == False:
             early_stop_callback = self.init_early_stopping()
             mycallbacks.append(early_stop_callback)
-
+    
         trainer = pl.Trainer(
+            precision = '16-mixed', # mixed precision training 
             max_epochs=int(params['epochs']),
             log_every_n_steps=5,
             callbacks=mycallbacks,
@@ -159,7 +161,8 @@ class HyperparameterTuning:
             logger=False,
             enable_checkpointing=False,
             devices=1,
-            accelerator=self.device_type
+            accelerator=self.device_type,
+            profiler = "simple" #pl.pytorch.profilers.AdvancedProfiler(dirpath=".", filename="perf_logs")
         )
         return trainer, early_stop_callback
     
@@ -211,8 +214,10 @@ class HyperparameterTuning:
                 print(f"[INFO] {'training cross-validation fold' if self.use_cv else 'training validation split'} {i}")
                 train_subset = torch.utils.data.Subset(self.loader_dataset, train_index)
                 val_subset = torch.utils.data.Subset(self.loader_dataset, val_index)
-                train_loader = self.DataLoader(train_subset, batch_size=int(params['batch_size']), pin_memory=True, shuffle=True, drop_last=True)
-                val_loader = self.DataLoader(val_subset, batch_size=int(params['batch_size']), pin_memory=True, shuffle=False)
+                train_loader = self.DataLoader(train_subset, batch_size=int(params['batch_size']), 
+                                               pin_memory=True, shuffle=True, drop_last=True, num_workers = 4, prefetch_factor = None, persistent_workers = True)
+                val_loader = self.DataLoader(val_subset, batch_size=int(params['batch_size']), 
+                                             pin_memory=True, shuffle=False, num_workers = 4, prefetch_factor = None, persistent_workers = True)
 
                 model = self.model_class(**model_args)
                 trainer, early_stop_callback = self.setup_trainer(params, current_step, total_steps)
