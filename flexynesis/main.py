@@ -159,8 +159,7 @@ class HyperparameterTuning:
             logger=False,
             enable_checkpointing=False,
             devices=1,
-            accelerator=self.device_type,
-            profiler = "simple" #pl.pytorch.profilers.AdvancedProfiler(dirpath=".", filename="perf_logs")
+            accelerator=self.device_type
         )
         return trainer, early_stop_callback
     
@@ -219,6 +218,7 @@ class HyperparameterTuning:
 
                 model = self.model_class(**model_args)
                 trainer, early_stop_callback = self.setup_trainer(params, current_step, total_steps)
+                print(f"[INFO] hpo config:{params}")
                 trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
                 if early_stop_callback.stopped_epoch:
                     epochs.append(early_stop_callback.stopped_epoch)
