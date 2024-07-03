@@ -234,20 +234,19 @@ class GNNEarly(pl.LightningModule):
         
     # Adaptor forward function for captum integrated gradients. 
     def forward_target(self, *args):
-        input_data = list(args[:-3])  # expect a single tensor (early integration)
-        target_var = args[-3]  # target variable of interest
-        steps = args[-2]  # number of steps for IntegratedGradients().attribute 
-        edge_index = args[-1] 
+        input_data = list(args[:-2])  # expect a single tensor (early integration)
+        target_var = args[-2]  # target variable of interest
+        steps = args[-1]  # number of steps for IntegratedGradients().attribute 
         outputs_list = []
         for i in range(steps):
             x_step = input_data[0][i] 
-            edges_step = edge_index[i] # although, identical, they get copied. 
-            out = self.forward(x_step, edges_step)
+            #edges_step = edge_index[i] # although, identical, they get copied. 
+            out = self.forward(x_step, self.dataset_edge_index)
             outputs_list.append(out[target_var])
         return torch.cat(outputs_list, dim = 0)
 
         
-    def compute_feature_importance(self, dataset, target_var, steps=5, batch_size = 32):
+    def compute_feature_importance(self, dataset, target_var, steps=5, batch_size = 16):
         """
         Computes the feature importance for each variable in the dataset using the Integrated Gradients method.
         This method measures the importance of each feature by attributing the prediction output to each input feature.
@@ -269,10 +268,11 @@ class GNNEarly(pl.LightningModule):
         """
         def bytes_to_gb(bytes):
             return bytes / 1024 ** 2
+        print("Memory before moving model to device: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
         device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
         self.to(device)
         print("Memory before edges: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
-        edge_index = dataset.edge_index.unsqueeze(0).to(device)
+        self.dataset_edge_index = dataset.edge_index.to(device)
         print("Memory after edges: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
 
 
@@ -296,14 +296,14 @@ class GNNEarly(pl.LightningModule):
             if num_class == 1:
                 # returns a tuple of tensors (one per data modality)
                 attributions = ig.attribute( input_data, baseline, 
-                                             additional_forward_args=(target_var, steps, edge_index), 
+                                             additional_forward_args=(target_var, steps), 
                                              n_steps=steps)
                 aggregated_attributions[0].append(attributions)
             else:
                 for target_class in range(num_class):
                     # returns a tuple of tensors (one per data modality)
                     attributions = ig.attribute( input_data, baseline, 
-                                                 additional_forward_args=(target_var, steps, edge_index), 
+                                                 additional_forward_args=(target_var, steps), 
                                                  target=target_class, n_steps=steps)
                     aggregated_attributions[target_class].append(attributions)
         # For each target class concatenate node attributions accross batches 
