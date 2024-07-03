@@ -133,8 +133,7 @@ class GNNEarly(pl.LightningModule):
         return total_loss
             
     def configure_optimizers(self):
-        #optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
-        optimizer = torch.optim.SGD(self.parameters(), lr=self.config["lr"])
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
         return optimizer
 
     def compute_loss(self, var, y, y_hat):
@@ -205,6 +204,7 @@ class GNNEarly(pl.LightningModule):
         self.eval()  # Set the model to evaluation mode
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(device)  # Move the model to the appropriate device
+        edge_index = dataset.edge_index.to(device)  # Move edge_index to GPU
 
         dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
         all_embeddings = []  # List to store embeddings from all batches
@@ -213,7 +213,6 @@ class GNNEarly(pl.LightningModule):
         # Process each batch
         for x, y_dict, samples in dataloader:
             x = x.to(device)  # Move data to GPU
-            edge_index = dataset.edge_index.to(device)  # Move edge_index to GPU
 
             embeddings = self.encoders(x, edge_index).detach().cpu().numpy()  # Compute embeddings and move to CPU
             all_embeddings.append(embeddings)
@@ -232,3 +231,114 @@ class GNNEarly(pl.LightningModule):
 
     def optimizer_zero_grad(self, epoch, batch_idx, optimizer):
         optimizer.zero_grad(set_to_none=True)
+        
+    # Adaptor forward function for captum integrated gradients. 
+    def forward_target(self, *args):
+        input_data = list(args[:-3])  # expect a single tensor (early integration)
+        target_var = args[-3]  # target variable of interest
+        steps = args[-2]  # number of steps for IntegratedGradients().attribute 
+        edge_index = args[-1] 
+        outputs_list = []
+        for i in range(steps):
+            x_step = input_data[0][i] 
+            edges_step = edge_index[i] # although, identical, they get copied. 
+            out = self.forward(x_step, edges_step)
+            outputs_list.append(out[target_var])
+        return torch.cat(outputs_list, dim = 0)
+
+        
+    def compute_feature_importance(self, dataset, target_var, steps=5, batch_size = 32):
+        """
+        Computes the feature importance for each variable in the dataset using the Integrated Gradients method.
+        This method measures the importance of each feature by attributing the prediction output to each input feature.
+    
+        Args:
+            dataset: The dataset object containing the features and data (MultiOmicDatasetNW object).
+            target_var (str): The target variable for which feature importance is calculated.
+            steps (int, optional): The number of steps to use for integrated gradients approximation. Defaults to 5.
+            batch_size (int, optional): The size of the batch to process the dataset. Defaults to 64.
+    
+        Returns:
+            pd.DataFrame: A DataFrame containing feature importances across different variables and data modalities.
+                          Columns include 'target_variable', 'target_class', 'target_class_label', 'layer', 'name',
+                          and 'importance'.
+    
+        This function adjusts the device setting based on the availability of GPUs and performs the computation using
+        Integrated Gradients. It processes batches of data, aggregates results across batches, and formats the output
+        into a readable DataFrame which is then stored in the model's attribute for later use or analysis.
+        """
+        def bytes_to_gb(bytes):
+            return bytes / 1024 ** 2
+        device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
+        self.to(device)
+        print("Memory before edges: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
+        edge_index = dataset.edge_index.unsqueeze(0).to(device)
+        print("Memory after edges: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
+
+
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        ig = IntegratedGradients(self.forward_target)
+
+        if dataset.variable_types[target_var] == 'numerical':
+            num_class = 1
+        else:
+            num_class = len(np.unique(dataset.ann[target_var]))
+        
+        print("Memory before batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
+
+        aggregated_attributions = [[] for _ in range(num_class)]
+        for batch in dataloader:
+            x, y_dict, samples = batch
+            
+            input_data = x.unsqueeze(0).requires_grad_().to(device)
+            baseline = torch.zeros_like(input_data)
+            
+            if num_class == 1:
+                # returns a tuple of tensors (one per data modality)
+                attributions = ig.attribute( input_data, baseline, 
+                                             additional_forward_args=(target_var, steps, edge_index), 
+                                             n_steps=steps)
+                aggregated_attributions[0].append(attributions)
+            else:
+                for target_class in range(num_class):
+                    # returns a tuple of tensors (one per data modality)
+                    attributions = ig.attribute( input_data, baseline, 
+                                                 additional_forward_args=(target_var, steps, edge_index), 
+                                                 target=target_class, n_steps=steps)
+                    aggregated_attributions[target_class].append(attributions)
+        # For each target class concatenate node attributions accross batches 
+        processed_attributions = [] 
+        # Process each class
+        for class_idx in range(len(aggregated_attributions)):
+            class_attr = aggregated_attributions[class_idx]
+            # Concatenate tensors along the batch dimension
+            attr_concat = torch.cat([batch_attr for batch_attr in class_attr], dim=1)
+            processed_attributions.append(attr_concat)
+
+        # compute absolute importance and move to cpu 
+        abs_attr = [torch.abs(attr_class).cpu() for attr_class in processed_attributions]
+        # average over samples 
+        imp = [a.mean(dim=1) for a in abs_attr]
+
+        # move the model also back to cpu (if not already on cpu)
+        self.to('cpu')
+        print("Memory after batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
+
+
+        df_list = []
+        layers = list(dataset.multiomic_dataset.dat.keys())
+        for i in range(num_class):
+            features = dataset.common_features
+            target_class_label = dataset.label_mappings[target_var].get(i) if target_var in dataset.label_mappings else ''
+            for l in range(len(layers)): 
+                # extracting node feature attributes coming from different omic layers 
+                importances = imp[i].squeeze().detach().numpy()[:,l]
+                df_list.append(pd.DataFrame({'target_variable': target_var, 
+                                             'target_class': i, 
+                                             'target_class_label': target_class_label,
+                                             'layer': layers[l], 
+                                             'name': features, 
+                                             'importance': importances}))    
+        df_imp = pd.concat(df_list, ignore_index=True)
+        # save the computed scores in the model
+        self.feature_importances[target_var] = df_imp
