@@ -237,7 +237,8 @@ def main():
         # overlay datasets with network info 
         # this is a temporary solution 
         print("[INFO] Overlaying the dataset with network data from STRINGDB")
-        obj = STRING('STRING', "9606", "gene_name")
+        obj = STRING(os.path.join(args.data_path, '_'.join(['processed', args.prefix])), 
+                     args.string_organism, args.string_node_name)
         train_dataset = MultiOmicDatasetNW(train_dataset, obj.graph_df)
         train_dataset.print_stats()
         test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df)
@@ -310,7 +311,7 @@ def main():
             # compute feature importance values
             print("[INFO] Computing variable importance scores")
             for var in model.target_variables:
-                model.compute_feature_importance(train_dataset, var, steps = 50)
+                model.compute_feature_importance(train_dataset, var, steps = 25)
             df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], 
                                ignore_index = True)
             df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
