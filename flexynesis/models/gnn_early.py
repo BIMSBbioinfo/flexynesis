@@ -90,7 +90,7 @@ class GNNEarly(pl.LightningModule):
 
             
     def training_step(self, batch):
-        x, y_dict = batch
+        x, y_dict, samples = batch
         outputs = self.forward(x, self.edge_index)
 
         losses = {}
@@ -112,7 +112,7 @@ class GNNEarly(pl.LightningModule):
         return total_loss
 
     def validation_step(self, batch):
-        x, y_dict = batch
+        x, y_dict, samples = batch
         outputs = self.forward(x, self.edge_index)
         losses = {}
         for var in self.variables:
@@ -172,33 +172,61 @@ class GNNEarly(pl.LightningModule):
         return total_loss
     
     def predict(self, dataset):
-        self.eval()
-        dataloader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
-        x, yict = next(iter(dataloader))
-        outputs = self.forward(x, dataset.edge_index.to(x.device))
+        self.eval()  # Set the model to evaluation mode
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.to(device)  # Move the model to the appropriate device
 
-        predictions = {}
-        for var in self.variables:
-            y_pred = outputs[var].detach().numpy()
-            if self.variable_types[var] == "categorical":
-                predictions[var] = np.argmax(y_pred, axis=1)
-            else:
-                predictions[var] = y_pred
+        # Create a DataLoader with a practical batch size
+        dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
+        edge_index = dataset.edge_index.to(device)  # Move edge_index to GPU
+
+        predictions = {var: [] for var in self.variables}  # Initialize prediction storage
+
+        # Process each batch
+        for x, y_dict,samples in dataloader:
+            x = x.to(device)  # Move data to GPU
+
+            outputs = self.forward(x, edge_index)
+
+            # Collect predictions for each variable
+            for var in self.variables:
+                y_pred = outputs[var].detach().cpu().numpy()  # Move outputs back to CPU and convert to numpy
+                if self.variable_types[var] == "categorical":
+                    predictions[var].extend(np.argmax(y_pred, axis=1))
+                else:
+                    predictions[var].extend(y_pred)
+
+        # Convert lists to arrays if necessary, depending on the downstream use-case
+        predictions = {var: np.array(predictions[var]) for var in predictions}
+
         return predictions
 
-
     def transform(self, dataset):
-        self.eval()
-        
-        dataloader = DataLoader(dataset, batch_size=len(dataset), shuffle=False)
-        x, y_dict = next(iter(dataloader))
-        embeddings = self.encoders(x, dataset.edge_index.to(x.device))
+        self.eval()  # Set the model to evaluation mode
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.to(device)  # Move the model to the appropriate device
+
+        dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
+        all_embeddings = []  # List to store embeddings from all batches
+        sample_ids = []  # List to store indices for all samples processed
+
+        # Process each batch
+        for x, y_dict, samples in dataloader:
+            x = x.to(device)  # Move data to GPU
+            edge_index = dataset.edge_index.to(device)  # Move edge_index to GPU
+
+            embeddings = self.encoders(x, edge_index).detach().cpu().numpy()  # Compute embeddings and move to CPU
+            all_embeddings.append(embeddings)
+            sample_ids.extend(samples)  
+            
+        # Concatenate all embeddings into a single numpy array
+        all_embeddings = np.vstack(all_embeddings)
 
         # Converting tensor to numpy array and then to DataFrame
         embeddings_df = pd.DataFrame(
-            embeddings.detach().numpy(),
-            index=dataset.samples,
-            columns=[f"E{dim}" for dim in range(embeddings.shape[1])],
+            all_embeddings,
+            index=sample_ids,  # Use the correct indices as row names
+            columns=[f"E{dim}" for dim in range(all_embeddings.shape[1])],
         )
         return embeddings_df
 
