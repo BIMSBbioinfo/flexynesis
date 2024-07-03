@@ -7,7 +7,7 @@ import pandas as pd
 import flexynesis
 from flexynesis.models import *
 from lightning.pytorch.callbacks import EarlyStopping
-
+from .data import STRING, MultiOmicDatasetNW
 
 def main():
     """
@@ -57,7 +57,7 @@ def main():
     
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, 
-                        choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred"], required = True)
+                        choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "GNNEarly"], required = True)
     parser.add_argument("--gnn_conv_type", help="If model_class is set to DirectPredGCNN, choose which graph convolution type to use", type=str, 
                         choices=["GC", "GCN", "GAT", "SAGE"])
     parser.add_argument("--target_variables", 
@@ -109,11 +109,6 @@ def main():
     parser.add_argument("--string_organism", help="STRING DB organism id.", type=int, default=9606)
     parser.add_argument("--string_node_name", help="Type of node name.", type=str, choices=["gene_name", "gene_id"], default="gene_name")
 
-
-    warnings.filterwarnings("ignore", ".*does not have many workers.*")
-    warnings.filterwarnings("ignore", "has been removed as a dependency of the")
-    warnings.filterwarnings("ignore", "The `srun` command is available on your system but is not used")
-
     args = parser.parse_args()
     
     # do some sanity checks on input arguments
@@ -157,10 +152,10 @@ def main():
         torch.set_num_threads(args.threads)
 
     # 5. check GNN arguments
-    if args.model_class == 'DirectPredGCNN':
+    if args.model_class == 'DirectPredGCNN' or args.model_class == 'GNNEarly':
         if not args.gnn_conv_type:
             warning_message = "\n".join([
-                "\n\n!!! When running DirectPredGCNN, a convolution type can be set",
+                "\n\n!!! When running DirectPredGCNN or GNNEarly, a convolution type can be set",
                 "with the --gnn_conv_type flag. See `flexynesis -h` for full set of options.",
                 "Falling back on the default convolution type: GC !!!\n\n"
             ])
@@ -202,7 +197,8 @@ def main():
         MultiTripletNetwork: tuple[MultiTripletNetwork, str] = MultiTripletNetwork, "MultiTripletNetwork"
         DirectPredGCNN: tuple[DirectPredGCNN, str] = DirectPredGCNN, "DirectPredGCNN"
         CrossModalPred: tuple[CrossModalPred, str] = CrossModalPred, "CrossModalPred"
-
+        GNNEarly: tuple[GNNEarly, str] = GNNEarly, "GNNEarly"
+        
     available_models = AvailableModels()
     model_class = getattr(available_models, args.model_class, None)
     if model_class is None:
@@ -236,6 +232,16 @@ def main():
                                             string_node_name=args.string_node_name, 
                                             downsample = args.subsample)
     train_dataset, test_dataset = data_importer.import_data(force = True)
+    
+    if args.model_class == 'GNNEarly': 
+        # overlay datasets with network info 
+        # this is a temporary solution 
+        print("[INFO] Overlaying the dataset with network data from STRINGDB")
+        obj = STRING('STRING', "9606", "gene_name")
+        train_dataset = MultiOmicDatasetNW(train_dataset, obj.graph_df)
+        train_dataset.print_stats()
+        test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df)
+        
     
     # print feature logs to file (we use these tables to track which features are dropped/selected and why)
     feature_logs = data_importer.feature_logs
@@ -347,14 +353,20 @@ def main():
         print("[INFO] Computing off-the-shelf method performance on first target variable:",model.target_variables[0])
         var = model.target_variables[0]
         metrics = pd.DataFrame()
+        
+        # in the case when GNNEarly was used, the we use the initial multiomicdataset for train/test
+        # because GNNEarly requires a modified dataset structure to fit the networks (temporary solution)
+        train = train_dataset.multiomic_dataset if args.model_class == 'GNNEarly' else train_dataset
+        test = test_dataset.multiomic_dataset if args.model_class == 'GNNEarly' else test_dataset
+        
         if var != model.surv_event_var: 
-            metrics = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, 
+            metrics = flexynesis.evaluate_baseline_performance(train, test, 
                                                             variable_name = var, 
                                                             n_folds=5,
                                                             n_jobs = int(args.threads))
         if model.surv_event_var and model.surv_time_var:
             print("[INFO] Computing off-the-shelf method performance on survival variable:",model.surv_time_var)
-            metrics_baseline_survival = flexynesis.evaluate_baseline_survival_performance(train_dataset, test_dataset, 
+            metrics_baseline_survival = flexynesis.evaluate_baseline_survival_performance(train, test, 
                                                                                              model.surv_time_var, 
                                                                                              model.surv_event_var, 
                                                                                              n_folds = 5,

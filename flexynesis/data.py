@@ -200,7 +200,7 @@ class DataImporter:
                 initial_edge_list = graph_df.to_numpy().tolist()
             # Read STRING by default.
             elif isinstance(self.graph, STRING):
-                graph_df = self.graph.df
+                graph_df = self.graph.graph_df
                 available_features = np.unique(graph_df[["protein1", "protein2"]].to_numpy()).tolist()
                 initial_edge_list = stringdb_links_to_list(graph_df)
             else:
@@ -679,6 +679,7 @@ class MultiOmicDataset(Dataset):
         stats = {': '.join(['feature_count in', x]): self.dat[x].shape[1] for x in self.dat.keys()}
         stats['sample_count'] = len(self.samples)
         return(stats)
+    
 
 # given a MultiOmicDataset object, convert to Triplets (anchor,positive,negative)
 class TripletMultiOmicDataset(Dataset):
@@ -714,7 +715,100 @@ class TripletMultiOmicDataset(Dataset):
                              for label in labels_set}
         return labels_set, label_to_indices
 
+class MultiOmicDatasetNW(Dataset):
+    def __init__(self, multiomic_dataset, interaction_df):
+        self.multiomic_dataset = multiomic_dataset
+        self.interaction_df = interaction_df
+        
+        # Precompute common features and edge index
+        self.common_features = self.find_common_features()
+        self.gene_to_index = {gene: idx for idx, gene in enumerate(self.common_features)}
+        self.edge_index = self.create_edge_index()
+        self.samples = self.multiomic_dataset.samples
+        self.variable_types = self.multiomic_dataset.variable_types
+        self.label_mappings = self.multiomic_dataset.label_mappings
+        self.ann = self.multiomic_dataset.ann
+        
+        # Precompute all node features for all samples
+        self.node_features_tensor = self.precompute_node_features()
+        
+        # Store labels for all samples
+        self.labels = {target_name: labels for target_name, labels in self.multiomic_dataset.ann.items()}
+        
+        # Store sample identifiers
+        self.samples = self.multiomic_dataset.samples
 
+    def find_common_features(self):
+        common_features = set.intersection(*(set(features) for features in self.multiomic_dataset.features.values()))
+        interaction_genes = set(self.interaction_df['protein1']).union(set(self.interaction_df['protein2']))
+        return list(common_features.intersection(interaction_genes))
+
+    def create_edge_index(self):
+        filtered_df = self.interaction_df[
+            (self.interaction_df['protein1'].isin(self.common_features)) & 
+            (self.interaction_df['protein2'].isin(self.common_features))
+        ]
+        edge_list = [(self.gene_to_index[row['protein1']], self.gene_to_index[row['protein2']]) for index, row in filtered_df.iterrows()]
+        return torch.tensor(edge_list, dtype=torch.long).t()
+
+    def precompute_node_features(self):
+        # Find indices of common features in each data matrix
+        feature_indices = {data_type: [self.multiomic_dataset.features[data_type].get_loc(gene) 
+                                        for gene in self.common_features]
+                           for data_type in self.multiomic_dataset.dat}
+        # Create a tensor to store all features [num_samples, num_nodes, num_data_types]
+        num_samples = len(self.samples)
+        num_nodes = len(self.common_features)
+        num_data_types = len(self.multiomic_dataset.dat)
+        all_features = torch.empty((num_samples, num_nodes, num_data_types), dtype=torch.float)
+
+        # Extract features for each data type and place them in the tensor
+        for i, data_type in enumerate(self.multiomic_dataset.dat):
+            # Get the data matrix
+            data_matrix = self.multiomic_dataset.dat[data_type]
+            # Use advanced indexing to extract features for all samples at once
+            indices = feature_indices[data_type]
+            if indices:  # Ensure there are common features in this data type
+                all_features[:, :, i] = data_matrix[:, indices]
+        return all_features
+        
+    def __getitem__(self, idx):
+        node_features_tensor = self.node_features_tensor[idx]
+        y_dict = {target_name: self.labels[target_name][idx] for target_name in self.labels}
+        return node_features_tensor, y_dict, self.samples[idx]
+
+    def __len__(self):
+        return len(self.samples)
+    
+    def print_stats(self):
+        """
+        Prints various statistics about the graph.
+        """
+        num_nodes = len(self.common_features)
+        num_edges = self.edge_index.size(1)
+        num_node_features = self.node_features_tensor.size(2)
+
+        # Calculate degree for each node
+        degrees = torch.zeros(num_nodes, dtype=torch.long)
+        degrees.index_add_(0, self.edge_index[0], torch.ones_like(self.edge_index[0]))
+        degrees.index_add_(0, self.edge_index[1], torch.ones_like(self.edge_index[1]))  # For undirected graphs
+
+        num_singletons = torch.sum(degrees == 0).item()
+        non_singletons = degrees[degrees > 0]
+
+        mean_edges_per_node = non_singletons.float().mean().item() if len(non_singletons) > 0 else 0
+        median_edges_per_node = non_singletons.median().item() if len(non_singletons) > 0 else 0
+        max_edges = degrees.max().item()
+
+        print("Dataset Statistics:")
+        print(f"Number of nodes: {num_nodes}")
+        print(f"Total number of edges: {num_edges}")
+        print(f"Number of node features per node: {num_node_features}")
+        print(f"Number of singletons (nodes with no edges): {num_singletons}")
+        print(f"Mean number of edges per node (excluding singletons): {mean_edges_per_node:.2f}")
+        print(f"Median number of edges per node (excluding singletons): {median_edges_per_node}")
+        print(f"Max number of edges per node: {max_edges}")
+        
 class MultiOmicPYGDataset(PYGDataset):
     required = ["variable_types", "features", "samples", "label_mappings", "feature_ann"]
 
@@ -811,7 +905,11 @@ class STRING(PYGDataset):
         self.organism = organism
         self.node_name = node_name
         super().__init__(os.path.join(root, self.base_folder))
-        self.df = read_user_graph(self.processed_paths[0], sep=",", header=0, index_col=0)
+        
+        if not os.path.exists(self.processed_paths[0]):
+            self.download()
+            self.process()
+        self.graph_df = pd.read_csv(self.processed_paths[0], sep=",", header=0, index_col=0)
 
     def len(self) -> int:
         return 0
@@ -839,8 +937,8 @@ class STRING(PYGDataset):
 
     def process(self) -> None:
         graph_df = read_stringdb_graph(self.node_name, self.raw_paths[0], self.raw_paths[1])
-        # Drop nans and save to disk.
         graph_df.dropna().to_csv(self.processed_paths[0])
+        self.graph_df = graph_df  # Storing the DataFrame in the instance
 
 
 def read_user_graph(fpath, sep=" ", header=None, **pd_read_csv_kw):
@@ -859,6 +957,22 @@ def read_stringdb_links(fname):
     df[["protein1", "protein2"]] = df[["protein1", "protein2"]].map(lambda a: a.split(".")[-1])
     return df
 
+def read_stringdb_links_test(fname):
+    df = pd.read_csv(fname, header=0, sep=" ")
+    df = df[df.combined_score > 800]
+    df = df[df.combined_score > df.combined_score.quantile(0.9)]
+    df_expanded = pd.concat([
+        df.rename(columns={'protein1': 'protein', 'protein2': 'partner'}),
+        df.rename(columns={'protein2': 'protein', 'protein1': 'partner'})
+    ])
+    # Sort the expanded DataFrame by 'combined_score' in descending order
+    df_expanded_sorted = df_expanded.sort_values(by='combined_score', ascending=False)
+        # Reduce to unique interactions to avoid counting duplicates
+    df_expanded_unique = df_expanded_sorted.drop_duplicates(subset=['protein', 'partner'])
+    top_interactions = df_expanded_unique.groupby('protein').head(5)
+    df = top_interactions.rename(columns={'protein': 'protein1', 'partner': 'protein2'})
+    df[["protein1", "protein2"]] = df[["protein1", "protein2"]].map(lambda a: a.split(".")[-1])
+    return df
 
 def read_stringdb_aliases(fname: str, node_name: str) -> dict[str, str]:
     if node_name == "gene_id":

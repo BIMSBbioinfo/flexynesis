@@ -171,18 +171,19 @@ class GNNs(nn.Module):
             raise ValueError('Unknown convolution type. Choose one of: ',conv_options.keys())
         
         self.conv = conv_options[conv]
-        self.layer_1 = self.conv(input_dim, output_dim)
+        self.layer_1 = self.conv(input_dim, hidden_dim)
         self.act_1 = self.activation
-        #self.layer_2 = self.conv(hidden_dim, output_dim)
-        #self.act_2 = self.activation
-        self.aggregation = aggr.SumAggregation()
+        self.layer_2 = self.conv(hidden_dim, output_dim)
+        self.act_2 = self.activation
 
-    def forward(self, x, edge_index, batch):
+    def forward(self, x, edge_index):
         x = self.layer_1(x, edge_index)
         x = self.act_1(x)
-        #x = self.layer_2(x, edge_index)
-        #x = self.act_2(x)
-        x = self.aggregation(x, batch)
+        x = self.layer_2(x, edge_index)
+        x = self.act_2(x)
+        # mean pooling to get sample embeddings (we use a single graph across samples)
+        # Perform mean pooling across the node dimension
+        x = x.mean(dim=1)  
         return x
     
 def cox_ph_loss(outputs, durations, events):
