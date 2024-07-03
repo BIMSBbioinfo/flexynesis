@@ -353,14 +353,20 @@ def main():
         print("[INFO] Computing off-the-shelf method performance on first target variable:",model.target_variables[0])
         var = model.target_variables[0]
         metrics = pd.DataFrame()
+        
+        # in the case when GNNEarly was used, the we use the initial multiomicdataset for train/test
+        # because GNNEarly requires a modified dataset structure to fit the networks (temporary solution)
+        train = train_dataset.multiomic_dataset if args.model_class == 'GNNEarly' else train_dataset
+        test = test_dataset.multiomic_dataset if args.model_class == 'GNNEarly' else test_dataset
+        
         if var != model.surv_event_var: 
-            metrics = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, 
+            metrics = flexynesis.evaluate_baseline_performance(train, test, 
                                                             variable_name = var, 
                                                             n_folds=5,
                                                             n_jobs = int(args.threads))
         if model.surv_event_var and model.surv_time_var:
             print("[INFO] Computing off-the-shelf method performance on survival variable:",model.surv_time_var)
-            metrics_baseline_survival = flexynesis.evaluate_baseline_survival_performance(train_dataset, test_dataset, 
+            metrics_baseline_survival = flexynesis.evaluate_baseline_survival_performance(train, test, 
                                                                                              model.surv_time_var, 
                                                                                              model.surv_event_var, 
                                                                                              n_folds = 5,
