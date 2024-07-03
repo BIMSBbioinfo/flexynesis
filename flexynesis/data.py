@@ -754,7 +754,7 @@ class MultiOmicDatasetNW(Dataset):
     def precompute_node_features(self):
         # Find indices of common features in each data matrix
         feature_indices = {data_type: [self.multiomic_dataset.features[data_type].get_loc(gene) 
-                                        for gene in self.common_features if gene in self.multiomic_dataset.features[data_type]]
+                                        for gene in self.common_features]
                            for data_type in self.multiomic_dataset.dat}
         # Create a tensor to store all features [num_samples, num_nodes, num_data_types]
         num_samples = len(self.samples)
@@ -770,13 +770,12 @@ class MultiOmicDatasetNW(Dataset):
             indices = feature_indices[data_type]
             if indices:  # Ensure there are common features in this data type
                 all_features[:, :, i] = data_matrix[:, indices]
-                print(data_matrix[:, indices])
         return all_features
         
     def __getitem__(self, idx):
         node_features_tensor = self.node_features_tensor[idx]
         y_dict = {target_name: self.labels[target_name][idx] for target_name in self.labels}
-        return node_features_tensor, y_dict
+        return node_features_tensor, y_dict, self.samples[idx]
 
     def __len__(self):
         return len(self.samples)
