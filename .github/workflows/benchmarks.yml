@@ -101,8 +101,8 @@ jobs:
         conda activate my_env
         flexynesis --data_path dataset2 --model_class MultiTripletNetwork --target_variables y --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,meth --outdir . --prefix msi_triplet --early_stop_patience 3 --evaluate_baseline_performance False
 
-    - name: Run GNNEarly
+    - name: Run GNN
       shell: bash -l {0}
       run: |
         conda activate my_env
-        flexynesis --data_path dataset1 --model_class GNN --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_top_percentile 50 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False --evaluate_baseline_performance False --subsample 50
+        flexynesis --data_path dataset1 --model_class GNN --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_top_percentile 10 --log_transform False --data_types gex --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False --evaluate_baseline_performance False --subsample 50 --disable_marker_finding
