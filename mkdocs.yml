@@ -10,7 +10,8 @@ nav:
   - Command Line Interface: commandline.md
   - API: 
     - Model Classes: 
-      - DirectPred: models.direct_pred.md 
+      - DirectPred: models.direct_pred.md
+      - GNN: models.gnn.md 
       - Supervised VAE: models.supervised_vae.md 
       - MultiTripletNetwork: models.triplet_encoder.md
       - CrossModalPred: models.crossmodel_pred.md 
