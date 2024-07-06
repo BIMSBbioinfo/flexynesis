@@ -2,11 +2,10 @@
 
 import torch
 from torch import nn
-from torch_geometric.nn import aggr, GCNConv, GATConv, SAGEConv, GraphConv, \
-    global_mean_pool as gmeanp, global_max_pool as gmaxp, global_add_pool as gap
+from torch_geometric.nn import aggr, GCNConv, GATConv, SAGEConv, GraphConv
 
 
-__all__ = ["Encoder", "Decoder", "MLP", "GNNs", "cox_ph_loss"]
+__all__ = ["Encoder", "Decoder", "MLP", "flexGCN", "cox_ph_loss"]
 
 
 class Encoder(nn.Module):

@@ -112,9 +112,6 @@ class HyperparameterTuning:
         
         if self.model_class.__name__ == 'MultiTripletNetwork':
             self.loader_dataset = TripletMultiOmicDataset(self.dataset, self.target_variables[0])
-        if self.model_class.__name__ == 'DirectPredGCNN':
-             # use torch_geometric data loader for GCNN class
-            self.DataLoader = torch_geometric.loader.DataLoader
 
         # If config_path is provided, use it
         if config_path:
@@ -181,7 +178,7 @@ class HyperparameterTuning:
             "device_type": self.device_type,
         }
         
-        if self.model_class.__name__ == 'DirectPredGCNN' or self.model_class.__name__ == 'GNNEarly':
+        if self.model_class.__name__ == 'GNN':
             model_args['gnn_conv_type'] = self.gnn_conv_type
         if self.model_class.__name__ == 'CrossModalPred':
             model_args['input_layers'] = self.input_layers

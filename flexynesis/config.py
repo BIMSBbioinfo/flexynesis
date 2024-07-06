@@ -32,15 +32,7 @@ search_spaces = {
         Real(0.0001, 0.01, prior='log-uniform', name='lr'),
         Categorical(epochs, name='epochs')
     ],
-    "DirectPredGCNN": [
-        Integer(8, 32, name="latent_dim"),
-        Real(0.1, 0.25, name='hidden_dim_factor'), # relative size of the hidden_dim w.r.t input_dim 
-        Real(0.0001, 0.01, prior="log-uniform", name="lr"),
-        Categorical(epochs, name="epochs"),
-        Integer(8, 32, name='supervisor_hidden_dim'),
-        Categorical(['relu'], name="activation")
-    ],
-    'GNNEarly': [
+    'GNN': [
         Integer(16, 128, name='latent_dim'),
         Integer(4, 32, name='node_embedding_dim'), # node embedding dimensions
         Integer(1, 4, name='num_convs'), # number of convolutional layers 

@@ -18,8 +18,8 @@ def main():
 
     Args:
         --data_path (str): Path to the folder with train/test data files. (Required)
-        --model_class (str): The kind of model class to instantiate. Choices are ["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred"]. (Required)
-        --gnn_conv_type (str): If model_class is set to DirectPredGCNN, choose which graph convolution type to use. Choices are ["GC", "GCN", "GAT", "SAGE"].
+        --model_class (str): The kind of model class to instantiate. Choices are ["DirectPred", "GNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred"]. (Required)
+        --gnn_conv_type (str): If model_class is set to GNN, choose which graph convolution type to use. Choices are ["GC", "GCN", "SAGE"].
         --target_variables (str): Which variables in 'clin.csv' to use for predictions, comma-separated if multiple. Optional if survival variables are not set to None.
         --batch_variables (str): Which variables in 'clin.csv' to use for data integration/batch correction, comma-separated if multiple. Optional.
         --surv_event_var (str): Which column in 'clin.csv' to use as event/status indicator for survival modeling.
@@ -57,9 +57,9 @@ def main():
     
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, 
-                        choices=["DirectPred", "DirectPredGCNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "GNNEarly"], required = True)
-    parser.add_argument("--gnn_conv_type", help="If model_class is set to DirectPredGCNN, choose which graph convolution type to use", type=str, 
-                        choices=["GC", "GCN", "GAT", "SAGE"])
+                        choices=["DirectPred", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "GNN"], required = True)
+    parser.add_argument("--gnn_conv_type", help="If model_class is set to GNN, choose which graph convolution type to use", type=str, 
+                        choices=["GC", "GCN", "SAGE"])
     parser.add_argument("--target_variables", 
                         help="(Optional if survival variables are not set to None)." 
                         "Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", 
@@ -104,7 +104,7 @@ def main():
                         help="(Optional) If set, the system will attempt to use CUDA/GPU if available.")
     parser.add_argument("--disable_marker_finding", action="store_true", 
                         help="(Optional) If set, marker discovery after model training is disabled.")
-    # DirectPredGCNN args.
+    # GNN args.
     parser.add_argument("--graph", help="Graph to use, name of the database or path to the edge list on the disk.", type=str,  default="STRING")
     parser.add_argument("--string_organism", help="STRING DB organism id.", type=int, default=9606)
     parser.add_argument("--string_node_name", help="Type of node name.", type=str, choices=["gene_name", "gene_id"], default="gene_name")
@@ -124,11 +124,8 @@ def main():
                                   "survival variables (--surv_event_var and --surv_time_var)",
                                   "or --batch_variables."]))
 
-    # 3. Check for compatibility of fusion_type with DirectPredGCNN
+    # 3. Check for compatibility of fusion_type with GNN
     if args.fusion_type == "early":
-        if args.model_class == "DirectPredGCNN":
-            parser.error("The 'DirectPredGCNN' model cannot be used with early fusion type. "
-                         "Use --fusion_type intermediate instead.")
         if args.model_class == 'CrossModalPred': 
             parser.error("The 'CrossModalPred' model cannot be used with early fusion type. "
                          "Use --fusion_type intermediate instead.")
@@ -138,8 +135,7 @@ def main():
     if args.use_gpu:
         if not torch.cuda.is_available():
             warnings.warn(''.join(["\n\n!!! WARNING: GPU REQUESTED BUT NOT AVAILABLE. FALLING BACK TO CPU.\n",
-                                   "PERFORMANCE MAY BE DEGRADED, PARTICULARLY FOR DirectPredGCNN.\n",
-                                   "OTHER MODELS SHOULD HAVE REASONABLE PERFORMANCE ON CPU. \n",
+                                   "PERFORMANCE MAY BE DEGRADED\n",
                                    "IF USING A SLURM SCHEDULER, ENSURE YOU REQUEST A GPU WITH: ",
                                    "`srun --gpus=1 --pty flexynesis <rest of your_command>` !!!\n\n"]))
             time.sleep(3)  #wait a bit to capture user's attention to the warning
@@ -152,10 +148,10 @@ def main():
         torch.set_num_threads(args.threads)
 
     # 5. check GNN arguments
-    if args.model_class == 'DirectPredGCNN' or args.model_class == 'GNNEarly':
+    if args.model_class == 'GNN':
         if not args.gnn_conv_type:
             warning_message = "\n".join([
-                "\n\n!!! When running DirectPredGCNN or GNNEarly, a convolution type can be set",
+                "\n\n!!! When running GNN, a convolution type can be set",
                 "with the --gnn_conv_type flag. See `flexynesis -h` for full set of options.",
                 "Falling back on the default convolution type: GC !!!\n\n"
             ])
@@ -195,9 +191,8 @@ def main():
         DirectPred: tuple[DirectPred, str] = DirectPred, "DirectPred"
         supervised_vae: tuple[supervised_vae, str] = supervised_vae, "supervised_vae"
         MultiTripletNetwork: tuple[MultiTripletNetwork, str] = MultiTripletNetwork, "MultiTripletNetwork"
-        DirectPredGCNN: tuple[DirectPredGCNN, str] = DirectPredGCNN, "DirectPredGCNN"
         CrossModalPred: tuple[CrossModalPred, str] = CrossModalPred, "CrossModalPred"
-        GNNEarly: tuple[GNNEarly, str] = GNNEarly, "GNNEarly"
+        GNN: tuple[GNN, str] = GNN, "GNN"
         
     available_models = AvailableModels()
     model_class = getattr(available_models, args.model_class, None)
@@ -206,16 +201,12 @@ def main():
     else:
         model_class, config_name = model_class
 
-    # Fix graph argument for non GNN models.
-    graph = args.graph if config_name == "DirectPredGCNN" else None
-
     # import assays and labels
     inputDir = args.data_path
     
     # Set concatenate to True to use early fusion, otherwise it will run intermediate fusion
-    concatenate = False 
-    if args.fusion_type == 'early':
-        concatenate = True
+    # Currently, GNNs will only work in early fusion mode, but requires the data to be not concatenated 
+    concatenate = args.fusion_type == 'early' and args.model_class != 'GNN' 
         
     data_importer = flexynesis.DataImporter(path = args.data_path, 
                                             data_types = datatypes,
@@ -226,14 +217,11 @@ def main():
                                             restrict_to_features = args.restrict_to_features,
                                             min_features= args.features_min, 
                                             top_percentile= args.features_top_percentile,
-                                            graph=graph,
                                             processed_dir = '_'.join(['processed', args.prefix]),
-                                            string_organism=args.string_organism,
-                                            string_node_name=args.string_node_name, 
                                             downsample = args.subsample)
-    train_dataset, test_dataset = data_importer.import_data(force = False)
+    train_dataset, test_dataset = data_importer.import_data()
     
-    if args.model_class == 'GNNEarly': 
+    if args.model_class == 'GNN': 
         # overlay datasets with network info 
         # this is a temporary solution 
         print("[INFO] Overlaying the dataset with network data from STRINGDB")
@@ -357,8 +345,8 @@ def main():
         
         # in the case when GNNEarly was used, the we use the initial multiomicdataset for train/test
         # because GNNEarly requires a modified dataset structure to fit the networks (temporary solution)
-        train = train_dataset.multiomic_dataset if args.model_class == 'GNNEarly' else train_dataset
-        test = test_dataset.multiomic_dataset if args.model_class == 'GNNEarly' else test_dataset
+        train = train_dataset.multiomic_dataset if args.model_class == 'GNN' else train_dataset
+        test = test_dataset.multiomic_dataset if args.model_class == 'GNN' else test_dataset
         
         if var != model.surv_event_var: 
             metrics = flexynesis.evaluate_baseline_performance(train, test, 

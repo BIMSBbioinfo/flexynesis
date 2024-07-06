@@ -12,10 +12,10 @@ from torch.utils.data import DataLoader
 
 from captum.attr import IntegratedGradients
 
-from ..modules import MLP, cox_ph_loss, GNNs
+from ..modules import MLP, cox_ph_loss, flexGCN
 
 
-class GNNEarly(pl.LightningModule):
+class GNN(pl.LightningModule):
     def __init__(
         self,
         config,
@@ -58,7 +58,7 @@ class GNNEarly(pl.LightningModule):
             for var in self.variables:
                 self.log_vars[var] = nn.Parameter(torch.zeros(1))
         
-        self.encoders = GNNs(
+        self.encoders = flexGCN(
                         node_count = dataset[0][0].shape[0], #number of nodes
                         node_feature_count= dataset[0][0].shape[1], # number of node features
                         node_embedding_dim=int(self.config["node_embedding_dim"]),  
