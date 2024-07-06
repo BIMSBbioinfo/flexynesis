@@ -48,7 +48,6 @@ def main():
         --threads (int): How many threads to use when using CPU. Default is 4.
         --use_gpu (bool): If set, the system will attempt to use CUDA/GPU if available.
         --disable_marker_finding (bool): If set, marker discovery after model training is disabled.
-        --graph (str): Graph to use, name of the database or path to the edge list on the disk. Default is "STRING".
         --string_organism (int): STRING DB organism id. Default is 9606.
         --string_node_name (str): Type of node name. Choices are ["gene_name", "gene_id"]. Default is "gene_name".
     """
@@ -105,7 +104,6 @@ def main():
     parser.add_argument("--disable_marker_finding", action="store_true", 
                         help="(Optional) If set, marker discovery after model training is disabled.")
     # GNN args.
-    parser.add_argument("--graph", help="Graph to use, name of the database or path to the edge list on the disk.", type=str,  default="STRING")
     parser.add_argument("--string_organism", help="STRING DB organism id.", type=int, default=9606)
     parser.add_argument("--string_node_name", help="Type of node name.", type=str, choices=["gene_name", "gene_id"], default="gene_name")
 
