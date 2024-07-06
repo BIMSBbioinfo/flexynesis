@@ -735,9 +735,6 @@ class MultiOmicDatasetNW(Dataset):
         # Store labels for all samples
         self.labels = {target_name: labels for target_name, labels in self.multiomic_dataset.ann.items()}
         
-        # Store sample identifiers
-        self.samples = self.multiomic_dataset.samples
-
     def find_common_features(self):
         common_features = set.intersection(*(set(features) for features in self.multiomic_dataset.features.values()))
         interaction_genes = set(self.interaction_df['protein1']).union(set(self.interaction_df['protein2']))
@@ -949,18 +946,10 @@ def read_user_graph(fpath, sep=" ", header=None, **pd_read_csv_kw):
     """
     return pd.read_csv(fpath, sep=sep, header=header, **pd_read_csv_kw)
 
-
 def read_stringdb_links(fname):
     df = pd.read_csv(fname, header=0, sep=" ")
     df = df[df.combined_score > 400]
-    df = df[df.combined_score > df.combined_score.quantile(0.9)]
-    df[["protein1", "protein2"]] = df[["protein1", "protein2"]].map(lambda a: a.split(".")[-1])
-    return df
-
-def read_stringdb_links_test(fname):
-    df = pd.read_csv(fname, header=0, sep=" ")
-    df = df[df.combined_score > 800]
-    df = df[df.combined_score > df.combined_score.quantile(0.9)]
+    #df = df[df.combined_score > df.combined_score.quantile(0.9)]
     df_expanded = pd.concat([
         df.rename(columns={'protein1': 'protein', 'protein2': 'partner'}),
         df.rename(columns={'protein2': 'protein', 'protein1': 'partner'})
