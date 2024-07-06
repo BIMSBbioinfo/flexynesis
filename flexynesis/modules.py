@@ -143,7 +143,45 @@ class MLP(nn.Module):
         x = self.layer_out(x)
         return x
     
-class GNNs(nn.Module):
+class flexGCN(nn.Module):
+    """
+    A Graph Neural Network (GNN) model using configurable convolution and activation layers.
+
+    This class defines a GNN that can utilize various graph convolution types and activation functions.
+    It supports a configurable number of convolutional layers with batch normalization and dropout
+    for regularization. The model aggregates node features into a single vector per graph using
+    a fully connected layer.
+
+    Attributes:
+        act (torch.nn.Module): Activation function applied after each convolution.
+        convs (nn.ModuleList): List of convolutional layers.
+        bns (nn.ModuleList): List of batch normalization layers applied after each convolution.
+        dropout (nn.Dropout): Dropout layer applied after activation to prevent overfitting.
+        fc (torch.nn.Linear): Fully connected layer that aggregates node features into a single vector.
+
+    Args:
+        node_count (int): The number of nodes in each graph.
+        node_feature_count (int): The number of features each node initially has.
+        node_embedding_dim (int): The size of the node embeddings (output dimension of the convolutions).
+        output_dim (int): The size of the output vector, which is the final feature vector for the whole graph.
+        num_convs (int, optional): Number of convolutional layers in the network. Defaults to 2.
+        dropout_rate (float, optional): The dropout probability used for regularization. Defaults to 0.2.
+        conv (str, optional): Type of convolution layer to use. Supported types include 'GCN' for Graph Convolution Network, 
+                              'GAT' for Graph Attention Network, 'SAGE' for GraphSAGE, and 'GC' for generic Graph Convolution. 
+                              Defaults to 'GC'.
+        act (str, optional): Type of activation function to use. Supported types include 'relu', 'sigmoid', 
+                             'leakyrelu', 'tanh', and 'gelu'. Defaults to 'relu'.
+
+    Raises:
+        ValueError: If an unsupported activation function or convolution type is specified.
+
+    Example:
+        >>> model = flexGCN(node_count=100, node_feature_count=5, node_embedding_dim=64, output_dim=10, 
+                         num_convs=3, dropout_rate=0.3, conv='GAT', act='relu')
+        >>> output = model(input_features, edge_index)
+        # Where `input_features` is a tensor of shape (batch_size, num_nodes, node_feature_count)
+        # and `edge_index` is a list of edges in the COO format (2, num_edges).
+    """
     def __init__(self, node_count, node_feature_count, node_embedding_dim, output_dim, 
                  num_convs = 2, dropout_rate = 0.2, conv='GC', act='relu'):
         super().__init__()
