@@ -16,10 +16,47 @@ from ..modules import MLP, cox_ph_loss, flexGCN
 
 
 class GNN(pl.LightningModule):
+    """
+    A Graph Neural Network module implemented with PyTorch Lightning, designed for
+    multi-omic data.
+
+    This class integrates various graph convolution types and supports complex tasks
+    such as single/multi-task regression/classification/survival prediction.
+    It allows for extensive configuration including device type and convolution type,
+    and dynamically constructs output layers based on the variable types provided.
+
+    Attributes:
+        config (dict): Configuration dictionary specifying model parameters like
+                       node embedding dimensions, number of convolutions, activation functions, etc.
+        target_variables (list): List of target variables for prediction.
+        surv_event_var (str, optional): Name of the survival event variable if survival analysis is performed.
+        surv_time_var (str, optional): Name of the survival time variable if survival analysis is performed.
+        batch_variables (list, optional): List of batch variables for handling batch effects.
+        use_loss_weighting (bool): If True, uses log variance for uncertainty weighting in loss calculations.
+        device_type (str, optional): Device type to use ('gpu' or 'cpu'). Defaults to 'cpu' if not specified.
+        gnn_conv_type (str, optional): Type of graph convolutional layer to use (options: GC, SAGE, GCN)
+        variable_types (dict): Dictionary mapping variables to their types (e.g., numerical, categorical).
+        ann (DataFrame): Annotation DataFrame from the dataset containing variables and their annotations.
+        edge_index (Tensor): Tensor describing the edge connections in the graph.
+        feature_importances (dict): Dictionary to store feature importances if computed.
+        encoders (Module): Graph convolutional network module for feature encoding.
+        MLPs (ModuleDict): Dictionary of multi-layer perceptrons, one for each target variable.
+
+    Args:
+        config (dict): Configuration settings for model parameters.
+        dataset (MultiOmicGeometricDataset): Dataset object containing graph data and annotations.
+        target_variables (list): Names of the variables to be predicted.
+        batch_variables (list, optional): Names of the variables that represent batch effects.
+        surv_event_var (str, optional): The variable name representing survival events.
+        surv_time_var (str, optional): The variable name representing survival times.
+        use_loss_weighting (bool, optional): Whether to use uncertainty weighting in loss calculation. Defaults to True.
+        device_type (str, optional): Specifies the computation device ('gpu' or 'cpu'). Default is None, which uses 'cpu' if 'gpu' is not available.
+        gnn_conv_type (str, optional): Specifies the type of graph convolutional layer to use.
+    """    
     def __init__(
         self,
         config,
-        dataset, # MultiOmicGeometricDataset object
+        dataset, # MultiomicDatasetNW object
         target_variables,
         batch_variables=None,
         surv_event_var=None,
@@ -82,6 +119,16 @@ class GNN(pl.LightningModule):
             )
             
     def forward(self, x, edge_index): 
+        """
+        Defines the forward pass of the GNN.
+
+        Args:
+            x (Tensor): Node feature matrix (batch_size, num_nodes, node_feature_count).
+            edge_index (Tensor): Edge index in COO format (2, num_edges).
+
+        Returns:
+            dict: Outputs from the MLPs, one for each target variable.
+        """
         embeddings = self.encoders(x, edge_index)
         outputs = {}
         for var, mlp in self.MLPs.items():
@@ -90,6 +137,15 @@ class GNN(pl.LightningModule):
 
             
     def training_step(self, batch):
+        """
+        Performs a training step including loss calculation and logging.
+
+        Args:
+            batch (tuple): A batch of data consisting of features, target labels as a dictionary of tensors, and sample ids.
+
+        Returns:
+            float: Total loss for the batch.
+        """
         x, y_dict, samples = batch
         outputs = self.forward(x, self.edge_index)
 
@@ -112,6 +168,15 @@ class GNN(pl.LightningModule):
         return total_loss
 
     def validation_step(self, batch):
+        """
+        Performs a validation step, computing losses for a batch of data.
+
+        Args:
+            batch (tuple): A batch of data consisting of features, target labels as a dictionary of tensors, and sample ids.
+
+        Returns:
+            float: Total validation loss for the batch.
+        """
         x, y_dict, samples = batch
         outputs = self.forward(x, self.edge_index)
         losses = {}
@@ -133,10 +198,34 @@ class GNN(pl.LightningModule):
         return total_loss
             
     def configure_optimizers(self):
+        """
+        Configure the optimizer for the DirectPred model.
+
+        Returns:
+            torch.optim.Optimizer: The configured optimizer.
+        """
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config['lr'])
         return optimizer
 
     def compute_loss(self, var, y, y_hat):
+        """
+        Computes the loss for a specific variable based on whether the variable is numerical or categorical.
+        Handles missing labels by excluding them from the loss calculation.
+    
+        Args:
+            var (str): The name of the variable for which the loss is being calculated.
+            y (torch.Tensor): The true labels or values for the variable.
+            y_hat (torch.Tensor): The predicted labels or values output by the model.
+    
+        Returns:
+            torch.Tensor: The calculated loss tensor for the variable. If there are no valid labels or values
+                          to compute the loss (all are missing), returns a zero loss tensor with gradient enabled.
+    
+        The method first checks the type of the variable (`var`) from `variable_types`. If the variable is
+        numerical, it computes the mean squared error loss. For categorical variables, it calculates the
+        cross-entropy loss. The method ensures to ignore any instances where the labels are missing (NaN for
+        numerical or -1 for categorical as assumed missing value encoding) when calculating the loss.
+        """
         if self.variable_types[var] == "numerical":
             # Ignore instances with missing labels for numerical variables
             valid_indices = ~torch.isnan(y)
@@ -159,6 +248,26 @@ class GNN(pl.LightningModule):
         return loss
 
     def compute_total_loss(self, losses):
+        """
+        Computes the total loss from a dictionary of individual losses. This method can compute
+        either weighted or unweighted total loss based on the model configuration. If loss weighting
+        is enabled and there are multiple loss components, it uses uncertainty-based weighting.
+        See Kendall A. et al, https://arxiv.org/abs/1705.07115.
+        
+        Args:
+            losses (dict of torch.Tensor): A dictionary where each key is a variable name and
+                                           each value is the loss tensor associated with that variable.
+    
+        Returns:
+            torch.Tensor: The total loss computed across all inputs, either weighted or unweighted.
+        
+        The method checks if loss weighting is used (`use_loss_weighting`) and if there are multiple
+        losses to weight. If so, it computes the weighted sum of losses, where the weight involves
+        the exponential of the negative log variance (acting as precision) associated with each loss,
+        added to the log variance itself. This approach helps in balancing the contribution of each
+        loss component based on its uncertainty. If loss weighting is not used, or there is only one
+        loss component, it sums up the losses directly.
+        """
         if self.use_loss_weighting and len(losses) > 1:
             # Compute weighted loss for each loss
             # Weighted loss = precision * loss + log-variance
@@ -171,6 +280,15 @@ class GNN(pl.LightningModule):
         return total_loss
     
     def predict(self, dataset):
+        """
+        Make predictions on an entire dataset.
+
+        Args:
+            dataset: The MultiOmicDatasetNW object to evaluate the model on.
+
+        Returns:
+            dict: Predictions mapped by target variable names.
+        """
         self.eval()  # Set the model to evaluation mode
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(device)  # Move the model to the appropriate device
@@ -201,6 +319,15 @@ class GNN(pl.LightningModule):
         return predictions
 
     def transform(self, dataset):
+        """
+        Transforms the input data into a lower-dimensional representation using trained encoders.
+
+        Args:
+            dataset: The MultiOmicDatasetNW containing the input data.
+
+        Returns:
+            pd.DataFrame: DataFrame containing the transformed data.
+        """
         self.eval()  # Set the model to evaluation mode
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(device)  # Move the model to the appropriate device
