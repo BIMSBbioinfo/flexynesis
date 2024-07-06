@@ -231,7 +231,7 @@ def main():
                                             string_organism=args.string_organism,
                                             string_node_name=args.string_node_name, 
                                             downsample = args.subsample)
-    train_dataset, test_dataset = data_importer.import_data(force = True)
+    train_dataset, test_dataset = data_importer.import_data(force = False)
     
     if args.model_class == 'GNNEarly': 
         # overlay datasets with network info 

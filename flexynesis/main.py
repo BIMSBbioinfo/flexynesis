@@ -1,4 +1,6 @@
 from lightning import seed_everything
+seed_everything(42, workers=True)
+
 import torch 
 from torch.utils.data import DataLoader, random_split
 import torch_geometric
@@ -151,8 +153,11 @@ class HyperparameterTuning:
             mycallbacks.append(early_stop_callback)
     
         trainer = pl.Trainer(
+            #deterministic = True, 
             precision = '16-mixed', # mixed precision training 
             max_epochs=int(params['epochs']),
+            gradient_clip_val=1.0,  
+            gradient_clip_algorithm='norm',
             log_every_n_steps=5,
             callbacks=mycallbacks,
             default_root_dir="./",
@@ -274,6 +279,9 @@ class HyperparameterTuning:
                 if no_improvement_count >= hpo_patience & hpo_patience > 0:
                     print(f"No improvement in best loss for {hpo_patience} iterations, stopping hyperparameter optimisation early.")
                     break  # Break out of the loop
+                best_params_dict = {param.name: value for param, value in zip(self.space, best_params)} if best_params else None
+                print(f"[INFO] current best val loss: {best_loss}; best params: {best_params_dict} since {no_improvement_count} hpo iterations")
+                
 
         # Convert best parameters from list to dictionary and include epochs
         best_params_dict = {param.name: value for param, value in zip(self.space, best_params)}
