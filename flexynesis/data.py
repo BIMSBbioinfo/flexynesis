@@ -946,10 +946,32 @@ def read_user_graph(fpath, sep=" ", header=None, **pd_read_csv_kw):
     """
     return pd.read_csv(fpath, sep=sep, header=header, **pd_read_csv_kw)
 
-def read_stringdb_links(fname):
+def read_stringdb_links(fname, top_neighbors = 5):
+    """
+    Reads and processes a STRING database file to extract and rank protein-protein interactions.
+
+    The function loads a STRING database interactions file, filters out interactions with a combined
+    score lower than 400, and then finds the top `top_neighbors` interactions for each protein based
+    on the combined score. Each interaction is considered bidirectionally, ensuring that all possible
+    interactions are accounted for without duplication.
+
+    Args:
+        fname (str): The file name or path to the STRING database file. The file should be a space-separated
+            value format with a header row, and at least the columns 'protein1', 'protein2', and 'combined_score'.
+        top_neighbors (int, optional): The number of top interactions to return for each protein. Defaults to 5.
+
+    Returns:
+        pd.DataFrame: A DataFrame with columns 'protein1' and 'protein2' representing the top interactions
+            for each protein. Each protein and partner identifier is simplified by stripping to the last
+            element after splitting by ".".
+
+    Example:
+        >>> read_stringdb_links('string_interactions.txt', top_neighbors=3)
+        # This will return a DataFrame with the top 3 interactions for each protein,
+        # based on the 'combined_score', from the 'string_interactions.txt' file.
+    """
     df = pd.read_csv(fname, header=0, sep=" ")
     df = df[df.combined_score > 400]
-    #df = df[df.combined_score > df.combined_score.quantile(0.9)]
     df_expanded = pd.concat([
         df.rename(columns={'protein1': 'protein', 'protein2': 'partner'}),
         df.rename(columns={'protein2': 'protein', 'protein1': 'partner'})
@@ -958,7 +980,7 @@ def read_stringdb_links(fname):
     df_expanded_sorted = df_expanded.sort_values(by='combined_score', ascending=False)
         # Reduce to unique interactions to avoid counting duplicates
     df_expanded_unique = df_expanded_sorted.drop_duplicates(subset=['protein', 'partner'])
-    top_interactions = df_expanded_unique.groupby('protein').head(5)
+    top_interactions = df_expanded_unique.groupby('protein').head(top_neighbors)
     df = top_interactions.rename(columns={'protein': 'protein1', 'partner': 'protein2'})
     df[["protein1", "protein2"]] = df[["protein1", "protein2"]].map(lambda a: a.split(".")[-1])
     return df
