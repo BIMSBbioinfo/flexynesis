@@ -144,23 +144,20 @@ class MLP(nn.Module):
         return x
     
 class GNNs(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, 
-                 conv='GC', act = 'relu'):
+    def __init__(self, node_count, node_feature_count, node_embedding_dim, output_dim, 
+                 num_convs = 2, dropout_rate = 0.2, conv='GC', act='relu'):
         super().__init__()
-        
+
         act_options = {
-            'relu': (torch.nn.ReLU()),
-            'sigmoid': (torch.nn.Sigmoid()),
-            'tanh': (torch.nn.Tanh()),
-            'gelu': (torch.nn.GELU())
+            'relu': nn.ReLU(),
+            'sigmoid': nn.Sigmoid(),
+            'leakyrelu': nn.LeakyReLU(), 
+            'tanh': nn.Tanh(),
+            'gelu': nn.GELU()
         }
-        # check if the activation function string is valid
         if act not in act_options:
-            raise ValueError("Invalid activation function string. Choose from 'relu', 'sigmoid', 'tanh', 'softmax', 'leakyrelu', 'elu', or 'gelu'.")
+            raise ValueError("Invalid activation function string. Choose from ", list(act_options.keys()))
         
-        # instantiate the activation function
-        self.activation = act_options[act]
-        self.convs = torch.nn.ModuleList()
         conv_options = {
             'GCN': GCNConv,
             'GAT': GATConv,
@@ -168,24 +165,37 @@ class GNNs(nn.Module):
             'GC': GraphConv
         }
         if conv not in conv_options:
-            raise ValueError('Unknown convolution type. Choose one of: ',conv_options.keys())
+            raise ValueError('Unknown convolution type. Choose one of: ', list(conv_options.keys()))
+
+        self.act = act_options[act]
+        self.convs = nn.ModuleList()
+        self.bns = nn.ModuleList()
+        self.dropout = nn.Dropout(dropout_rate)
         
-        self.conv = conv_options[conv]
-        self.layer_1 = self.conv(input_dim, hidden_dim)
-        self.act_1 = self.activation
-        self.layer_2 = self.conv(hidden_dim, output_dim)
-        self.act_2 = self.activation
+        # Initialize the first convolution layer separately if different input size
+        self.convs.append(conv_options[conv](node_feature_count, node_embedding_dim))
+        self.bns.append(nn.BatchNorm1d(node_embedding_dim))
+
+        # Loop to create the remaining convolution and BN layers
+        for _ in range(1, num_convs):
+            self.convs.append(conv_options[conv](node_embedding_dim, node_embedding_dim))
+            self.bns.append(nn.BatchNorm1d(node_embedding_dim))
+
+        # Final fully connected layer
+        self.fc = nn.Linear(node_embedding_dim * node_count, output_dim)
 
     def forward(self, x, edge_index):
-        x = self.layer_1(x, edge_index)
-        x = self.act_1(x)
-        x = self.layer_2(x, edge_index)
-        x = self.act_2(x)
-        # mean pooling to get sample embeddings (we use a single graph across samples)
-        # Perform mean pooling across the node dimension
-        x = x.mean(dim=1)  
+        for conv, bn in zip(self.convs, self.bns):
+            x = conv(x, edge_index)
+            x = bn(x.view(-1, x.size(2))).view_as(x)
+            x = self.act(x)
+            x = self.dropout(x) 
+
+        # Flatten the output of all nodes into a single vector per graph/sample
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
         return x
-    
+
 def cox_ph_loss(outputs, durations, events):
     """
     Calculate the Cox proportional hazards loss.

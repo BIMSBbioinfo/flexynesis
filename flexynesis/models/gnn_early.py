@@ -58,11 +58,11 @@ class GNNEarly(pl.LightningModule):
             for var in self.variables:
                 self.log_vars[var] = nn.Parameter(torch.zeros(1))
         
-        node_features = dataset[0][0].shape[1] # number of node features
-        node_count = dataset[0][0].shape[0] #number of nodes
         self.encoders = GNNs(
-                        input_dim=node_features,
-                        hidden_dim=int(self.config["hidden_dim_factor"] * node_count),  
+                        node_count = dataset[0][0].shape[0], #number of nodes
+                        node_feature_count= dataset[0][0].shape[1], # number of node features
+                        node_embedding_dim=int(self.config["node_embedding_dim"]),  
+                        num_convs = int(self.config['num_convs']), # Number of convolutional layers 
                         output_dim=self.config["latent_dim"],
                         act = self.config['activation'],
                         conv = self.gnn_conv_type
@@ -133,7 +133,7 @@ class GNNEarly(pl.LightningModule):
         return total_loss
             
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.config['lr'])
         return optimizer
 
     def compute_loss(self, var, y, y_hat):
@@ -228,9 +228,6 @@ class GNNEarly(pl.LightningModule):
             columns=[f"E{dim}" for dim in range(all_embeddings.shape[1])],
         )
         return embeddings_df
-
-    def optimizer_zero_grad(self, epoch, batch_idx, optimizer):
-        optimizer.zero_grad(set_to_none=True)
         
     # Adaptor forward function for captum integrated gradients. 
     def forward_target(self, *args):
@@ -246,7 +243,7 @@ class GNNEarly(pl.LightningModule):
         return torch.cat(outputs_list, dim = 0)
 
         
-    def compute_feature_importance(self, dataset, target_var, steps=5, batch_size = 16):
+    def compute_feature_importance(self, dataset, target_var, steps=5, batch_size = 32):
         """
         Computes the feature importance for each variable in the dataset using the Integrated Gradients method.
         This method measures the importance of each feature by attributing the prediction output to each input feature.
