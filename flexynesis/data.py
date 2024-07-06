@@ -1,6 +1,6 @@
 from torch.utils.data import Dataset, DataLoader
 from torch_geometric.data import download_url, extract_gz
-from torch_geometric.data import Data, Dataset as PYGDataset
+from torch_geometric.data import Dataset as PYGDataset
 
 import numpy as np
 import pandas as pd
@@ -35,34 +35,26 @@ class DataImporter:
         correlation_threshold(float): The correlation threshold for dropping highly redundant features
         variance_threshold (float): The variance threshold for removing low-variance features.
         na_threshold (float): The threshold for removing features with too many NA values.
-        graph (str | None): Either provide a path to a file containing the network as an edge-list or choose "STRING" for automated  downloading from the StringDB. 
-                            (default: None, graph features are not used).
         string_organism (int): STRING organism (species) id (default: 9606 (human)).
         string_node_name (str): The type of node names used in the graph. Available options: "gene_name", "gene_id" (default: "gene_name").
-        transform (callable): An optional graph transformation function to be applied for each modality.
-
     Methods:
         import_data():
             The primary method to orchestrate the data import and preprocessing workflow. It follows these steps:
                 1. Validates the presence of required data files in training and testing directories.
                 2. Imports data using `read_data` for both training and testing sets.
-                3. If `graph` is not None, imports graph data using `read_graph` and processes it.
-                4. Cleans and preprocesses the data through `cleanup_data`.
-                5. Processes data to align features and samples across modalities using `process_data`.
-                6. Harmonizes training and testing datasets to have the same features using `harmonize`.
-                7. Optionally applies log transformation.
-                8. Normalizes the data.
-                9. Encodes labels and prepares PyTorch datasets.
-                10. Returns PyTorch datasets for training and testing.
+                3. Cleans and preprocesses the data through `cleanup_data`.
+                4. Processes data to align features and samples across modalities using `process_data`.
+                5. Harmonizes training and testing datasets to have the same features using `harmonize`.
+                6. Optionally applies log transformation.
+                7. Normalizes the data.
+                8. Encodes labels and prepares PyTorch datasets.
+                9. Returns PyTorch datasets for training and testing.
 
         validate_data_folders(training_path, testing_path):
             Checks for the presence of required data files in specified directories.
 
         read_data(folder_path):
             Reads and imports data files for a given modality from a specified folder.
-
-        read_graph(fname=None):
-            Imports graph data from a specified file, defaulting to protein interaction data.
 
         cleanup_data(df_dict):
             Cleans dataframes by removing low-variance features, imputing missing values, 
@@ -88,7 +80,6 @@ class DataImporter:
         get_labels(dat, ann):
             Aligns and subsets annotations to match the samples present in the data matrices.
 
-
         get_torch_dataset(dat, ann, samples, feature_ann):
             Prepares and returns PyTorch datasets for the imported and processed data.
 
@@ -97,8 +88,7 @@ class DataImporter:
     """
 
     def __init__(self, path, data_types, processed_dir="processed", log_transform = False, concatenate = False, restrict_to_features = None, min_features=None,
-                 top_percentile=20, correlation_threshold = 0.9, variance_threshold=0.01, na_threshold=0.1,
-                 graph=None, string_organism=9606, string_node_name="gene_name", transform=None, downsample=0):
+                 top_percentile=20, correlation_threshold = 0.9, variance_threshold=0.01, na_threshold=0.1, downsample=0):
         self.path = path
         self.data_types = data_types
         self.processed_dir = os.path.join(self.path, processed_dir)
@@ -116,16 +106,6 @@ class DataImporter:
         # initialize data transformers
         self.transformers = None
         self.downsample = downsample
-
-        self.graph = graph
-        if self.graph is not None:
-            if self.graph == "STRING":
-                # Download STRING network graph data.
-                self.graph = STRING(self.processed_dir, organism=string_organism, node_name=string_node_name)
-        self.transform = transform
-        # NOTE: For now  pre_transform and pre_filter are disabled.
-        self.pre_transform = None
-        self.pre_filter = None
 
         # read user-specified feature list to restrict the analysis to that
         self.restrict_to_features = restrict_to_features
@@ -155,21 +135,7 @@ class DataImporter:
         else: 
             self.restrict_to_features = None
 
-    def import_data(self, force=False):
-        if not force:
-            if not (os.path.exists(os.path.join(self.processed_dir, "train")) and os.path.exists(os.path.join(self.processed_dir, "test"))):
-                force = True
-        # Skip processing if data already on a disk.
-        if (not force) and (self.graph is not None):
-            print("\n[INFO] ================= Skipping Importing Data =================")
-            print("\n[INFO] ================= Loading Data from a Disk =================")
-            train_dataset = self.get_torch_dataset(None, None, None, None, force=False, subset="train")
-            test_dataset = self.get_torch_dataset(None, None, None, None, force=False, subset="test")
-            print("[INFO] Data loaded successfully.")
-            return train_dataset, test_dataset
-
-        # Otherwise (If force is True) - process data and rewrite data on a disk.
-        # NOTE: This feature is available only for GNNs (for STRING and custom graphs).
+    def import_data(self):
         print("\n[INFO] ================= Importing Data =================")
         training_path = os.path.join(self.path, 'train')
         testing_path = os.path.join(self.path, 'test')
@@ -191,23 +157,6 @@ class DataImporter:
         # check for any problems with the the input files 
         self.validate_input_data(train_dat, test_dat)
 
-        if self.graph is not None:  # True | non-empty str
-            # Read a graph specified by user.
-            if isinstance(self.graph, str):
-                # Assumes that graph csv file in a dataset root dir.
-                graph_df = read_user_graph(self.graph)
-                available_features = np.unique(graph_df.to_numpy()).tolist()
-                initial_edge_list = graph_df.to_numpy().tolist()
-            # Read STRING by default.
-            elif isinstance(self.graph, STRING):
-                graph_df = self.graph.graph_df
-                available_features = np.unique(graph_df[["protein1", "protein2"]].to_numpy()).tolist()
-                initial_edge_list = stringdb_links_to_list(graph_df)
-            else:
-                raise NotImplementedError
-
-            train_dat, test_dat, edge_list = sync_graph_and_data(train_dat, test_dat, initial_edge_list, available_features)
-
         # cleanup uninformative features/samples, subset annotation data, do feature selection on training data
         train_dat, train_ann, train_samples, train_features = self.process_data(train_dat, split = 'train')
         test_dat, test_ann, test_samples, test_features = self.process_data(test_dat, split = 'test')
@@ -217,17 +166,7 @@ class DataImporter:
 
         train_feature_ann = {}
         test_feature_ann = {}
-        if self.graph is not None:
-            # apply a second filter to the graph, 
-            # this time by each data modality separately 
-            print("\n[INFO] ----------------- Filtering graph by modality -----------------")
-            train_feature_ann = filter_graph_by_modality(train_dat, edge_list)
-            print("[INFO] Number of edges by modality in training data", 
-                  {x: train_feature_ann[x]['edge_index'].shape[1] for x in train_feature_ann.keys()})
-            test_feature_ann = filter_graph_by_modality(test_dat, edge_list)
-            print("[INFO] Number of edges by modality in test data", 
-                  {x: test_feature_ann[x]['edge_index'].shape[1] for x in test_feature_ann.keys()})
-            
+
         # log_transform 
         if self.log_transform:
             print("[INFO] transforming data to log scale")
@@ -240,21 +179,19 @@ class DataImporter:
         test_dat = self.normalize_data(test_dat, scaler_type="standard", fit=False)
 
         # encode the variable annotations, convert data matrices and annotations pytorch datasets 
-        training_dataset = self.get_torch_dataset(train_dat, train_ann, train_samples, train_feature_ann, force=True, subset="train")
-        testing_dataset = self.get_torch_dataset(test_dat, test_ann, test_samples, test_feature_ann, force=True, subset="test")
+        training_dataset = self.get_torch_dataset(train_dat, train_ann, train_samples, train_feature_ann)
+        testing_dataset = self.get_torch_dataset(test_dat, test_ann, test_samples, test_feature_ann)
 
         # NOTE: Exporting to the disk happens in get_torch_dataset, so the concatenate doesn't work.
         # TODO: Find better way for early integration, or move it to get_torch_dataset. Otherwise it will be ignored.
         # for early fusion, concatenate all data matrices and feature lists
         if self.concatenate:
-            if self.graph is not None:
-                raise NotImplementedError("Early fusion is not supported for GNNs.")
-
             training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in training_dataset.dat.keys()], dim = 1)}
             training_dataset.features = {'all': list(chain(*training_dataset.features.values()))}
 
             testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in testing_dataset.dat.keys()], dim = 1)}
             testing_dataset.features = {'all': list(chain(*testing_dataset.features.values()))}
+        
         print("[INFO] Training Data Stats: ", training_dataset.get_dataset_stats())
         print("[INFO] Test Data Stats: ", testing_dataset.get_dataset_stats())
         print("[INFO] Merging Feature Logs...")
@@ -454,15 +391,8 @@ class DataImporter:
                            for x in data.keys()}
         return normalized_data
     
-    def get_torch_dataset(self, dat, ann, samples, feature_ann, force, subset=None):
-        # If not force and graph is there - load already preprocessed data.
-        if (not force) and (self.graph is not None):
-            if subset is None:
-                raise ValueError("train and test subsets cannot be stored in a same location!")
-            data_path_on_disk = os.path.join(self.processed_dir, subset)
-            print(f"[DATA IMPORTER] Using data from existing {data_path_on_disk} folder...")
-            return MultiOmicPYGDataset(data_path_on_disk)
-
+    def get_torch_dataset(self, dat, ann, samples, feature_ann):
+        
         features = {x: dat[x].index for x in dat.keys()}
         dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
 
@@ -470,25 +400,7 @@ class DataImporter:
 
         # Convert DataFrame to tensor
         ann = {col: torch.from_numpy(ann[col].values) for col in ann.columns}
-        if self.graph is None:
-            return MultiOmicDataset(dat, ann, variable_types, features, samples, label_mappings)
-        else:
-            if subset is None:
-                raise ValueError("train and test subsets cannot be stored in a same location!")
-
-            data_path_on_disk = os.path.join(self.processed_dir, subset)
-
-            print(f"[DATA IMPORTER] Removing data from existing {data_path_on_disk} folder...")
-            shutil.rmtree(data_path_on_disk, ignore_errors=True)
-            return MultiOmicPYGDataset(
-                data_path_on_disk,
-                dat, ann,
-                variable_types, features, samples, label_mappings,
-                feature_ann,
-                transform=self.transform,
-                pre_transform=self.pre_transform,
-                pre_filter=self.pre_filter,
-            )
+        return MultiOmicDataset(dat, ann, variable_types, features, samples, label_mappings)
 
     def encode_labels(self, df):
         label_mappings = {}
@@ -806,90 +718,6 @@ class MultiOmicDatasetNW(Dataset):
         print(f"Median number of edges per node (excluding singletons): {median_edges_per_node}")
         print(f"Max number of edges per node: {max_edges}")
         
-class MultiOmicPYGDataset(PYGDataset):
-    required = ["variable_types", "features", "samples", "label_mappings", "feature_ann"]
-
-    def __init__(
-        self,
-        root,
-        dat=None,
-        ann=None,
-        variable_types=None,
-        features=None,
-        samples=None,
-        label_mappings=None,
-        feature_ann=None,
-        transform=None,
-        pre_transform=None,
-        pre_filter=None,
-    ):
-        self.dat = dat
-        self.ann = ann
-        self.variable_types = variable_types
-        self.features = features
-        self.samples = samples
-        self.label_mappings = label_mappings
-        self.feature_ann = feature_ann
-        for attr in self.required:
-            if getattr(self, attr) is None:
-                setattr(self, attr, torch.load(os.path.join(root, "processed", f"{attr}.pt")))
-        super().__init__(root, transform, pre_transform, pre_filter)
-
-    @property
-    def raw_file_names(self):
-        # NOTE: Skip for now. DataImport is in charge of data/graph preprocessing.
-        return [""]
-
-    @property
-    def processed_file_names(self):
-        fnames = [f"data_{i}.pt" for i in range(len(self.samples))]
-        return fnames + [f"{f}.pt" for f in self.required]
-
-    def download(self):
-        # NOTE: We skip download step. This is done before the dataset creation.
-        pass
-
-    def process(self):
-        # Save data sample to the disk.
-        idx = 0
-        for _ in range(len(self.samples)):
-            subset_dat = {}
-            for k, v in self.dat.items():
-                x = v[idx]
-                # If number of node features is 1, insert a new dim.
-                if x.ndim == 1:
-                    x = x.unsqueeze(1)
-                edge_index = self.feature_ann[k]["edge_index"]
-                data = Data(x=x, edge_index=edge_index)
-                # NOTE: Applies the same type filter to all data modalities.
-                if self.pre_filter is not None and not self.pre_filter(data):
-                    continue
-                # NOTE: Applies the same type pre_transform to all data modalities.
-                if self.pre_transform is not None:
-                    data = self.pre_transform(data)
-                subset_dat[k] = data
-            subset_ann = {k: v[idx] for k, v in self.ann.items()}
-            torch.save((subset_dat, subset_ann), os.path.join(self.processed_dir, f"data_{idx}.pt"))
-            idx += 1
-        # Save additional data to the disk.
-        for attr in self.required:
-            torch.save(getattr(self, attr), os.path.join(self.processed_dir, f"{attr}.pt"))
-
-    def len(self):
-        return len(self.processed_file_names) - len(self.required)
-
-    def get(self, idx):
-        data = torch.load(os.path.join(self.processed_dir, f"data_{idx}.pt"))
-        return data, idx
-
-    def get_dataset_stats(self):
-        stats = {}
-        stats |= {"feature_count in: " + k: v.x.size(0) for k, v in self[0][0][0].items()}
-        stats |= {"n_edges in: " + k: v.edge_index.size(1) for k, v in self[0][0][0].items()}
-        stats["sample_count"] = len(self)
-        return stats
-
-
 class STRING(PYGDataset):
     base_folder = "STRING"
     version = "12.0"
@@ -1029,63 +857,6 @@ def read_stringdb_graph(node_name, edges_data_path, nodes_data_path):
 
     graph_df[["protein1", "protein2"]] = graph_df[["protein1", "protein2"]].map(fn)
     return graph_df
-
-
-def sync_graph_and_data(train_dat, test_dat, initial_edge_list, available_features):
-    print("[INFO] Removing nodes/edges features which don't exist in omics data matrices")
-    # Collect genes from both training and testing data matrices
-    provided_features = list({x for df in {**train_dat, **test_dat}.values() for x in df.index})
-
-    # Intersect with available genes to filter out non-existing ones
-    provided_features = set(available_features).intersection(provided_features)
-
-    print("[INFO] Number of edges in initial edgelist", len(initial_edge_list))
-    print("[INFO] Number of train features BEFORE syncing with the graph", {k: len(v) for k, v in train_dat.items() if k != "clin"})
-    print("[INFO] Number of test features BEFORE syncing with the graph", {k: len(v) for k, v in test_dat.items() if k != "clin"})
-
-    # Now filter the graph edges based on provided_genes
-    edge_list = []
-    for edge in initial_edge_list:
-        src, dst = edge
-        if (src in provided_features) and (dst in provided_features):
-            edge_list.append(edge)
-
-    print("[INFO] Number of edges in pruned edgelist", len(edge_list))
-
-    filtered_train_dat = {}
-    filtered_test_dat = {}
-    for data, filtered_data in zip([train_dat, test_dat], [filtered_train_dat, filtered_test_dat]):
-        # Now sync data matrices
-        for k, v in data.items():
-            # Skip annotations, since a graph is feature based.
-            if k == "clin":
-                filtered_data[k] = v
-            else:
-                sorted_features = []
-                for f in v.index.to_list():
-                    if f in provided_features:
-                        sorted_features.append(f)
-                filtered_data[k] = v.loc[sorted_features]
-
-    print("[INFO] Number of train features AFTER syncing with the graph", {k: len(v) for k, v in train_dat.items() if k != "clin"})
-    print("[INFO] Number of test features AFTER syncing with the graph", {k: len(v) for k, v in test_dat.items() if k != "clin"})
-
-    return train_dat, test_dat, edge_list
-
-
-def filter_graph_by_modality(dat, edge_list):
-    feature_ann = {}
-    for k, v in dat.items():
-        mod_gene_list = v.index.to_list()
-        node_to_idx = {node: i for i, node in enumerate(mod_gene_list)}
-        mod_edge_list = []
-        for edge in edge_list:
-            src, dst = edge
-            if (src in mod_gene_list) and (dst in mod_gene_list):
-                mod_edge_list.append([node_to_idx[src], node_to_idx[dst]])
-        feature_ann[k] = {"edge_index": torch.tensor(mod_edge_list).T}
-    return feature_ann
-
 
 def stringdb_links_to_list(df):
     lst = df[["protein1", "protein2"]].to_numpy().tolist()
