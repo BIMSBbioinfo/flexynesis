@@ -515,7 +515,7 @@ class CrossModalPred(pl.LightningModule):
         aggregated_attributions = [[] for _ in range(num_class)]
         
         for batch in dataloader:
-            dat, _ = batch
+            dat, _, _ = batch
             x_list = [dat[x].to(device) for x in self.input_layers]
             input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
             baseline = tuple(torch.zeros_like(x) for x in input_data)
