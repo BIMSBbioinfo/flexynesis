@@ -680,7 +680,15 @@ class MultiOmicDatasetNW(Dataset):
             if indices:  # Ensure there are common features in this data type
                 all_features[:, :, i] = data_matrix[:, indices]
         return all_features
+    
+    def subset(self, indices):
+        # Create a subset of the main multiomic dataset
+        dataset_subset = self.multiomic_dataset.subset(indices)
         
+        # Create a new instance of MultiOmicDatasetNW with the subsetted multiomic dataset
+        return MultiOmicDatasetNW(dataset_subset, self.interaction_df.copy())
+
+
     def __getitem__(self, idx):
         node_features_tensor = self.node_features_tensor[idx]
         y_dict = {target_name: self.labels[target_name][idx] for target_name in self.labels}

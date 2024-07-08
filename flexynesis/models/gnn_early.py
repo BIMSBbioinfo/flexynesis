@@ -95,15 +95,16 @@ class GNN(pl.LightningModule):
             for var in self.variables:
                 self.log_vars[var] = nn.Parameter(torch.zeros(1))
         
-        self.encoders = flexGCN(
-                        node_count = dataset[0][0].shape[0], #number of nodes
-                        node_feature_count= dataset[0][0].shape[1], # number of node features
-                        node_embedding_dim=int(self.config["node_embedding_dim"]),  
-                        num_convs = int(self.config['num_convs']), # Number of convolutional layers 
-                        output_dim=self.config["latent_dim"],
-                        act = self.config['activation'],
-                        conv = self.gnn_conv_type
-        )
+        self.encoders = nn.ModuleList([ 
+            flexGCN(
+                node_count = dataset[0][0].shape[0], #number of nodes
+                node_feature_count= dataset[0][0].shape[1], # number of node features
+                node_embedding_dim=int(self.config["node_embedding_dim"]),  
+                num_convs = int(self.config['num_convs']), # Number of convolutional layers 
+                output_dim=self.config["latent_dim"],
+                act = self.config['activation'],
+                conv = self.gnn_conv_type
+            )])
 
         # Init output layers
         self.MLPs = nn.ModuleDict()
@@ -129,14 +130,15 @@ class GNN(pl.LightningModule):
         Returns:
             dict: Outputs from the MLPs, one for each target variable.
         """
-        embeddings = self.encoders(x, edge_index)
+        # notice we are using the first encoder (it is currently a early fusion method)
+        embeddings = self.encoders[0](x, edge_index)
         outputs = {}
         for var, mlp in self.MLPs.items():
             outputs[var] = mlp(embeddings)
         return outputs
 
             
-    def training_step(self, batch):
+    def training_step(self, batch, batch_idx, log = True):
         """
         Performs a training step including loss calculation and logging.
 
@@ -164,10 +166,11 @@ class GNN(pl.LightningModule):
 
         total_loss = self.compute_total_loss(losses)
         losses["train_loss"] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch))
+        if log:
+            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch))
         return total_loss
 
-    def validation_step(self, batch):
+    def validation_step(self, batch, batch_idx, log = True):
         """
         Performs a validation step, computing losses for a batch of data.
 
@@ -194,7 +197,8 @@ class GNN(pl.LightningModule):
 
         total_loss = sum(losses.values())
         losses["val_loss"] = total_loss
-        self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch))
+        if log:
+            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch))
         return total_loss
             
     def configure_optimizers(self):
@@ -341,7 +345,8 @@ class GNN(pl.LightningModule):
         for x, y_dict, samples in dataloader:
             x = x.to(device)  # Move data to GPU
 
-            embeddings = self.encoders(x, edge_index).detach().cpu().numpy()  # Compute embeddings and move to CPU
+            # notice we are using the first encoder (it is currently a early fusion method)
+            embeddings = self.encoders[0](x, edge_index).detach().cpu().numpy()  # Compute embeddings and move to CPU
             all_embeddings.append(embeddings)
             sample_ids.extend(samples)  
             
