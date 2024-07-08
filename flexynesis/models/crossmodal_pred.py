@@ -262,7 +262,7 @@ class CrossModalPred(pl.LightningModule):
         dataset, particularly handling survival analysis if applicable. All losses are aggregated to compute a total loss,
         which is logged and returned.
         """
-        dat, y_dict = train_batch
+        dat, y_dict, samples = train_batch
 
         # get input omics modalities and encode them; decode them to output layers 
         x_list_input = [dat[x] for x in self.input_layers]
@@ -315,7 +315,7 @@ class CrossModalPred(pl.LightningModule):
         analysis where applicable. The aggregated losses are then summed up to form the total validation loss, which is logged
         and returned.
         """
-        dat, y_dict = val_batch
+        dat, y_dict, samples = val_batch
 
         # get input omics modalities and encode them
         x_list_input = [dat[x] for x in self.input_layers]

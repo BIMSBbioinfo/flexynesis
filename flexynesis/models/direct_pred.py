@@ -190,7 +190,7 @@ class DirectPred(pl.LightningModule):
             torch.Tensor: The total loss computed for the batch.
         """
         
-        dat, y_dict = train_batch       
+        dat, y_dict, samples = train_batch       
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         outputs = self.forward(x_list)
@@ -226,7 +226,7 @@ class DirectPred(pl.LightningModule):
         Returns:
             torch.Tensor: The total loss computed for the batch.
         """
-        dat, y_dict = val_batch       
+        dat, y_dict, samples = val_batch       
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         outputs = self.forward(x_list)
@@ -250,28 +250,44 @@ class DirectPred(pl.LightningModule):
 
     def predict(self, dataset):
         """
-        Make predictions on an entire dataset.
+        Evaluate the model on a dataset using batching.
 
         Args:
-            dataset: The MultiOmicDataset object to evaluate the model on.
+            dataset (MultiOmicDataset): dataset containing input matrices for each omics layer.
 
         Returns:
-            dict: Predictions mapped by target variable names.
+            dict: Predicted values mapped by target variable names.
         """
-        self.eval()
-        layers = dataset.dat.keys()
-        x_list = [dataset.dat[x] for x in layers]
-        outputs = self.forward(x_list)
+        self.eval()  # Set the model to evaluation mode
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.to(device)  # Move the model to the appropriate device
 
-        predictions = {}
-        for var in self.variables:
-            y_pred = outputs[var].detach().numpy()
-            if self.variable_types[var] == 'categorical':
-                predictions[var] = np.argmax(y_pred, axis=1)
-            else:
-                predictions[var] = y_pred
+        # Create a DataLoader with a practical batch size
+        dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
+
+        predictions = {var: [] for var in self.variables}  # Initialize prediction storage
+
+        # Process each batch
+        for batch in dataloader:
+            dat, y_dict, samples = batch
+            x_list = [dat[x].to(device) for x in dat.keys()]  # Prepare the data batch for processing
+
+            # Perform the forward pass
+            outputs = self.forward(x_list)
+
+            # Collect predictions for each variable
+            for var in self.variables:
+                y_pred = outputs[var].detach().cpu().numpy()  # Move outputs back to CPU and convert to numpy
+                if dataset.variable_types[var] == 'categorical':
+                    predictions[var].extend(np.argmax(y_pred, axis=1))
+                else:
+                    predictions[var].extend(y_pred)
+
+        # Convert lists to arrays if necessary, depending on the downstream use-case
+        predictions = {var: np.array(predictions[var]) for var in predictions}
+
         return predictions
-
+    
     def transform(self, dataset):
         """
         Transforms the input data into a lower-dimensional representation using trained encoders.
@@ -282,16 +298,36 @@ class DirectPred(pl.LightningModule):
         Returns:
             pd.DataFrame: DataFrame containing the transformed data.
         """
-        self.eval()
-        embeddings_list = []
-        # Process each input matrix with its corresponding Encoder
-        for i, x in enumerate(dataset.dat.values()):
-            embeddings_list.append(self.encoders[i](x))
-        embeddings_concat = torch.cat(embeddings_list, dim=1)
+        self.eval()  # Set the model to evaluation mode
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.to(device)  # Move the model to the appropriate device
+
+        dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
+
+        embeddings_list = []  # Initialize a list to collect all batch embeddings
+        sample_names = []  # List to collect sample names
+
+        # Process each batch
+        for batch in dataloader:
+            dat, _, samples = batch
+            batch_embeddings = []
+            # Process each input matrix with its corresponding Encoder
+            for i, x in enumerate(dat.values()):
+                x = x.to(device)  # Move data to GPU
+                encoded_x = self.encoders[i](x)  # Transform data using the corresponding encoder
+                batch_embeddings.append(encoded_x)
+            
+            # Concatenate all embeddings from the current batch
+            embeddings_batch_concat = torch.cat(batch_embeddings, dim=1)
+            embeddings_list.append(embeddings_batch_concat.detach().cpu())  # Move tensor back to CPU and detach
+            sample_names.extend(samples)  # Collect sample names
+
+        # Concatenate all batch embeddings into one tensor
+        embeddings_concat = torch.cat(embeddings_list, dim=0)
 
         # Converting tensor to numpy array and then to DataFrame
-        embeddings_df = pd.DataFrame(embeddings_concat.detach().numpy(), 
-                                     index=dataset.samples,
+        embeddings_df = pd.DataFrame(embeddings_concat.numpy(), 
+                                     index=sample_names,  # Set DataFrame index to sample names
                                      columns=[f"E{dim}" for dim in range(embeddings_concat.shape[1])])
         return embeddings_df
         
@@ -341,7 +377,7 @@ class DirectPred(pl.LightningModule):
 
         aggregated_attributions = [[] for _ in range(num_class)]
         for batch in dataloader:
-            dat, _ = batch
+            dat, _, _ = batch
             x_list = [dat[x].to(device) for x in dat.keys()]
             input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
             baseline = tuple(torch.zeros_like(x) for x in input_data)

@@ -525,7 +525,7 @@ class MultiOmicDataset(Dataset):
         """
         subset_dat = {x: self.dat[x][index] for x in self.dat.keys()}
         subset_ann = {x: self.ann[x][index] for x in self.ann.keys()}
-        return subset_dat, subset_ann
+        return subset_dat, subset_ann, self.samples[index]
     
     def __len__ (self):
         """Get the total number of samples in the dataset.

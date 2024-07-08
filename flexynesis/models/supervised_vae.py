@@ -259,7 +259,7 @@ class supervised_vae(pl.LightningModule):
         Returns:
             torch.Tensor: The total loss computed for the batch.
         """
-        dat, y_dict = train_batch
+        dat, y_dict, samples = train_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         
@@ -303,7 +303,7 @@ class supervised_vae(pl.LightningModule):
         Returns:
             torch.Tensor: The total loss computed for the batch.
         """
-        dat, y_dict = val_batch
+        dat, y_dict, samples = val_batch
         layers = dat.keys()
         x_list = [dat[x] for x in layers]
         
@@ -335,7 +335,7 @@ class supervised_vae(pl.LightningModule):
                                        
     def transform(self, dataset):
         """
-        Transform the input dataset to latent representation.
+        Transform the input dataset to latent representation using batching.
 
         Args:
             dataset (MultiOmicDataset): MultiOmicDataset containing input matrices for each omics layer.
@@ -343,37 +343,71 @@ class supervised_vae(pl.LightningModule):
         Returns:
             pd.DataFrame: Transformed dataset as a pandas DataFrame.
         """
-        self.eval()
-        layers = list(dataset.dat.keys())
-        x_list = [dataset.dat[x] for x in layers]
-        M = self.forward(x_list)[1].detach().numpy()
-        z = pd.DataFrame(M)
-        z.columns = [''.join(['E', str(x)]) for x in z.columns]
-        z.index = dataset.samples
+        self.eval()  # Set the model to evaluation mode
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.to(device)  # Move the model to the appropriate device
+
+        dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
+        all_latent_representations = []  # Initialize a list to collect all batch latent representations
+        sample_names = []  # List to collect sample names
+
+        # Process each batch
+        for batch in dataloader:
+            dat, _, samples = batch
+            x_list = [dat[x].to(device) for x in dat.keys()]  # Prepare the data batch for processing
+
+            # Perform the forward pass and extract the latent representation
+            latent_representation = self.forward(x_list)[1].detach().cpu().numpy()  # Index [1] assumes second return is the latent rep
+
+            all_latent_representations.append(latent_representation)  # Store the batch's latent representation
+            sample_names.extend(samples)  # Collect sample names for this batch
+
+        # Concatenate all batch latent representations into one array
+        concatenated_latents = np.concatenate(all_latent_representations, axis=0)
+
+        # Convert the array to a DataFrame
+        z = pd.DataFrame(concatenated_latents)
+        z.columns = ['E' + str(i) for i in range(z.shape[1])]  # Name columns
+        z.index = sample_names  # Set DataFrame index to sample names
+
         return z
     
     def predict(self, dataset):
         """
-        Evaluate the model on a dataset.
+        Evaluate the model on a dataset using batching.
 
         Args:
-            dataset (MultiOmicDataset): dataset containing input matrices for each omics layer.
+            dataset (MultiOmicDataset): Dataset containing input matrices for each omics layer.
 
         Returns:
-            predicted values.
+            dict: Predicted values mapped by target variable names.
         """
-        self.eval()
-        layers = list(dataset.dat.keys())
-        x_list = [dataset.dat[x] for x in layers]
-        X_hat, z, mean, log_var, outputs = self.forward(x_list)
-        
-        predictions = {}
-        for var in self.variables:
-            y_pred = outputs[var].detach().numpy()
-            if self.dataset.variable_types[var] == 'categorical':
-                predictions[var] = np.argmax(y_pred, axis=1)
-            else:
-                predictions[var] = y_pred
+        self.eval()  # Set the model to evaluation mode
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.to(device)  # Move the model to the appropriate device
+
+        dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
+
+        predictions = {var: [] for var in self.variables}  # Initialize prediction storage
+
+        # Process each batch
+        for batch in dataloader:
+            dat, _, _ = batch
+            x_list = [dat[x].to(device) for x in dat.keys()]  # Prepare the data batch for processing
+
+            # Perform the forward pass
+            X_hat, z, mean, log_var, outputs = self.forward(x_list)
+
+            # Collect predictions for each variable
+            for var in self.variables:
+                y_pred = outputs[var].detach().cpu().numpy()  # Move outputs back to CPU and convert to numpy
+                if dataset.variable_types[var] == 'categorical':
+                    predictions[var].extend(np.argmax(y_pred, axis=1))
+                else:
+                    predictions[var].extend(y_pred)
+
+        # Convert lists to arrays if necessary, depending on the downstream use-case
+        predictions = {var: np.array(predictions[var]) for var in predictions}
 
         return predictions
     
@@ -482,6 +516,7 @@ class supervised_vae(pl.LightningModule):
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
         aggregated_attributions = [[] for _ in range(num_class)]
+        print("Memory before batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
         
         for batch in dataloader:
             dat, _ = batch
@@ -518,6 +553,7 @@ class supervised_vae(pl.LightningModule):
                 attr_concat = torch.cat(layer_tensors, dim=1)
                 layer_attributions.append(attr_concat)
             processed_attributions.append(layer_attributions)
+        print("Memory after batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
         
         # summarize feature importances
         # Compute absolute attributions
