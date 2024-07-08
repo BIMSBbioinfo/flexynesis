@@ -375,7 +375,7 @@ class GNN(pl.LightningModule):
         return torch.cat(outputs_list, dim = 0)
 
         
-    def compute_feature_importance(self, dataset, target_var, steps=5, batch_size = 32):
+    def compute_feature_importance(self, dataset, target_var, steps=5, batch_size = 64):
         """
         Computes the feature importance for each variable in the dataset using the Integrated Gradients method.
         This method measures the importance of each feature by attributing the prediction output to each input feature.
@@ -397,13 +397,9 @@ class GNN(pl.LightningModule):
         """
         def bytes_to_gb(bytes):
             return bytes / 1024 ** 2
-        print("Memory before moving model to device: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
         device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
         self.to(device)
-        print("Memory before edges: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
         self.dataset_edge_index = dataset.edge_index.to(device)
-        print("Memory after edges: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
-
 
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         ig = IntegratedGradients(self.forward_target)
