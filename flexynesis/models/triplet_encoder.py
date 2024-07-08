@@ -405,7 +405,7 @@ class MultiTripletNetwork(pl.LightningModule):
         if self.variable_types[target_var] == 'numerical':
             num_class = 1
         else:
-            num_class = len(np.unique([y[target_var] for _, y in dataset]))
+            num_class = len(np.unique([y[target_var] for _, y, _ in dataset]))
 
         aggregated_attributions = [[] for _ in range(num_class)]
         for batch in dataloader:

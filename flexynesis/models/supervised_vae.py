@@ -516,10 +516,9 @@ class supervised_vae(pl.LightningModule):
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
         aggregated_attributions = [[] for _ in range(num_class)]
-        print("Memory before batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
         
         for batch in dataloader:
-            dat, _ = batch
+            dat, _, _ = batch
             x_list = [dat[x].to(device) for x in dat.keys()]
             input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
             baseline = tuple(torch.zeros_like(x) for x in input_data)
@@ -553,7 +552,6 @@ class supervised_vae(pl.LightningModule):
                 attr_concat = torch.cat(layer_tensors, dim=1)
                 layer_attributions.append(attr_concat)
             processed_attributions.append(layer_attributions)
-        print("Memory after batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
         
         # summarize feature importances
         # Compute absolute attributions
