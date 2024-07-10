@@ -215,9 +215,11 @@ class HyperparameterTuning:
                 train_subset = torch.utils.data.Subset(self.loader_dataset, train_index)
                 val_subset = torch.utils.data.Subset(self.loader_dataset, val_index)
                 train_loader = self.DataLoader(train_subset, batch_size=int(params['batch_size']), 
-                                               pin_memory=True, shuffle=True, drop_last=True, num_workers = self.num_workers, prefetch_factor = None, persistent_workers = True)
+                                               pin_memory=True, shuffle=True, drop_last=True, num_workers = self.num_workers, prefetch_factor = None, 
+                                               persistent_workers = self.num_workers > 0)
                 val_loader = self.DataLoader(val_subset, batch_size=int(params['batch_size']), 
-                                             pin_memory=True, shuffle=False, num_workers = num_workers, prefetch_factor = None, persistent_workers = True)
+                                             pin_memory=True, shuffle=False, num_workers = self.num_workers, prefetch_factor = None, 
+                                             persistent_workers = self.num_workers > 0)
 
                 model = self.model_class(**model_args)
                 trainer, early_stop_callback = self.setup_trainer(params, current_step, total_steps)

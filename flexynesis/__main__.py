@@ -255,7 +255,8 @@ def main():
                                             device_type = device_type,
                                             gnn_conv_type = gnn_conv_type,
                                             input_layers = input_layers,
-                                            output_layers = output_layers)    
+                                            output_layers = output_layers, 
+                                            num_workers = args.num_workers)    
     
     # do a hyperparameter search training multiple models and get the best_configuration 
     model, best_params = tuner.perform_tuning(hpo_patience = args.hpo_patience)
