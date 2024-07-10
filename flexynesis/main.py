@@ -56,7 +56,7 @@ class HyperparameterTuning:
                  cv_splits=5, use_loss_weighting=True, early_stop_patience=-1, device_type=None, gnn_conv_type=None,
                  input_layers=None, output_layers=None): Initializes the hyperparameter tuner with specific settings.
 
-        get_batch_space(min_size=16, max_size=256): Determines the batch size search space based on the dataset size.
+        get_batch_space(min_size=16, max_size=128): Determines the batch size search space based on the dataset size.
 
         setup_trainer(params, current_step, total_steps, full_train=False): Sets up the trainer with appropriate callbacks
             and configurations for either full training or validation based training.
@@ -80,7 +80,7 @@ class HyperparameterTuning:
                  val_size = 0.2,  use_cv = False, cv_splits = 5, 
                  use_loss_weighting = True, early_stop_patience = -1,
                  device_type = None, gnn_conv_type = None, 
-                 input_layers = None, output_layers = None):
+                 input_layers = None, output_layers = None, num_workers = 2):
         self.dataset = dataset # dataset for model initiation
         self.loader_dataset = dataset # dataset for defining data loaders (this can be model specific)
         self.model_class = model_class
@@ -107,6 +107,7 @@ class HyperparameterTuning:
         self.gnn_conv_type = gnn_conv_type
         self.input_layers = input_layers
         self.output_layers = output_layers 
+        self.num_workers = num_workers
         
         self.DataLoader = torch.utils.data.DataLoader # use torch data loader by default
         
@@ -128,7 +129,7 @@ class HyperparameterTuning:
             else:
                 raise ValueError(f"'{self.config_name}' not found in the default config.")
 
-    def get_batch_space(self, min_size = 32, max_size = 256):
+    def get_batch_space(self, min_size = 32, max_size = 128):
         m = int(np.log2(len(self.dataset) * 0.8))
         st = int(np.log2(min_size))
         end = int(np.log2(max_size))
@@ -214,9 +215,9 @@ class HyperparameterTuning:
                 train_subset = torch.utils.data.Subset(self.loader_dataset, train_index)
                 val_subset = torch.utils.data.Subset(self.loader_dataset, val_index)
                 train_loader = self.DataLoader(train_subset, batch_size=int(params['batch_size']), 
-                                               pin_memory=True, shuffle=True, drop_last=True, num_workers = 4, prefetch_factor = None, persistent_workers = True)
+                                               pin_memory=True, shuffle=True, drop_last=True, num_workers = self.num_workers, prefetch_factor = None, persistent_workers = True)
                 val_loader = self.DataLoader(val_subset, batch_size=int(params['batch_size']), 
-                                             pin_memory=True, shuffle=False, num_workers = 4, prefetch_factor = None, persistent_workers = True)
+                                             pin_memory=True, shuffle=False, num_workers = num_workers, prefetch_factor = None, persistent_workers = True)
 
                 model = self.model_class(**model_args)
                 trainer, early_stop_callback = self.setup_trainer(params, current_step, total_steps)

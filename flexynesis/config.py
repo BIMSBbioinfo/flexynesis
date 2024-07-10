@@ -6,28 +6,28 @@ epochs = [500]
 search_spaces = {
     'DirectPred': [
         Integer(16, 128, name='latent_dim'),
-        Real(0.2, 1, name='hidden_dim_factor'), # relative size of the hidden_dim w.r.t input_dim 
+        Real(0.2, 0.5, name='hidden_dim_factor'), # relative size of the hidden_dim w.r.t input_dim 
         Real(0.0001, 0.01, prior='log-uniform', name='lr'),
         Integer(8, 32, name='supervisor_hidden_dim'),
         Categorical(epochs, name='epochs')
     ], 
     'supervised_vae': [
         Integer(16, 128, name='latent_dim'),
-        Real(0.2, 1, name='hidden_dim_factor'), # relative size of the hidden_dim w.r.t input_dim 
+        Real(0.2, 0.5, name='hidden_dim_factor'), # relative size of the hidden_dim w.r.t input_dim 
         Integer(8, 32, name='supervisor_hidden_dim'),
         Real(0.0001, 0.01, prior='log-uniform', name='lr'),
         Categorical(epochs, name='epochs')
     ],
     'CrossModalPred': [
         Integer(16, 128, name='latent_dim'),
-        Real(0.2, 1, name='hidden_dim_factor'), # relative size of the hidden_dim w.r.t input_dim 
+        Real(0.2, 0.5, name='hidden_dim_factor'), # relative size of the hidden_dim w.r.t input_dim 
         Integer(8, 32, name='supervisor_hidden_dim'),
         Real(0.0001, 0.01, prior='log-uniform', name='lr'),
         Categorical(epochs, name='epochs')
     ],
     'MultiTripletNetwork': [
         Integer(16, 128, name='latent_dim'),
-        Real(0.2, 1, name='hidden_dim_factor'), # relative size of the hidden_dim w.r.t input_dim 
+        Real(0.2, 0.5, name='hidden_dim_factor'), # relative size of the hidden_dim w.r.t input_dim 
         Integer(8, 32, name='supervisor_hidden_dim'),
         Real(0.0001, 0.01, prior='log-uniform', name='lr'),
         Categorical(epochs, name='epochs')
