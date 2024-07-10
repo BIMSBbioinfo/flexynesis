@@ -46,6 +46,7 @@ def main():
         --use_loss_weighting (str): Whether to apply loss-balancing using uncertainty weights method. Choices are ['True', 'False']. Default is 'True'.
         --evaluate_baseline_performance (str): Whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset. Choices are ['True', 'False']. Default is 'True'.
         --threads (int): How many threads to use when using CPU. Default is 4.
+        --num_workers (int): How many workers to use for model training. Default is 2
         --use_gpu (bool): If set, the system will attempt to use CUDA/GPU if available.
         --disable_marker_finding (bool): If set, marker discovery after model training is disabled.
         --string_organism (int): STRING DB organism id. Default is 9606.
@@ -99,6 +100,7 @@ def main():
     parser.add_argument("--use_loss_weighting", help="whether to apply loss-balancing using uncertainty weights method", type=str, choices=['True', 'False'], default = 'True')
     parser.add_argument("--evaluate_baseline_performance", help="whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset", type=str, choices=['True', 'False'], default = 'True')
     parser.add_argument("--threads", help="(Optional) How many threads to use when using CPU (default is 4)", type=int, default = 4)
+    parser.add_argument("--num_workers", help="(Optional) How many workers to use for model training (default is 2)", type=int, default = 2)
     parser.add_argument("--use_gpu", action="store_true", 
                         help="(Optional) If set, the system will attempt to use CUDA/GPU if available.")
     parser.add_argument("--disable_marker_finding", action="store_true", 
