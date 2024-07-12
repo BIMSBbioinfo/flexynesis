@@ -199,6 +199,23 @@ def evaluate_survival(outputs, durations, events):
     return {'cindex': c_index}
 
 def evaluate_classifier(y_true, y_pred, print_report = False):
+    """
+    Evaluate the performance of a classifier using multiple metrics and optionally print a detailed classification report.
+
+    This function computes balanced accuracy, F1 score (macro), and Cohen's Kappa score for the given true and predicted labels.
+    If `print_report` is set to True, it prints a detailed classification report.
+
+    Args:
+        y_true (array-like): True labels of the data, must be 1D list or array of labels.
+        y_pred (array-like): Predicted labels as returned by a classifier, must match the dimensions of y_true.
+        print_report (bool, optional): If True, prints a detailed classification report. Defaults to False.
+
+    Returns:
+        dict: A dictionary containing:
+              - 'balanced_acc': The balanced accuracy of the predictions.
+              - 'f1_score': The macro-average F1 score of the predictions.
+              - 'kappa': Cohen's Kappa score indicating the level of agreement between the true and predicted labels.
+    """
     # Balanced accuracy
     balanced_acc = balanced_accuracy_score(y_true, y_pred)
     # F1 score (macro)
@@ -213,12 +230,48 @@ def evaluate_classifier(y_true, y_pred, print_report = False):
     return {"balanced_acc": balanced_acc, "f1_score": f1, "kappa": kappa}
 
 def evaluate_regressor(y_true, y_pred):
-    mse = mean_squared_error(y_true, y_pred)
+    """
+    Evaluate the performance of a regression model using mean squared error, R-squared, and Pearson correlation coefficient.
+
+    This function computes the mean squared error (MSE) between true and predicted values as a measure of prediction accuracy.
+    It also performs a linear regression analysis between the true and predicted values to obtain the R-squared value, which
+    explains the variance ratio, and the Pearson correlation coefficient, providing insight into the linear relationship strength.
+
+    Args:
+        y_true (array-like): True values of the dependent variable, must be a 1D list or array.
+        y_pred (array-like): Predicted values as returned by a regressor, must match the dimensions of y_true.
+
+    Returns:
+        dict: A dictionary containing:
+              - 'mse': The mean squared error between the true and predicted values.
+              - 'r2': The R-squared value indicating the proportion of variance in the dependent variable predictable from the independent variable.
+              - 'pearson_corr': The Pearson correlation coefficient indicating the linear relationship strength between the true and predicted values.
+                  mse = mean_squared_error(y_true, y_pred)
+    """
     slope, intercept, r_value, p_value, std_err = linregress(y_true,y_pred)
     r2 = r_value**2 
     return {"mse": mse, "r2": r2, "pearson_corr": r_value}
 
 def evaluate_wrapper(method, y_pred_dict, dataset, surv_event_var = None, surv_time_var = None):
+    """
+    Evaluates predictions for different variables within a dataset using appropriate metrics based on the variable type. 
+    Supports evaluation for numerical, categorical, and survival data.
+
+    This function loops through each variable in the predictions dictionary, determines the type of the variable,
+    and evaluates the predictions using the appropriate method: regression, classification, or survival analysis.
+    It compiles the metrics into a list of dictionaries, which is then converted into a pandas DataFrame.
+
+    Args:
+        method (str): Identifier for the prediction method or model used.
+        y_pred_dict (dict): A dictionary where keys are variable names and values are arrays of predicted values.
+        dataset (Dataset): A dataset object containing actual values and metadata such as variable types.
+        surv_event_var (str, optional): The name of the survival event variable. Required if survival analysis is performed.
+        surv_time_var (str, optional): The name of the survival time variable. Required if survival analysis is performed.
+
+    Returns:
+        pd.DataFrame: A DataFrame where each row contains the method, variable name, variable type, metric name, and metric value.
+
+    """
     metrics_list = []
     for var in y_pred_dict.keys():
         if dataset.variable_types[var] == 'numerical':
@@ -265,6 +318,25 @@ def get_predicted_labels(y_pred_dict, dataset, split):
     return pd.concat(dfs, ignore_index=True)
 
 def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, methods, n_folds=5, n_jobs=4):
+    """
+    Evaluates the performance of RandomForest and/or Support Vector Machine models on a given variable from the provided datasets using cross-validation.
+
+    This function preprocesses the training and testing data, performs grid search with cross-validation to find the best
+    hyperparameters for the specified methods, and then evaluates the performance of these models on the testing set.
+    It supports evaluation for both categorical and numerical variables using appropriate machine learning models.
+
+    Args:
+        train_dataset (Dataset): A MultiOmicDataset object containing training data and metadata such as variable types.
+        test_dataset (Dataset): A MultiOmicDataset object containing testing data.
+        variable_name (str): The name of the target variable for prediction.
+        methods (list of str): List of machine learning methods to evaluate, e.g., ['RandomForest', 'SVM'].
+        n_folds (int, optional): Number of folds to use in K-fold cross-validation. Defaults to 5.
+        n_jobs (int, optional): Number of jobs to run in parallel during grid search. Defaults to 4.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the method, variable name, variable type, metric name, and metric value for each tested method.
+
+    """
     def prepare_data(data_object):
         # Concatenate Data Matrices
         X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=1)
@@ -332,6 +404,26 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
     return pd.DataFrame(metrics_list)
 
 def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration_col, event_col, n_folds=5, n_jobs=4):
+    """
+    Evaluates the baseline performance of a Random Survival Forest model on survival data using the Concordance Index.
+
+    The function preprocesses both training and testing datasets to prepare appropriate survival data (comprising durations 
+    and event occurrences), performs cross-validation to assess model robustness, and then calculates the Concordance Index on 
+    the test data. It uses a Random Survival Forest (RSF) as the predictive model.
+
+    Args:
+        train_dataset (Dataset): The training dataset (a MultiOmicDataset object) containing features and survival data.
+        test_dataset (Dataset): The testing dataset  (a MultiOmicDataset object) containing features and survival data.
+        duration_col (str): Column name in the dataset for survival time.
+        event_col (str): Column name in the dataset for the event occurrence (1 if event occurred, 0 otherwise).
+        n_folds (int, optional): Number of folds for K-fold cross-validation. Defaults to 5.
+        n_jobs (int, optional): Number of parallel jobs to run for Random Survival Forest training. Defaults to 4.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the performance metrics of the RSF model, specifically the Concordance Index,
+                      listed along with the method name and variable details.
+
+    """
     print(f"[INFO] Evaluating baseline survival prediction performance")
     def prepare_data(data_object, duration_col, event_col):
         # Concatenate Data Matrices

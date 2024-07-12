@@ -19,7 +19,7 @@ nav:
     - Data Importer: data.md 
     - Feature Selection: feature_selection.md
     - Training: main.md
-
+    - Utility Functions: utils.md
 
 plugins:
   - search
