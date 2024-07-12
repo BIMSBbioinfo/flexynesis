@@ -218,7 +218,7 @@ def evaluate_regressor(y_true, y_pred):
     r2 = r_value**2 
     return {"mse": mse, "r2": r2, "pearson_corr": r_value}
 
-def evaluate_wrapper(y_pred_dict, dataset, surv_event_var = None, surv_time_var = None):
+def evaluate_wrapper(method, y_pred_dict, dataset, surv_event_var = None, surv_time_var = None):
     metrics_list = []
     for var in y_pred_dict.keys():
         if dataset.variable_types[var] == 'numerical':
@@ -235,6 +235,7 @@ def evaluate_wrapper(y_pred_dict, dataset, surv_event_var = None, surv_time_var 
 
         for metric, value in metrics.items():
             metrics_list.append({
+                'method': method,
                 'var': var,
                 'variable_type': dataset.variable_types[var],
                 'metric': metric,
@@ -263,8 +264,7 @@ def get_predicted_labels(y_pred_dict, dataset, split):
         dfs.append(df)
     return pd.concat(dfs, ignore_index=True)
 
-# evaluate performance of off-the-shelf methods such as Random Forests and SVMs on regression/classification tasks
-def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_folds=5, n_jobs = 4):
+def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, methods, n_folds=5, n_jobs=4):
     def prepare_data(data_object):
         # Concatenate Data Matrices
         X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=1)
@@ -281,52 +281,32 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_
     # Determine variable type
     variable_type = train_dataset.variable_types[variable_name]
 
-    # Initialize models and parameter grids
-    if variable_type == 'categorical':
-        model_params = {
-            'RandomForestClassifier': {
-                'model': RandomForestClassifier(random_state=42),
-                'params': {
-                    'n_estimators': [100, 200, 300],
-                    'max_depth': [10, 20, None]
-                }
-            },
-            'SVC': {
-                'model': SVC(),
-                'params': {
-                    'C': [0.1, 1, 10],
-                    'kernel': ['rbf', 'poly']
-                }
-            }
-        }
-    elif variable_type == 'numerical':
-        model_params = {
-            'RandomForestRegressor': {
-                'model': RandomForestRegressor(random_state=42),
-                'params': {
-                    'n_estimators': [100, 200, 300],
-                    'max_depth': [10, 20, None]
-                }
-            },
-            'SVR': {
-                'model': SVR(),
-                'params': {
-                    'C': [0.1, 1, 10],
-                    'kernel': ['rbf', 'poly']
-                }
-            }
-        }
-
     # Cross-Validation and Training
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
     X_train, y_train = prepare_data(train_dataset)
-    print("Train:",X_train.shape)
+    print("Train:", X_train.shape)
     X_test, y_test = prepare_data(test_dataset)
-    print("Test:",X_test.shape)
+    print("Test:", X_test.shape)
 
     metrics_list = []
-    for model_name, mp in model_params.items():
-        grid_search = GridSearchCV(mp['model'], mp['params'], cv=kf, n_jobs=n_jobs)
+
+    for method in methods:
+        if variable_type == 'categorical':
+            if method == 'RandomForest':
+                model = RandomForestClassifier(random_state=42)
+                params = {'n_estimators': [100, 200, 300], 'max_depth': [10, 20, None]}
+            elif method == 'SVM':
+                model = SVC(random_state=42)
+                params = {'C': [0.1, 1, 10], 'kernel': ['rbf', 'poly']}
+        elif variable_type == 'numerical':
+            if method == 'RandomForest':
+                model = RandomForestRegressor(random_state=42)
+                params = {'n_estimators': [100, 200, 300], 'max_depth': [10, 20, None]}
+            elif method == 'SVM':
+                model = SVR()
+                params = {'C': [0.1, 1, 10], 'kernel': ['rbf', 'poly']}
+
+        grid_search = GridSearchCV(model, params, cv=kf, n_jobs=n_jobs)
         grid_search.fit(X_train, y_train)
         best_model = grid_search.best_estimator_
 
@@ -341,7 +321,7 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, n_
 
         for metric, value in metrics.items():
             metrics_list.append({
-                'method': model_name,
+                'method': method + ('Classifier' if variable_type == 'categorical' else 'Regressor'),
                 'var': variable_name,
                 'variable_type': variable_type,
                 'metric': metric,

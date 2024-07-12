@@ -1,7 +1,7 @@
 from lightning import seed_everything
 import lightning as pl
 from typing import NamedTuple
-import os, yaml, torch, time, random, warnings, argparse 
+import os, yaml, torch, time, random, warnings, argparse, sys
 os.environ["OMP_NUM_THREADS"] = "1"
 import pandas as pd
 import flexynesis
@@ -18,7 +18,8 @@ def main():
 
     Args:
         --data_path (str): Path to the folder with train/test data files. (Required)
-        --model_class (str): The kind of model class to instantiate. Choices are ["DirectPred", "GNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred"]. (Required)
+        --model_class (str): The kind of model class to instantiate. Choices are ["DirectPred", "GNN", "supervised_vae", 
+        "MultiTripletNetwork", "CrossModalPred", "RandomForest", "SVM", "RandomSurvivalForest"]. (Required)
         --gnn_conv_type (str): If model_class is set to GNN, choose which graph convolution type to use. Choices are ["GC", "GCN", "SAGE"].
         --target_variables (str): Which variables in 'clin.csv' to use for predictions, comma-separated if multiple. Optional if survival variables are not set to None.
         --batch_variables (str): Which variables in 'clin.csv' to use for data integration/batch correction, comma-separated if multiple. Optional.
@@ -44,7 +45,7 @@ def main():
         --hpo_patience (int): How many hyperparameter optimisation iterations to wait for when no improvements are observed. Default is 10; set to 0 to disable early stopping.
         --use_cv (bool): If set, a 5-fold cross-validation training will be done. Otherwise, a single training on 80 percent of the dataset is done.
         --use_loss_weighting (str): Whether to apply loss-balancing using uncertainty weights method. Choices are ['True', 'False']. Default is 'True'.
-        --evaluate_baseline_performance (str): Whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset. Choices are ['True', 'False']. Default is 'True'.
+        --evaluate_baseline_performance (bool): Enables modeling also with Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset. 
         --threads (int): How many threads to use when using CPU. Default is 4.
         --num_workers (int): How many workers to use for model training. Default is 2
         --use_gpu (bool): If set, the system will attempt to use CUDA/GPU if available.
@@ -57,7 +58,7 @@ def main():
     
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, 
-                        choices=["DirectPred", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "GNN"], required = True)
+                        choices=["DirectPred", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "GNN", "RandomForest", "SVM", "RandomSurvivalForest"], required = True)
     parser.add_argument("--gnn_conv_type", help="If model_class is set to GNN, choose which graph convolution type to use", type=str, 
                         choices=["GC", "GCN", "SAGE"])
     parser.add_argument("--target_variables", 
@@ -98,7 +99,8 @@ def main():
     parser.add_argument("--use_cv", action="store_true", 
                         help="(Optional) If set, the a 5-fold cross-validation training will be done. Otherwise, a single trainig on 80 percent of the dataset is done.")
     parser.add_argument("--use_loss_weighting", help="whether to apply loss-balancing using uncertainty weights method", type=str, choices=['True', 'False'], default = 'True')
-    parser.add_argument("--evaluate_baseline_performance", help="whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset", type=str, choices=['True', 'False'], default = 'True')
+    parser.add_argument("--evaluate_baseline_performance", action="store_true", 
+                        help="whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset")
     parser.add_argument("--threads", help="(Optional) How many threads to use when using CPU (default is 4)", type=int, default = 4)
     parser.add_argument("--num_workers", help="(Optional) How many workers to use for model training (default is 2)", type=int, default = 2)
     parser.add_argument("--use_gpu", action="store_true", 
@@ -186,20 +188,24 @@ def main():
     if not os.path.exists(args.outdir):
         raise FileNotFoundError(f"Path to --outdir doesn't exist at:",  {args.outdir})
 
-    class AvailableModels(NamedTuple):
-        # type AvailableModel = ModelClass: Type, ModelConfig: str
-        DirectPred: tuple[DirectPred, str] = DirectPred, "DirectPred"
-        supervised_vae: tuple[supervised_vae, str] = supervised_vae, "supervised_vae"
-        MultiTripletNetwork: tuple[MultiTripletNetwork, str] = MultiTripletNetwork, "MultiTripletNetwork"
-        CrossModalPred: tuple[CrossModalPred, str] = CrossModalPred, "CrossModalPred"
-        GNN: tuple[GNN, str] = GNN, "GNN"
-        
-    available_models = AvailableModels()
-    model_class = getattr(available_models, args.model_class, None)
-    if model_class is None:
-        raise ValueError(f"Invalid model_class: {args.model_class}")
-    else:
-        model_class, config_name = model_class
+    available_models = {
+        "DirectPred": (DirectPred, "DirectPred"),
+        "supervised_vae": (supervised_vae, "supervised_vae"),
+        "MultiTripletNetwork": (MultiTripletNetwork,  "MultiTripletNetwork"),
+        "CrossModalPred": (CrossModalPred, "CrossModalPred"),
+        "GNN": (GNN, "GNN"),
+        "RandomForest": ("RandomForest", None),
+        "SVM": ("SVM", None),
+        "RandomSurvivalForest": ("RandomSurvivalForest", None)
+    }
+    
+    model_info = available_models.get(args.model_class)
+
+    if model_info is None:
+        raise ValueError(f"Unsupported model class {args.model_class}")
+
+    # Unpack the tuple into model class and config name
+    model_class, config_name = model_info
 
     # import assays and labels
     inputDir = args.data_path
@@ -220,6 +226,34 @@ def main():
                                             processed_dir = '_'.join(['processed', args.prefix]),
                                             downsample = args.subsample)
     train_dataset, test_dataset = data_importer.import_data()
+    
+    if args.model_class in ["RandomForest", "SVM"]:
+        if args.target_variables:
+            var =  args.target_variables.strip().split(',')[0]
+            print(f"Training {args.model_class} on variable: {var}")
+            metrics = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, variable_name=var,  
+                                                    methods=[args.model_class], n_folds=5, n_jobs=args.threads)
+            metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
+            print(f"{args.model_class} evaluation complete. Results saved.")
+            # we skip everything related to deep learning models here
+            sys.exit(0) 
+        else:
+            raise ValueError(f"At least one target variable is required to run RandomForest/SVM models. Set --target_variables argument")
+
+    if args.model_class == "RandomSurvivalForest":
+        if args.surv_event_var and args.surv_time_var:
+            print(f"Training {args.model_class} on survival variables: {args.surv_event_var} and {args.surv_time_var}")
+            metrics = flexynesis.evaluate_baseline_survival_performance(train_dataset, test_dataset,
+                                                              args.surv_time_var, 
+                                                                 args.surv_event_var, 
+                                                                 n_folds = 5,
+                                                                 n_jobs = int(args.threads))
+            metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
+            print(f"{args.model_class} evaluation complete. Results saved.")
+            # we skip everything related to deep learning models here
+            sys.exit(0) 
+        else:
+            raise ValueError(f"Missing survival variables. Set --surv_event_var --surv_time_var arguments")
     
     if args.model_class == 'GNN': 
         # overlay datasets with network info 
@@ -282,20 +316,16 @@ def main():
         # update the test dataset to exclude finetuning samples
         test_dataset = holdout_dataset 
     
+    # get sample embeddings and save 
+    print("[INFO] Extracting sample embeddings")
+    embeddings_train = model.transform(train_dataset)
+    embeddings_test = model.transform(test_dataset)
+    
+    embeddings_train.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.csv'])), header=True)
+    embeddings_test.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.csv'])), header=True)
+
     # evaluate predictions;  (if any supervised learning happened)
     if any([args.target_variables, args.surv_event_var, args.batch_variables]):
-        print("[INFO] Computing model evaluation metrics")
-        metrics_df = flexynesis.evaluate_wrapper(model.predict(test_dataset), test_dataset, 
-                                                 surv_event_var=model.surv_event_var, 
-                                                 surv_time_var=model.surv_time_var)
-        metrics_df.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
-
-        # print known/predicted labels 
-        predicted_labels = pd.concat([flexynesis.get_predicted_labels(model.predict(train_dataset), train_dataset, 'train'),
-                                      flexynesis.get_predicted_labels(model.predict(test_dataset), test_dataset, 'test')], 
-                                    ignore_index=True)
-        predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
-        
         if not args.disable_marker_finding: # unless marker discovery is disabled
             # compute feature importance values
             print("[INFO] Computing variable importance scores")
@@ -305,14 +335,19 @@ def main():
                                ignore_index = True)
             df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
 
-    # get sample embeddings and save 
-    print("[INFO] Extracting sample embeddings")
-    embeddings_train = model.transform(train_dataset)
-    embeddings_test = model.transform(test_dataset)
-    
-    embeddings_train.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.csv'])), header=True)
-    embeddings_test.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.csv'])), header=True)
-    
+        # print known/predicted labels 
+        predicted_labels = pd.concat([flexynesis.get_predicted_labels(model.predict(train_dataset), train_dataset, 'train'),
+                                      flexynesis.get_predicted_labels(model.predict(test_dataset), test_dataset, 'test')], 
+                                    ignore_index=True)
+        predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
+        
+        print("[INFO] Computing model evaluation metrics")
+        metrics_df = flexynesis.evaluate_wrapper(args.model_class, model.predict(test_dataset), test_dataset, 
+                                                 surv_event_var=model.surv_event_var, 
+                                                 surv_time_var=model.surv_time_var)
+        metrics_df.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
+
+        
     # also filter embeddings to remove batch-associated dims and only keep target-variable associated dims 
     if args.batch_variables is not None:
         print("[INFO] Printing filtered embeddings")
@@ -339,7 +374,7 @@ def main():
 
     
     # evaluate off-the-shelf methods on the main target variable 
-    if args.evaluate_baseline_performance == 'True':
+    if args.evaluate_baseline_performance:
         print("[INFO] Computing off-the-shelf method performance on first target variable:",model.target_variables[0])
         var = model.target_variables[0]
         metrics = pd.DataFrame()
@@ -351,9 +386,10 @@ def main():
         
         if var != model.surv_event_var: 
             metrics = flexynesis.evaluate_baseline_performance(train, test, 
-                                                            variable_name = var, 
-                                                            n_folds=5,
-                                                            n_jobs = int(args.threads))
+                                                               variable_name = var, 
+                                                               methods = ['RandomForest', 'SVM'],
+                                                               n_folds = 5,
+                                                               n_jobs = int(args.threads))
         if model.surv_event_var and model.surv_time_var:
             print("[INFO] Computing off-the-shelf method performance on survival variable:",model.surv_time_var)
             metrics_baseline_survival = flexynesis.evaluate_baseline_survival_performance(train, test, 
@@ -369,5 +405,7 @@ def main():
     # save the trained model in file
     torch.save(model, os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.pth'])))
     
+    
 if __name__ == "__main__":
     main()
+    print("[INFO] Finished the analysis!") 
