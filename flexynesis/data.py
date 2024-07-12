@@ -627,13 +627,14 @@ class TripletMultiOmicDataset(Dataset):
                              for label in labels_set}
         return labels_set, label_to_indices
 
+    
 class MultiOmicDatasetNW(Dataset):
     def __init__(self, multiomic_dataset, interaction_df):
         self.multiomic_dataset = multiomic_dataset
         self.interaction_df = interaction_df
         
-        # Precompute common features and edge index
-        self.common_features = self.find_common_features()
+        # Compute union of features in the data matrices that also appear in the network
+        self.common_features = self.find_union_features()
         self.gene_to_index = {gene: idx for idx, gene in enumerate(self.common_features)}
         self.edge_index = self.create_edge_index()
         self.samples = self.multiomic_dataset.samples
@@ -647,38 +648,48 @@ class MultiOmicDatasetNW(Dataset):
         # Store labels for all samples
         self.labels = {target_name: labels for target_name, labels in self.multiomic_dataset.ann.items()}
         
-    def find_common_features(self):
-        common_features = set.intersection(*(set(features) for features in self.multiomic_dataset.features.values()))
+    def find_union_features(self):
+        # Find the union of all features in the multiomic dataset
+        all_omic_features = set().union(*(set(features) for features in self.multiomic_dataset.features.values()))
+        # Find the union of proteins involved in interactions
         interaction_genes = set(self.interaction_df['protein1']).union(set(self.interaction_df['protein2']))
-        return list(common_features.intersection(interaction_genes))
+        # Return the intersection of omic features and interaction genes
+        return list(all_omic_features.intersection(interaction_genes))
 
     def create_edge_index(self):
+        # Create edges only if both proteins are within the available features
         filtered_df = self.interaction_df[
             (self.interaction_df['protein1'].isin(self.common_features)) & 
             (self.interaction_df['protein2'].isin(self.common_features))
         ]
         edge_list = [(self.gene_to_index[row['protein1']], self.gene_to_index[row['protein2']]) for index, row in filtered_df.iterrows()]
         return torch.tensor(edge_list, dtype=torch.long).t()
-
+    
     def precompute_node_features(self):
-        # Find indices of common features in each data matrix
-        feature_indices = {data_type: [self.multiomic_dataset.features[data_type].get_loc(gene) 
-                                        for gene in self.common_features]
-                           for data_type in self.multiomic_dataset.dat}
-        # Create a tensor to store all features [num_samples, num_nodes, num_data_types]
         num_samples = len(self.samples)
         num_nodes = len(self.common_features)
         num_data_types = len(self.multiomic_dataset.dat)
-        all_features = torch.empty((num_samples, num_nodes, num_data_types), dtype=torch.float)
+        all_features = torch.full((num_samples, num_nodes, num_data_types), float('nan'), dtype=torch.float)
 
-        # Extract features for each data type and place them in the tensor
         for i, data_type in enumerate(self.multiomic_dataset.dat):
-            # Get the data matrix
             data_matrix = self.multiomic_dataset.dat[data_type]
-            # Use advanced indexing to extract features for all samples at once
-            indices = feature_indices[data_type]
-            if indices:  # Ensure there are common features in this data type
-                all_features[:, :, i] = data_matrix[:, indices]
+            feature_indices = {
+                gene: self.multiomic_dataset.features[data_type].get_loc(gene)
+                for gene in self.common_features if gene in self.multiomic_dataset.features[data_type]
+            }
+            valid_indices = torch.tensor(list(feature_indices.values()))
+            feature_positions = torch.tensor([self.gene_to_index[gene] for gene in feature_indices.keys()])
+
+            # Fill in the available data
+            all_features[:, feature_positions, i] = data_matrix[:, valid_indices]
+
+        # Precompute medians for all data types, ignoring NaN values
+        medians = torch.nanmedian(all_features, dim=1, keepdim=True).values  # Use .values to get the actual median tensor
+
+        # Replace all NaN values in all_features with their corresponding median values
+        isnan = torch.isnan(all_features)
+        all_features[isnan] = medians.expand_as(all_features)[isnan]
+
         return all_features
     
     def subset(self, indices):
