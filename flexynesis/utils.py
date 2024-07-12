@@ -246,8 +246,8 @@ def evaluate_regressor(y_true, y_pred):
               - 'mse': The mean squared error between the true and predicted values.
               - 'r2': The R-squared value indicating the proportion of variance in the dependent variable predictable from the independent variable.
               - 'pearson_corr': The Pearson correlation coefficient indicating the linear relationship strength between the true and predicted values.
-                  mse = mean_squared_error(y_true, y_pred)
     """
+    mse = mean_squared_error(y_true, y_pred)
     slope, intercept, r_value, p_value, std_err = linregress(y_true,y_pred)
     r2 = r_value**2 
     return {"mse": mse, "r2": r2, "pearson_corr": r_value}
