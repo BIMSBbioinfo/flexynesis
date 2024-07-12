@@ -18,8 +18,7 @@ def main():
 
     Args:
         --data_path (str): Path to the folder with train/test data files. (Required)
-        --model_class (str): The kind of model class to instantiate. Choices are ["DirectPred", "GNN", "supervised_vae", 
-        "MultiTripletNetwork", "CrossModalPred", "RandomForest", "SVM", "RandomSurvivalForest"]. (Required)
+        --model_class (str): The kind of model class to instantiate. Choices are ["DirectPred", "GNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "RandomForest", "SVM", "RandomSurvivalForest"]. (Required)
         --gnn_conv_type (str): If model_class is set to GNN, choose which graph convolution type to use. Choices are ["GC", "GCN", "SAGE"].
         --target_variables (str): Which variables in 'clin.csv' to use for predictions, comma-separated if multiple. Optional if survival variables are not set to None.
         --batch_variables (str): Which variables in 'clin.csv' to use for data integration/batch correction, comma-separated if multiple. Optional.

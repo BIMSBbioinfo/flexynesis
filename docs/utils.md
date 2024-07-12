@@ -1,3 +1,3 @@
-# Network Modules
+# Utility Functions
 
 ::: flexynesis.utils
