@@ -2,68 +2,74 @@ DirectPred:
   - type: Integer
     name: latent_dim
     low: 16
-    high: 64
+    high: 128
+  - type: Real
+    name: hidden_dim_factor
+    low: 0.5
+    high: 2
   - type: Integer
-    name: hidden_dim
-    low: 64
-    high: 512
+    name: supervisor_hidden_dim
+    low: 16
+    high: 128
   - type: Real
     name: lr
     low: 0.0001
     high: 0.01
     prior: log-uniform
-  - type: Integer
+  - type: Categorical
     name: batch_size
-    low: 32
-    high: 128
+    categories: [32, 64, 128]
   - type: Categorical
     name: epochs
     categories: [200]
 
-DirectPredCNN:
+CrossModalPred:
   - type: Integer
     name: latent_dim
     low: 16
-    high: 64
+    high: 128
+  - type: Real
+    name: hidden_dim_factor
+    low: 0.5
+    high: 2
   - type: Integer
-    name: hidden_dim
-    low: 64
-    high: 512
+    name: supervisor_hidden_dim
+    low: 16
+    high: 128
   - type: Real
     name: lr
     low: 0.0001
     high: 0.01
     prior: log-uniform
-  - type: Integer
+  - type: Categorical
     name: batch_size
-    low: 32
-    high: 128
+    categories: [32, 64, 128]
   - type: Categorical
     name: epochs
     categories: [200]
+
 
 supervised_vae:
   - type: Integer
     name: latent_dim
     low: 16
     high: 128
-  - type: Integer
-    name: hidden_dim
-    low: 64
-    high: 512
+  - type: Real
+    name: hidden_dim_factor
+    low: 0.5
+    high: 2
   - type: Integer
     name: supervisor_hidden_dim
-    low: 8
-    high: 32
+    low: 16
+    high: 128
   - type: Real
     name: lr
     low: 0.0001
     high: 0.01
     prior: log-uniform
-  - type: Integer
+  - type: Categorical
     name: batch_size
-    low: 32
-    high: 128
+    categories: [32, 64, 128]
   - type: Categorical
     name: epochs
     categories: [200]
@@ -73,23 +79,22 @@ MultiTripletNetwork:
     name: latent_dim
     low: 16
     high: 128
-  - type: Integer
-    name: hidden_dim
-    low: 64
-    high: 512
+  - type: Real
+    name: hidden_dim_factor
+    low: 0.5
+    high: 2
   - type: Integer
     name: supervisor_hidden_dim
-    low: 8
-    high: 32
+    low: 16
+    high: 128
   - type: Real
     name: lr
     low: 0.0001
     high: 0.01
     prior: log-uniform
-  - type: Integer
+  - type: Categorical
     name: batch_size
-    low: 32
-    high: 128
+    categories: [32, 64, 128]
   - type: Categorical
     name: epochs
     categories: [200]

@@ -58,12 +58,6 @@ jobs:
         notebook='examples/tutorials/brca_subtypes'
         papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
         
-    - name: Compile modeling_drug_response
-      shell: bash -l {0}
-      run: |
-        conda activate my_env
-        notebook='examples/tutorials/modeling_drug_response'
-        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
         
     - name: Compile survival_subtypes_LGG_GBM
       shell: bash -l {0}
@@ -72,21 +66,7 @@ jobs:
         notebook='examples/tutorials/survival_subtypes_LGG_GBM'
         papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
 
-    - name: Compile scrnaseq_bonemarrow
-      shell: bash -l {0}
-      run: |
-        conda activate my_env
-        notebook='examples/tutorials/scrnaseq_bonemarrow'
-        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
-        
-    - name: Compile neuroblastoma_data_integration
-      shell: bash -l {0}
-      run: |
-        conda activate my_env
-        notebook='examples/tutorials/neuroblastoma_data_integration' 
-        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
-
-    - name: Compile unsupervised_analysis_single_cell
+    - name: Compile unsupervised-analysis
       shell: bash -l {0}
       run: |
         conda activate my_env
