@@ -77,7 +77,7 @@ flexynesis --data_path dataset1 \
   --prefix erlotinib_direct \
   --early_stop_patience 3 \
   --use_loss_weighting False \
-  --evaluate_baseline_performance False
+  --evaluate_baseline_performance
 ```
 
 ## Accelerating with GPUs
@@ -229,8 +229,8 @@ jupyter nbconvert --to html brca_subtypes.ipynb
 Documentation generated using [mkdocs](https://mkdocstrings.github.io/) 
 
 ```
-pip install mkdocstrings
-mkdocs build 
+pip install mkdocstrings[python]
+mkdocs build --clean
 ```
 
 
