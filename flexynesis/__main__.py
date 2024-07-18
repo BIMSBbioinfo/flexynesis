@@ -141,12 +141,10 @@ def main():
                                    "`srun --gpus=1 --pty flexynesis <rest of your_command>` !!!\n\n"]))
             time.sleep(3)  #wait a bit to capture user's attention to the warning
             device_type = 'cpu'
-            torch.set_num_threads(args.threads)
         else:
             device_type = 'gpu'
     else:
         device_type = 'cpu'
-        torch.set_num_threads(args.threads)
 
     # 5. check GNN arguments
     if args.model_class == 'GNN':
