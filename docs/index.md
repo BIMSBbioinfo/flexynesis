@@ -22,19 +22,6 @@ that can be formulated as a regression or classification problem.
   <img alt="workflow" src="https://github.com/BIMSBbioinfo/flexynesis/raw/main/img/graphical_abstract.jpg">
 </p>
 
-# Documentation
-
-A detailed documentation of classes and functions in this repository can be found [here](https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/site/index.html).
-
-# Benchmarks
-
-For the latest benchmark results see: 
-https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dashboard.html
-
-The code for the benchmarking pipeline is at: https://github.com/BIMSBbioinfo/flexynesis-benchmarks
-
-# Quick Start
-
 ## Install 
 
 ```
@@ -82,84 +69,5 @@ flexynesis --data_path dataset1 \
 
 # Tutorial for getting started 
 
-See our tutorial for how to use Flexynesis in different scenarios:
-https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/site/getting_started/
-
-# Guix
-
-You can also create a reproducible development environment or build a reproducible package of Flexynesis with [GNU Guix](https://guix.gnu.org).  You will need at least the Guix channels listed in `channels.scm`.  It also helps to have authorized the Inria substitute server to get binaries for CUDA-enabled packages.  See [this page](https://hpc.guix.info/channels/non-free/) for instructions on how to configure fetching binary substitutes from the build servers.
-
-You can build a Guix package from the current committed state of your git checkout and using the specified state of Guix like this:
-
-```sh
-guix time-machine -C channels.scm -- \
-    build --no-grafts -f guix.scm
-```
-
-To enter an environment containing just Flexynesis:
-
-```sh
-guix time-machine -C channels.scm -- \
-    shell --no-grafts -f guix.scm
-```
-
-To enter a development environment to hack on Flexynesis:
-
-```sh
-guix time-machine -C channels.scm -- \
-    shell --no-grafts -Df guix.scm
-```
-
-Do this to build a Docker image containing this package together with a matching Python installation:
-
-```sh
-guix time-machine -C channels.scm -- \
-  pack -C none \
-  -e '(load "guix.scm")' \
-  -f docker \
-  -S /bin=bin -S /lib=lib -S /share=share \
-  glibc-locales coreutils bash python
-```
-
-# Defining Kernel for Jupyter Notebook
-
-For interactively using flexynesis on Jupyter notebooks, one can define the kernel to make
-flexynesis and its dependencies available on the jupyter session. 
-
-Assuming you have already defined an environment and installed the package: 
-```
-conda activate flexynesisenv 
-python -m ipykernel install --user --name "flexynesisenv" --display-name "flexynesisenv"
-```
-
-# Compiling Notebooks
-
-`papermill` can be used to compile the tutorials under `examples/tutorials`. 
-
-If the purpose is to quickly check if the notebook can be run; set HPO_ITER to 1. 
-This sets hyperparameter optimisation steps to 1. 
-For longer training runs to see more meaningful results from the notebook, increase this number to e.g. 50. 
-
-Example: 
-
-```
-papermill examples/tutorials/brca_subtypes.ipynb brca_subtypes.ipynb -p HPO_ITER 1 
-```
-
-The output from papermill can be converted to an html file as follows:
-
-```
-jupyter nbconvert --to html brca_subtypes.ipynb 
-```
-
-# Documentation
-
-Documentation generated using [mkdocs](https://mkdocstrings.github.io/) 
-
-```
-pip install mkdocstrings[python]
-mkdocs build --clean
-```
-
-
+See our [tutorial](https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/site/getting_started/) for how to use Flexynesis in different scenarios. 
 
