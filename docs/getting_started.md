@@ -1,5 +1,7 @@
 # Getting Started with Flexynesis 
 
+## Input Dataset Description
+
 Flexynesis expects as input a path to a data folder with the following structure:
 
 ```txt
@@ -17,9 +19,9 @@ InputFolder/
 |    |-- clin.csv
 ```
 
-## File contents
+### File contents
 
-### clin.csv
+#### clin.csv
 `clin.csv` contains the sample metadata. The first column contains unique sample identifiers. 
 The other columns contain sample-associated clinical variables. 
 `NA` values are allowed in the clinical variables. 
@@ -31,7 +33,7 @@ s2,c,d
 s3,e,f
 ```
 
-### omics.csv 
+#### omics.csv 
 The first column of the feature tables must be unique feature identifiers (e.g. gene names). 
 The column names must be sample identifiers that should overlap with those in the `clin.csv`. 
 They don't have to be completely identical or in the same order. Samples from the `clin.csv` that are not represented
@@ -44,13 +46,13 @@ g2,3,3,5
 g3,2,3,4
 ```
 
-### Concordance between train/test splits
+#### Concordance between train/test splits
 The corresponding omics files in train/test splits must contain overlapping feature names (they don't 
 have to be identical or in the same order). 
 The `clin.csv` files in train/test must contain matching clinical variables. 
 
 
-# Download a curated dataset
+## Download a curated dataset
 
 Before using Flexynesis on your own dataset, it is highly recommended that you familiarize yourself with datasets we have already curated and used for training and testing Flexynesis models. 
 
@@ -65,9 +67,9 @@ tar -xzvf lgggbm_tcga_pub_processed.tgz
 
 The example dataset contains 556 training samples and 238 testing samples. Each sample has both copy number variation and mutation data. The mutation data was converted into a binary matrix of genes-vs-samples where the value of a gene for a given sample is set to 1 if the gene is mutated in that sample, or it is set to 0 if no mutation was found for that gene. 
 
-# Supervised training
+## Supervised training
 
-## Minimal setup 
+### Minimal setup 
 
 For supervised training, the minimum required options to run Flexynesis are
 
@@ -86,7 +88,7 @@ flexynesis  --data_path lgggbm_tcga_pub_processed \
             --hpo_iter 1
 ```
 
-## Multi-modal training 
+### Multi-modal training 
 In the case where we want to use multiple data modalities, we provide a comma separated list of data type names as input:
 
 For example, if we wanted to utilize both mutation and CNA data matrices for training: 
@@ -95,13 +97,13 @@ For example, if we wanted to utilize both mutation and CNA data matrices for tra
 flexynesis  --data_types mut,cna  <... other arguments> 
 ```
 
-## Different options for the outcome variables 
+### Different options for the outcome variables 
 
 Flexynesis supports both single-task and multi-task training. We can provide one or more target variables and optionally survival variables as input and Flexynesis will build the appropriate model architecture. If the selected variable is numerical, a Multi-Layered-Perceptron (MLP) with MSE loss will be used. If a categorical variable is provided, an MLP with cross-entropy-loss will be utilized. If survival variables are provided, an MLP with Cox-Proportional-Hazards loss will be attached to the model.  
 
 All the user has to do is to provide a list of variable names:
 
-### Example: Regression
+#### Example: Regression
 
 The target variable `KARNOFSKY_PERFORMANCE_SCORE` is a numerical value, so it will be built as a regression problem. 
 
@@ -113,7 +115,7 @@ flexynesis  --data_path lgggbm_tcga_pub_processed \
             --hpo_iter 1
 ```
 
-### Example: Classification
+#### Example: Classification
 
 The target varible `HISTOLOGICAL_DIAGNOSIS` is a categorical variable, so it will be built as a classification problem. 
 ```
@@ -124,7 +126,7 @@ flexynesis  --data_path lgggbm_tcga_pub_processed \
             --hpo_iter 1
 ```
 
-### Example: Survival 
+#### Example: Survival 
 
 For survival analysis, two separate variables are required, where the first variable is a numeric  `event` variable (consisting of 0's or 1's, where 1 means an event such as disease progression or death has occurred). The second variable is also a numeric `time` variable, which indicates how much time it took since last patient follow-up. 
 
@@ -138,7 +140,7 @@ flexynesis  --data_path lgggbm_tcga_pub_processed \
 ```
 
 
-### Example: Mixed/multi-task model 
+#### Example: Mixed/multi-task model 
 
 Flexynesis can be trained with multiple target variables, which can be a mixture of regression/classification/survival tasks. 
 ```
@@ -152,7 +154,7 @@ flexynesis  --data_path lgggbm_tcga_pub_processed \
 ```
 
 
-## Using different model architectures
+### Using different model architectures
 
 For the supervised tasks, the user can easily switch between different model architectures.  
 
@@ -166,7 +168,7 @@ flexynesis  --data_path lgggbm_tcga_pub_processed \
             --hpo_iter 1
 ```
 
-### Model-specific exceptions
+#### Model-specific exceptions
 
 However there are model-specific exceptions due to the nature of the model architectures. 
 
@@ -178,7 +180,7 @@ it only works if the omics features are "genes". For instance, if the features a
 GNNs have an additional option called `--gnn_conv_type`, which determines the type of graph convolution algorithm. By default it is set to `GC`, but it can be change to `SAGE` or `GCN`. 
 
 
-## Modality fusion options
+### Modality fusion options
 
 Flexynesis currently supports two main ways of fusing different omics data modalities:
 1. Early fusion: The input data matrices are initially concatenated and pushed through the networks
