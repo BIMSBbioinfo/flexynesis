@@ -17,11 +17,44 @@ InputFolder/
 |    |-- clin.csv
 ```
 
+## File contents
+
+### clin.csv
+`clin.csv` contains the sample metadata. The first column contains unique sample identifiers. 
+The other columns contain sample-associated clinical variables. 
+`NA` values are allowed in the clinical variables. 
+
+```csv
+v1,v2
+s1,a,b
+s2,c,d
+s3,e,f
+```
+
+### omics.csv 
+The first column of the feature tables must be unique feature identifiers (e.g. gene names). 
+The column names must be sample identifiers that should overlap with those in the `clin.csv`. 
+They don't have to be completely identical or in the same order. Samples from the `clin.csv` that are not represented
+in the omics table will be dropped. 
+
+```txt
+s1,s2,s3
+g1,0,1,2
+g2,3,3,5
+g3,2,3,4
+```
+
+### Concordance between train/test splits
+The corresponding omics files in train/test splits must contain overlapping feature names (they don't 
+have to be identical or in the same order). 
+The `clin.csv` files in train/test must contain matching clinical variables. 
+
+
+# Download a curated dataset
+
 Before using Flexynesis on your own dataset, it is highly recommended that you familiarize yourself with datasets we have already curated and used for training and testing Flexynesis models. 
 
 Below you can find examples of how we can utilize Flexynesis from the command-line in multi-omic data integration for clinical variable prediction. 
-
-# Download a curated dataset
 
 In order to demonstrate the various command-line options and different ways to run Flexynesis, we will use a multi-omic dataset of Lower Grade Glioma (LGG) and Glioblastoma Multiforme (GBM) Merged Cohorts. The data were downloaded from [Cbioportal](https://www.cbioportal.org/study/summary?id=lgggbm_tcga_pub). The dataset was split into 70/30 train/test splits and used as input to Flexynesis. 
 
@@ -32,9 +65,7 @@ tar -xzvf lgggbm_tcga_pub_processed.tgz
 
 The example dataset contains 556 training samples and 238 testing samples. Each sample has both copy number variation and mutation data. The mutation data was converted into a binary matrix of genes-vs-samples where the value of a gene for a given sample is set to 1 if the gene is mutated in that sample, or it is set to 0 if no mutation was found for that gene. 
 
-
 # Supervised training
-
 
 ## Minimal setup 
 
@@ -63,7 +94,6 @@ For example, if we wanted to utilize both mutation and CNA data matrices for tra
 ```
 flexynesis  --data_types mut,cna  <... other arguments> 
 ```
-
 
 ## Different options for the outcome variables 
 

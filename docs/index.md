@@ -80,82 +80,10 @@ flexynesis --data_path dataset1 \
   --evaluate_baseline_performance
 ```
 
-## Accelerating with GPUs
+# Tutorial for getting started 
 
-If you have access to GPUs on your system, they can be used to accelerate the training of models. 
-However, making GPUs accessible to `torch` is system-specific. Please contact your system administrator 
-to make sure you have accessible GPUs and methods to access them. 
-
-### With Slurm 
-
-If you have [Slurm Workload Manager] in your system, you can call `flexynesis` as follows: 
-
-```
-conda activate flexynesisenv
-srun --gpus=1 --pty flexynesis --use_gpu ...otherarguments
-```
-
-### GridEngine
-
-If you have an HPC sytem running GridEngine with GPU nodes, you may be allowed to request a node with 
-GPUs. The important thing here is to request a GPU node with the proper **CUDA** version installed on it. 
-
-```
-# request 1 GPU device node with CUDA version 12
-qrsh -l gpu=1,cuda12
-# activate your environment
-conda activate flexynesisenv
-flexynesis --use_gpu ...otherarguments 
-```
-
-# Input Dataset Structure
-
-```txt
-InputFolder/
-| --  train 
-|    |-- omics1.csv 
-|    |-- omics2.csv
-|    |--  ... 
-|    |-- clin.csv
-
-| --  test 
-|    |-- omics1.csv 
-|    |-- omics2.csv
-|    |--  ... 
-|    |-- clin.csv
-```
-
-## File contents
-
-### clin.csv
-`clin.csv` contains the sample metadata. The first column contains unique sample identifiers. 
-The other columns contain sample-associated clinical variables. 
-`NA` values are allowed in the clinical variables. 
-
-```csv
-v1,v2
-s1,a,b
-s2,c,d
-s3,e,f
-```
-
-### omics.csv 
-The first column of the feature tables must be unique feature identifiers (e.g. gene names). 
-The column names must be sample identifiers that should overlap with those in the `clin.csv`. 
-They don't have to be completely identical or in the same order. Samples from the `clin.csv` that are not represented
-in the omics table will be dropped. 
-
-```txt
-s1,s2,s3
-g1,0,1,2
-g2,3,3,5
-g3,2,3,4
-```
-
-### Concordance between train/test splits
-The corresponding omics files in train/test splits must contain overlapping feature names (they don't 
-have to be identical or in the same order). 
-The `clin.csv` files in train/test must contain matching clinical variables. 
+See our tutorial for how to use Flexynesis in different scenarios:
+https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/site/getting_started/
 
 # Guix
 
