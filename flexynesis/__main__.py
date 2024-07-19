@@ -21,12 +21,11 @@ def main():
         --model_class (str): The kind of model class to instantiate. Choices are ["DirectPred", "GNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "RandomForest", "SVM", "RandomSurvivalForest"]. (Required)
         --gnn_conv_type (str): If model_class is set to GNN, choose which graph convolution type to use. Choices are ["GC", "GCN", "SAGE"].
         --target_variables (str): Which variables in 'clin.csv' to use for predictions, comma-separated if multiple. Optional if survival variables are not set to None.
-        --batch_variables (str): Which variables in 'clin.csv' to use for data integration/batch correction, comma-separated if multiple. Optional.
         --surv_event_var (str): Which column in 'clin.csv' to use as event/status indicator for survival modeling.
         --surv_time_var (str): Which column in 'clin.csv' to use as time/duration indicator for survival modeling.
         --config_path (str): Optional path to an external hyperparameter configuration file in YAML format.
         --fusion_type (str): How to fuse the omics layers. Choices are ["early", "intermediate"]. Default is 'intermediate'.
-        --hpo_iter (int): Number of iterations for hyperparameter optimisation. Default is 5.
+        --hpo_iter (int): Number of iterations for hyperparameter optimisation. Default is 100.
         --finetuning_samples (int): Number of samples from the test dataset to use for fine-tuning the model. Set to 0 to disable fine-tuning. Default is 0.
         --variance_threshold (float): Variance threshold (as percentile) to drop low variance features. Default is 1; set to 0 for no variance filtering.
         --correlation_threshold (float): Correlation threshold to drop highly redundant features. Default is 0.8; set to 1 for no redundancy filtering.
@@ -64,14 +63,11 @@ def main():
                         help="(Optional if survival variables are not set to None)." 
                         "Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", 
                         type = str, default = None)
-    parser.add_argument("--batch_variables", 
-                        help="(Optional) Which variables in 'clin.csv' to use for data integration / batch correction, comma-separated if multiple", 
-                        type = str, default = None)
     parser.add_argument("--surv_event_var", help="Which column in 'clin.csv' to use as event/status indicator for survival modeling", type = str, default = None)
     parser.add_argument("--surv_time_var", help="Which column in 'clin.csv' to use as time/duration indicator for survival modeling", type = str, default = None)
     parser.add_argument('--config_path', type=str, default=None, help='Optional path to an external hyperparameter configuration file in YAML format.')
     parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"], default = 'intermediate')
-    parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int, default = 5)
+    parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int, default = 100)
     parser.add_argument("--finetuning_samples", help="Number of samples from the test dataset to use for fine-tuning the model. Set to 0 to disable fine-tuning", type=int, default = 0)
     parser.add_argument("--variance_threshold", help="Variance threshold (as percentile) to drop low variance features (default is 1; set to 0 for no variance filtering)", type=float, default = 1)
     parser.add_argument("--correlation_threshold", help="Correlation threshold to drop highly redundant features (default is 0.8; set to 1 for no redundancy filtering)", type=float, default = 0.8)
@@ -94,7 +90,7 @@ def main():
     parser.add_argument("--prefix", help="Job prefix to use for output files", type=str, default = 'job')
     parser.add_argument("--log_transform", help="whether to apply log-transformation to input data matrices", type=str, choices=['True', 'False'], default = 'False')
     parser.add_argument("--early_stop_patience", help="How many epochs to wait when no improvements in validation loss is observed (default 10; set to -1 to disable early stopping)", type=int, default = 10)
-    parser.add_argument("--hpo_patience", help="How many hyperparamater optimisation iterations to wait for when no improvements are observed (default is 10; set to 0 to disable early stopping)", type=int, default = 10)
+    parser.add_argument("--hpo_patience", help="How many hyperparamater optimisation iterations to wait for when no improvements are observed (default is 10; set to 0 to disable early stopping)", type=int, default = 20)
     parser.add_argument("--use_cv", action="store_true", 
                         help="(Optional) If set, the a 5-fold cross-validation training will be done. Otherwise, a single trainig on 80 percent of the dataset is done.")
     parser.add_argument("--use_loss_weighting", help="whether to apply loss-balancing using uncertainty weights method", type=str, choices=['True', 'False'], default = 'True')
@@ -119,11 +115,10 @@ def main():
 
     # 2. Check for required variables for model classes
     if args.model_class != "supervised_vae" and args.model_class != 'CrossModalPred':
-        if not any([args.target_variables, args.surv_event_var, args.batch_variables]):
+        if not any([args.target_variables, args.surv_event_var]):
             parser.error(''.join(["When selecting a model other than 'supervised_vae' or 'CrossModalPred',",
                                   "you must provide at least one of --target_variables, ",
-                                  "survival variables (--surv_event_var and --surv_time_var)",
-                                  "or --batch_variables."]))
+                                  "or survival variables (--surv_event_var and --surv_time_var)"]))
 
     # 3. Check for compatibility of fusion_type with GNN
     if args.fusion_type == "early":
@@ -274,7 +269,7 @@ def main():
     tuner = flexynesis.HyperparameterTuning(dataset = train_dataset, 
                                             model_class = model_class, 
                                             target_variables = args.target_variables.strip().split(',') if args.target_variables is not None else [],
-                                            batch_variables = args.batch_variables.strip().split(',') if args.batch_variables is not None else None,
+                                            batch_variables = None,
                                             surv_event_var = args.surv_event_var,
                                             surv_time_var = args.surv_time_var,
                                             config_name = config_name, 
@@ -322,7 +317,7 @@ def main():
     embeddings_test.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.csv'])), header=True)
 
     # evaluate predictions;  (if any supervised learning happened)
-    if any([args.target_variables, args.surv_event_var, args.batch_variables]):
+    if any([args.target_variables, args.surv_event_var]):
         if not args.disable_marker_finding: # unless marker discovery is disabled
             # compute feature importance values
             print("[INFO] Computing variable importance scores")
@@ -345,20 +340,6 @@ def main():
         metrics_df.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
 
         
-    # also filter embeddings to remove batch-associated dims and only keep target-variable associated dims 
-    if args.batch_variables is not None:
-        print("[INFO] Printing filtered embeddings")
-        embeddings_train_filtered = flexynesis.remove_batch_associated_variables(data = embeddings_train, 
-                                                                                 batch_dict={x: train_dataset.ann[x] for x in model.batch_variables} if model.batch_variables is not None else None, 
-                                                                                 target_dict={x: train_dataset.ann[x] for x in model.target_variables}, 
-                                                                                 variable_types=train_dataset.variable_types)
-        # filter test embeddings to keep the same dims as the filtered training embeddings
-        embeddings_test_filtered = embeddings_test[embeddings_train_filtered.columns]
-
-        # save 
-        embeddings_train_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.filtered.csv'])), header=True)    
-        embeddings_test_filtered.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.filtered.csv'])), header=True)    
-
     # for architectures with decoders; print decoded output layers 
     if args.model_class == 'CrossModalPred':
         print("[INFO] Printing decoded output layers")
