@@ -26,13 +26,18 @@ that can be formulated as a regression, classification, survival, or cross-modal
 
 In order to refer to our work, please cite our manuscript currently available at [BioRxiv](https://biorxiv.org/cgi/content/short/2024.07.16.603606v1). 
 
-# Tutorial for getting started 
+# Getting started with Flexynesis
 
-See our [tutorial](https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/site/getting_started/) for how to use Flexynesis in different scenarios. 
+## Command-line tutorial
 
-# Documentation
+- [Getting Started with Flexynesis](https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/site/getting_started/)
 
-A detailed documentation of classes and functions in this repository can be found [here](https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/site/index.html).
+## Jupyter notebooks for interactive usage
+
+- [Modeling Breast Cancer Subtypes](https://github.com/BIMSBbioinfo/flexynesis/blob/main/examples/tutorials/brca_subtypes.ipynb)
+- [Survival Markers of Lower Grade Gliomas](https://github.com/BIMSBbioinfo/flexynesis/blob/main/examples/tutorials/survival_subtypes_LGG_GBM.ipynb)
+- [Unsupervised Analysis of Bone Marrow Cells](https://github.com/BIMSBbioinfo/flexynesis/blob/main/examples/tutorials/unsupervised_analysis_single_cell.ipynb)
+
 
 # Benchmarks
 
