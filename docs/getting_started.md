@@ -51,8 +51,8 @@ While it is not a required argument, we set the hyperparameter optimisation step
 flexynesis  --data_path lgggbm_tcga_pub_processed \
             --model_class DirectPred \
             --target_variables KARNOFSKY_PERFORMANCE_SCORE \
-            --data_types mut \ 
-            --hpo_iter 1 
+            --data_types mut \
+            --hpo_iter 1
 ```
 
 ## Multi-modal training 
@@ -76,22 +76,22 @@ All the user has to do is to provide a list of variable names:
 The target variable `KARNOFSKY_PERFORMANCE_SCORE` is a numerical value, so it will be built as a regression problem. 
 
 ```
-flexynesis  --data_path lgggbm_tcga_pub_processed \ 
+flexynesis  --data_path lgggbm_tcga_pub_processed \
             --model_class DirectPred \
-            --target_variables KARNOFSKY_PERFORMANCE_SCORE \ 
-            --data_types mut,cna
-            --hpo_iter 1 
+            --target_variables KARNOFSKY_PERFORMANCE_SCORE \
+            --data_types mut,cna \
+            --hpo_iter 1
 ```
 
 ### Example: Classification
 
 The target varible `HISTOLOGICAL_DIAGNOSIS` is a categorical variable, so it will be built as a classification problem. 
 ```
-flexynesis  --data_path lgggbm_tcga_pub_processed \ 
+flexynesis  --data_path lgggbm_tcga_pub_processed \
             --model_class DirectPred \
             --target_variables HISTOLOGICAL_DIAGNOSIS  \
-            --data_types mut,cna
-            --hpo_iter 1 
+            --data_types mut,cna \
+            --hpo_iter 1
 ```
 
 ### Example: Survival 
@@ -99,12 +99,12 @@ flexynesis  --data_path lgggbm_tcga_pub_processed \
 For survival analysis, two separate variables are required, where the first variable is a numeric  `event` variable (consisting of 0's or 1's, where 1 means an event such as disease progression or death has occurred). The second variable is also a numeric `time` variable, which indicates how much time it took since last patient follow-up. 
 
 ```
-flexynesis  --data_path lgggbm_tcga_pub_processed \ 
-            --model_class DirectPred \ 
-            --surv_event_var OS_STATUS \ 
-            --surv_time_var OS_MONTHS \ 
-            --data_types mut,cna
-            --hpo_iter 1 
+flexynesis  --data_path lgggbm_tcga_pub_processed \
+            --model_class DirectPred \
+            --surv_event_var OS_STATUS \
+            --surv_time_var OS_MONTHS \
+            --data_types mut,cna \
+            --hpo_iter 1
 ```
 
 
@@ -112,13 +112,13 @@ flexynesis  --data_path lgggbm_tcga_pub_processed \
 
 Flexynesis can be trained with multiple target variables, which can be a mixture of regression/classification/survival tasks. 
 ```
-flexynesis  --data_path lgggbm_tcga_pub_processed \ 
-            --model_class DirectPred \ 
-            --target_variables HISTOLOGICAL_DIAGNOSIS,KARNOFSKY_PERFORMANCE_SCORE \  
-            --surv_event_var OS_STATUS \ 
-            --surv_time_var OS_MONTHS \ 
-            --data_types mut,cna
-            --hpo_iter 1 
+flexynesis  --data_path lgggbm_tcga_pub_processed \
+            --model_class DirectPred \
+            --target_variables HISTOLOGICAL_DIAGNOSIS,KARNOFSKY_PERFORMANCE_SCORE \ 
+            --surv_event_var OS_STATUS \
+            --surv_time_var OS_MONTHS \
+            --data_types mut,cna \
+            --hpo_iter 1
 ```
 
 
@@ -127,13 +127,13 @@ flexynesis  --data_path lgggbm_tcga_pub_processed \
 For the supervised tasks, the user can easily switch between different model architectures.  
 
 ```
-flexynesis  --data_path lgggbm_tcga_pub_processed \ 
-            --model_class [DirectPred|supervised_vae|MultiTripletNetwork|GNN|CrossModalPred]\ 
-            --target_variables HISTOLOGICAL_DIAGNOSIS,KARNOFSKY_PERFORMANCE_SCORE \  
-            --surv_event_var OS_STATUS \ 
-            --surv_time_var OS_MONTHS \ 
-            --data_types mut,cna
-            --hpo_iter 1 
+flexynesis  --data_path lgggbm_tcga_pub_processed \
+            --model_class [DirectPred|supervised_vae|MultiTripletNetwork|GNN|CrossModalPred] \
+            --target_variables HISTOLOGICAL_DIAGNOSIS,KARNOFSKY_PERFORMANCE_SCORE \
+            --surv_event_var OS_STATUS \
+            --surv_time_var OS_MONTHS \
+            --data_types mut,cna \
+            --hpo_iter 1
 ```
 
 ### Model-specific exceptions
@@ -157,11 +157,11 @@ Flexynesis currently supports two main ways of fusing different omics data modal
 Fusion option can be set using the `--fusion` flag
 
 ```
-flexynesis  --data_path lgggbm_tcga_pub_processed \ 
-            --model_class DirectPred \ 
-            --target_variables HISTOLOGICAL_DIAGNOSIS \  
-            --data_types mut,cna
-            --fusion intermediate
+flexynesis  --data_path lgggbm_tcga_pub_processed \
+            --model_class DirectPred \
+            --target_variables HISTOLOGICAL_DIAGNOSIS \
+            --data_types mut,cna \
+            --fusion intermediate \
             --hpo_iter 1 
 ```
 
@@ -173,10 +173,10 @@ In the absence of any target variables or survival variables, we can use a VAE a
 Set model class to `supervised_vae` and leave variable arguments out. 
 
 ```
-flexynesis  --data_path lgggbm_tcga_pub_processed \ 
-            --model_class supervised_vae \ 
-            --data_types mut,cna
-            --hpo_iter 1 
+flexynesis  --data_path lgggbm_tcga_pub_processed \
+            --model_class supervised_vae \
+            --data_types mut,cna \
+            --hpo_iter 1
 ```
 
 ## Cross-modality Training
@@ -187,12 +187,12 @@ The purpose of a cross-modality encoder is to learn embeddings that can translat
 The user needs to provide which data layers to be used as input and which ones to be used as output (reconstruction target). 
 
 ```
-flexynesis  --data_path lgggbm_tcga_pub_processed \ 
-            --model_class CrossModalPred \ 
-            --data_types mut,cna
-            --input_layers mut
-            --output_layers cna
-            --hpo_iter 1 
+flexynesis  --data_path lgggbm_tcga_pub_processed \
+            --model_class CrossModalPred \
+            --data_types mut,cna \
+            --input_layers mut \
+            --output_layers cna \
+            --hpo_iter 1
 ```
 
 Both input and output layers can be set to one or more data modalities, where the modalities are determined by the `--data_types` flag. 
@@ -201,13 +201,13 @@ If the `--data_types` is set to "mut,cna"; the `--input_layers` can be set to `m
 Multi-modal input and multiple target variables: 
 
 ```
-flexynesis  --data_path lgggbm_tcga_pub_processed \ 
-            --model_class CrossModalPred \ 
-            --data_types mut,cna \ 
-            --input_layers mut,cna \ 
-            --output_layers cna \ 
-            --target_variables HISTOLOGICAL_DIAGNOSIS,AGE 
-            --hpo_iter 1 
+flexynesis  --data_path lgggbm_tcga_pub_processed \
+            --model_class CrossModalPred \
+            --data_types mut,cna \
+            --input_layers mut,cna \
+            --output_layers cna \
+            --target_variables HISTOLOGICAL_DIAGNOSIS,AGE \
+            --hpo_iter 1
 ```
 
 ## Fine-tuning options 
@@ -217,12 +217,12 @@ To enable fine-tuning, where Flexynesis builds a model on the training dataset, 
 For instance, to fine-tune the model on a randomly drawn subset of 50 samples:
 
 ```
-flexynesis  --data_path lgggbm_tcga_pub_processed \ 
-            --model_class DirectPred \ 
-            --data_types mut,cna \ 
-            --target_variables HISTOLOGICAL_DIAGNOSIS \ 
-            --finetuning_samples 50 
-            --hpo_iter 1 
+flexynesis  --data_path lgggbm_tcga_pub_processed \
+            --model_class DirectPred \
+            --data_types mut,cna \
+            --target_variables HISTOLOGICAL_DIAGNOSIS \
+            --finetuning_samples 50 \
+            --hpo_iter 1
 ```
 
 ## Feature filtering options 
@@ -239,17 +239,18 @@ Flexynesis will by default do feature selection using multiple flags.
 Flexynesis will run by default for 100 hyperparameter optimisation steps. It will stop the procedure if no improvement has been observed in the last 10 iterations. We can change these with the following flags: `--hpo_iter` and `--hpo_patience`. 
 
 ```
-flexynesis  --data_path lgggbm_tcga_pub_processed \ 
-            --model_class DirectPred \ 
-            --data_types mut,cna \ 
-            --target_variables HISTOLOGICAL_DIAGNOSIS \ 
-            --hpo_iter 50 \ 
-            --hpo_patience 20 
+flexynesis  --data_path lgggbm_tcga_pub_processed \
+            --model_class DirectPred \
+            --data_types mut,cna \
+            --target_variables HISTOLOGICAL_DIAGNOSIS \
+            --hpo_iter 50 \
+            --hpo_patience 20
 ```
 
 ## Accelerating with GPUs
 
-If you have access to GPUs on your system, they can be used to accelerate the training of models. 
+If you have access to GPUs on your system, they can be used to accelerate the training of models using the `--use_gpu` flag. 
+
 However, making GPUs accessible to `torch` is system-specific. Please contact your system administrator 
 to make sure you have accessible GPUs and methods to access them. 
 
