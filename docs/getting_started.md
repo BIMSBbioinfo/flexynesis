@@ -1,5 +1,45 @@
 # Getting Started with Flexynesis 
 
+## Quick Start
+
+### Install 
+
+```
+# create an environment with python 3.11 
+conda create --name flexynesisenv python==3.11
+conda activate flexynesisenv
+# install latest version from pypi (https://pypi.org/project/flexynesis)
+# make sure to use python3.11*
+python -m pip install flexynesis --upgrade  
+```
+
+### Test the installation
+
+Download a dataset and test the flexynesis installation on a test run. 
+```
+curl -L -o dataset1.tgz \
+https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz
+
+tar -xzvf dataset1.tgz
+
+conda activate flexynesisenv
+
+flexynesis --data_path dataset1 \
+  --model_class DirectPred \
+  --target_variables Erlotinib \
+  --fusion_type early \
+  --hpo_iter 1 \
+  --features_min 50 \
+  --features_top_percentile 5 \
+  --log_transform False \
+  --data_types gex,cnv \
+  --outdir . \
+  --prefix erlotinib_direct \
+  --early_stop_patience 3 \
+  --use_loss_weighting False \
+  --evaluate_baseline_performance
+```
+
 ## Input Dataset Description
 
 Flexynesis expects as input a path to a data folder with the following structure:
@@ -308,3 +348,38 @@ conda activate flexynesisenv
 flexynesis --use_gpu ...otherarguments 
 ```
 
+## Using Guix
+
+You can also create a reproducible development environment or build a reproducible package of Flexynesis with [GNU Guix](https://guix.gnu.org).  You will need at least the Guix channels listed in `channels.scm`.  It also helps to have authorized the Inria substitute server to get binaries for CUDA-enabled packages.  See [this page](https://hpc.guix.info/channels/non-free/) for instructions on how to configure fetching binary substitutes from the build servers.
+
+You can build a Guix package from the current committed state of your git checkout and using the specified state of Guix like this:
+
+```sh
+guix time-machine -C channels.scm -- \
+    build --no-grafts -f guix.scm
+```
+
+To enter an environment containing just Flexynesis:
+
+```sh
+guix time-machine -C channels.scm -- \
+    shell --no-grafts -f guix.scm
+```
+
+To enter a development environment to hack on Flexynesis:
+
+```sh
+guix time-machine -C channels.scm -- \
+    shell --no-grafts -Df guix.scm
+```
+
+Do this to build a Docker image containing this package together with a matching Python installation:
+
+```sh
+guix time-machine -C channels.scm -- \
+  pack -C none \
+  -e '(load "guix.scm")' \
+  -f docker \
+  -S /bin=bin -S /lib=lib -S /share=share \
+  glibc-locales coreutils bash python
+```
