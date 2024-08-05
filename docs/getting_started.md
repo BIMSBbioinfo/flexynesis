@@ -186,7 +186,7 @@ Flexynesis can be trained with multiple target variables, which can be a mixture
 ```
 flexynesis  --data_path lgggbm_tcga_pub_processed \
             --model_class DirectPred \
-            --target_variables HISTOLOGICAL_DIAGNOSIS,KARNOFSKY_PERFORMANCE_SCORE \ 
+            --target_variables HISTOLOGICAL_DIAGNOSIS,KARNOFSKY_PERFORMANCE_SCORE \
             --surv_event_var OS_STATUS \
             --surv_time_var OS_MONTHS \
             --data_types mut,cna \
