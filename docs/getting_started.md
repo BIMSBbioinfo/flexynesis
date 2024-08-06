@@ -29,7 +29,7 @@ flexynesis --data_path dataset1 \
   --target_variables Erlotinib \
   --hpo_iter 1 \
   --features_top_percentile 5 \
-  --data_types gex,cnv \
+  --data_types gex,cnv
 ```
 
 ## Input Dataset Description
