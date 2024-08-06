@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flexynesis"
-version = "0.2.9"
+version = "0.2.10"
 license = {file = "LICENSE"}
 authors = [
     {name = "Bora Uyar", email = "bora.uyar@mdc-berlin.de"},
@@ -46,7 +46,6 @@ dependencies = [
 
 [project.scripts]
 flexynesis = "flexynesis.__main__:main"
-flexynesis-cli = "flexynesis.cli:main"
 
 [project.urls]
 homepage = "https://github.com/BIMSBbioinfo/flexynesis"
