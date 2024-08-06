@@ -27,17 +27,9 @@ conda activate flexynesisenv
 flexynesis --data_path dataset1 \
   --model_class DirectPred \
   --target_variables Erlotinib \
-  --fusion_type early \
   --hpo_iter 1 \
-  --features_min 50 \
   --features_top_percentile 5 \
-  --log_transform False \
   --data_types gex,cnv \
-  --outdir . \
-  --prefix erlotinib_direct \
-  --early_stop_patience 3 \
-  --use_loss_weighting False \
-  --evaluate_baseline_performance
 ```
 
 ## Input Dataset Description
