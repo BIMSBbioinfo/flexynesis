@@ -4,6 +4,8 @@
 
 ### Install 
 
+The installation process via pip/conda (assuming you have conda installed) should take a few minutes. 
+
 ```
 # create an environment with python 3.11 
 conda create --name flexynesisenv python==3.11
