@@ -18,6 +18,9 @@ python -m pip install flexynesis --upgrade
 ### Test the installation
 
 Download a dataset and test the flexynesis installation on a test run. 
+
+The test run should finish within a minute.
+
 ```
 curl -L -o dataset1.tgz \
 https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz
