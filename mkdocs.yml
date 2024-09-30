@@ -9,6 +9,7 @@ nav:
   - Home: index.md
   - Getting Started: getting_started.md
   - Command Line Interface: commandline.md
+  - Using Flexynesis on usegalaxy.eu: running_on_galaxy.md
   - API: 
     - Model Classes: 
       - DirectPred: models.direct_pred.md
