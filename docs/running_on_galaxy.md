@@ -14,9 +14,9 @@ In this tutorial we will use a multi-omic dataset of Lower Grade Glioma (LGG) an
 https://zenodo.org/records/13881580/files/test_clin.csv
 https://zenodo.org/records/13881580/files/test_cna.csv
 https://zenodo.org/records/13881580/files/test_mut.csv
-https://zenodo.org/records/13881580/files/test_clin.csv
-https://zenodo.org/records/13881580/files/test_cna.csv
-https://zenodo.org/records/13881580/files/test_mut.csv
+https://zenodo.org/records/13881580/files/train_clin.csv
+https://zenodo.org/records/13881580/files/train_cna.csv
+https://zenodo.org/records/13881580/files/train_mut.csv
 ```
 
 ### Importing data via links
