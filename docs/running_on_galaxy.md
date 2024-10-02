@@ -11,7 +11,12 @@ You can check "**[Galaxy Basics for everyone](https://training.galaxyproject.org
 In this tutorial we will use a multi-omic dataset of Lower Grade Glioma (LGG) and Glioblastoma Multiforme (GBM) Merged Cohorts. The data were downloaded from [Cbioportal](https://www.cbioportal.org/study/summary?id=lgggbm_tcga_pub). The dataset was split into 70/30 train/test splits and used as input to Flexynesis.
 
 ```
-https://zenodo.org/links
+https://zenodo.org/records/13881580/files/test_clin.csv
+https://zenodo.org/records/13881580/files/test_cna.csv
+https://zenodo.org/records/13881580/files/test_mut.csv
+https://zenodo.org/records/13881580/files/test_clin.csv
+https://zenodo.org/records/13881580/files/test_cna.csv
+https://zenodo.org/records/13881580/files/test_mut.csv
 ```
 
 ### Importing data via links
@@ -23,7 +28,7 @@ https://zenodo.org/links
 * **Close** the window
 
 
-<!-- <img src="galaxy/upload_data.jpg" width="1000"> -->
+<img src="galaxy/upload_data.jpg" width="1000">
 
 The example dataset contains 556 training samples and 238 testing samples. Each sample has both copy number variation and mutation data. The mutation data was converted into a binary matrix of genes-vs-samples where the value of a gene for a given sample is set to 1 if the gene is mutated in that sample, or it is set to 0 if no mutation was found for that gene.
 
