@@ -27,8 +27,7 @@ https://zenodo.org/records/13881580/files/train_mut.csv
 * Press **Start**.
 * **Close** the window
 
-
-<img src="galaxy/upload_data.jpg" width="1000">
+![Data Upload](galaxy/upload_data.jpg)
 
 The example dataset contains 556 training samples and 238 testing samples. Each sample has both copy number variation and mutation data. The mutation data was converted into a binary matrix of genes-vs-samples where the value of a gene for a given sample is set to 1 if the gene is mutated in that sample, or it is set to 0 if no mutation was found for that gene.
 
@@ -69,7 +68,7 @@ Now continue with the following parameters to do a survival analysis using flexy
 
 **What type of assay is your input?** is an optional parameter you can use to name your assay (E.g. cnv here). If not specified it will be named "main"
 
-<img src="galaxy/first_assay.jpg" width="1000">
+![First Assay](galaxy/first_assay.jpg)
 
 Click on **Insert Multiple omics layer?** to add the next layer.
 
@@ -82,10 +81,10 @@ Click on **Insert Multiple omics layer?** to add the next layer.
 * **Survival event:** OS_STATUS
 * **Survival time:** OS_MONTHS
 
-<img src="galaxy/second_assay.jpg" width="1000">
+![Second Assay](galaxy/second_assay.jpg)
 
 Click on **Run Tool** to start your analysis!
 
 Once the result turns green, the analysis is finished. Click on the dataset to explore the results!
 
-<img src="galaxy/Finished.jpg" width="1000">
+![Finished](galaxy/Finished.jpg)
