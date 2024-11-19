@@ -27,8 +27,7 @@
             (setenv "NUMBA_CACHE_DIR" "/tmp")))
         (add-after 'wrap 'isolate-python
           (lambda _
-            (substitute* (list (string-append #$output "/bin/.flexynesis-real")
-                                (string-append #$output "/bin/.flexynesis-cli-real"))
+            (substitute* (string-append #$output "/bin/.flexynesis-real")
               (("/bin/python") "/bin/python -I")))))))
   (propagated-inputs %packages)
   (native-inputs %dev-packages)
