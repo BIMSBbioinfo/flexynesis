@@ -22,6 +22,12 @@
    (list
     #:phases
     #~(modify-phases %standard-phases
+        (add-after 'unpack 'disable-doctests
+          (lambda _
+            ;; Disable doctests because they are broken.  See
+            ;; https://github.com/BIMSBbioinfo/flexynesis/issues/93
+            (substitute* "pyproject.toml"
+              ((".*--doctest-modules.*") ""))))
         (add-before 'check 'set-numba-cache-dir
           (lambda _
             (setenv "NUMBA_CACHE_DIR" "/tmp")))
