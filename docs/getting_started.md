@@ -4,12 +4,14 @@
 
 ### Install 
 
-The installation process via pip/conda (assuming you have conda installed) should take a few minutes. 
+The installation process via pip/mamba (assuming you have mamba installed) should take a few minutes. 
+
+See `mamba` installation instructions [here.](https://mamba.readthedocs.io/en/latest/installation/mamba-installation.html)
 
 ```
 # create an environment with python 3.11 
-conda create --name flexynesisenv python==3.11
-conda activate flexynesisenv
+mamba create --name flexynesisenv python==3.11
+mamba activate flexynesisenv
 # install latest version from pypi (https://pypi.org/project/flexynesis)
 # make sure to use python3.11*
 python -m pip install flexynesis --upgrade  
@@ -27,7 +29,7 @@ https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dat
 
 tar -xzvf dataset1.tgz
 
-conda activate flexynesisenv
+mamba activate flexynesisenv
 
 flexynesis --data_path dataset1 \
   --model_class DirectPred \
