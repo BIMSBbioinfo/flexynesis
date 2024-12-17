@@ -58,6 +58,11 @@ test = [
 [tool.setuptools.packages.find]
 include = ["flexynesis", "flexynesis.*"]
 
+[tool.setuptools.exclude-package-data]
+flexynesis = [
+    "flexynesis/models/on_ice",
+]
+
 [tool.pytest.ini_options]
 norecursedirs = [
     ".git",
