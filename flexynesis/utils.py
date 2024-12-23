@@ -27,6 +27,8 @@ from sklearn.feature_selection import SelectFromModel
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
 from sklearn.model_selection import KFold, cross_val_score, GridSearchCV
 
+from xgboost import XGBClassifier, XGBRegressor
+
 from sksurv.ensemble import RandomSurvivalForest
 from sksurv.metrics import concordance_index_censored
 
@@ -319,7 +321,7 @@ def get_predicted_labels(y_pred_dict, dataset, split):
 
 def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, methods, n_folds=5, n_jobs=4):
     """
-    Evaluates the performance of RandomForest and/or Support Vector Machine models on a given variable from the provided datasets using cross-validation.
+    Evaluates the performance of RandomForest, Support Vector Machine, and/or XGBoost models on a given variable from the provided datasets using cross-validation.
 
     This function preprocesses the training and testing data, performs grid search with cross-validation to find the best
     hyperparameters for the specified methods, and then evaluates the performance of these models on the testing set.
@@ -329,7 +331,7 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
         train_dataset (Dataset): A MultiOmicDataset object containing training data and metadata such as variable types.
         test_dataset (Dataset): A MultiOmicDataset object containing testing data.
         variable_name (str): The name of the target variable for prediction.
-        methods (list of str): List of machine learning methods to evaluate, e.g., ['RandomForest', 'SVM'].
+        methods (list of str): List of machine learning methods to evaluate, e.g., ['RandomForest', 'SVM', 'XGBoost'].
         n_folds (int, optional): Number of folds to use in K-fold cross-validation. Defaults to 5.
         n_jobs (int, optional): Number of jobs to run in parallel during grid search. Defaults to 4.
 
@@ -370,6 +372,9 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
             elif method == 'SVM':
                 model = SVC(random_state=42)
                 params = {'C': [0.1, 1, 10], 'kernel': ['rbf', 'poly']}
+            elif method == 'XGBoost':
+                model = XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
+                params = {'n_estimators': [100, 200, 300], 'max_depth': [3, 6, 9], 'learning_rate': [0.01, 0.1, 0.2]}
         elif variable_type == 'numerical':
             if method == 'RandomForest':
                 model = RandomForestRegressor(random_state=42)
@@ -377,6 +382,9 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
             elif method == 'SVM':
                 model = SVR()
                 params = {'C': [0.1, 1, 10], 'kernel': ['rbf', 'poly']}
+            elif method == 'XGBoost':
+                model = XGBRegressor(random_state=42)
+                params = {'n_estimators': [100, 200, 300], 'max_depth': [3, 6, 9], 'learning_rate': [0.01, 0.1, 0.2]}
 
         grid_search = GridSearchCV(model, params, cv=kf, n_jobs=n_jobs)
         grid_search.fit(X_train, y_train)
@@ -402,6 +410,7 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
 
     # Convert the list of metrics to a DataFrame
     return pd.DataFrame(metrics_list)
+
 
 def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration_col, event_col, n_folds=5, n_jobs=4):
     """

@@ -18,7 +18,7 @@ def main():
 
     Args:
         --data_path (str): Path to the folder with train/test data files. (Required)
-        --model_class (str): The kind of model class to instantiate. Choices are ["DirectPred", "GNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "RandomForest", "SVM", "RandomSurvivalForest"]. (Required)
+        --model_class (str): The kind of model class to instantiate. Choices are ["DirectPred", "GNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "RandomForest", "SVM", "XGBoost", "RandomSurvivalForest"]. (Required)
         --gnn_conv_type (str): If model_class is set to GNN, choose which graph convolution type to use. Choices are ["GC", "GCN", "SAGE"].
         --target_variables (str): Which variables in 'clin.csv' to use for predictions, comma-separated if multiple. Optional if survival variables are not set to None.
         --surv_event_var (str): Which column in 'clin.csv' to use as event/status indicator for survival modeling.
@@ -56,7 +56,7 @@ def main():
     
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str, 
-                        choices=["DirectPred", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "GNN", "RandomForest", "SVM", "RandomSurvivalForest"], required = True)
+                        choices=["DirectPred", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "GNN", "RandomForest", "SVM", "XGBoost", "RandomSurvivalForest"], required = True)
     parser.add_argument("--gnn_conv_type", help="If model_class is set to GNN, choose which graph convolution type to use", type=str, 
                         choices=["GC", "GCN", "SAGE"])
     parser.add_argument("--target_variables", 
@@ -187,6 +187,7 @@ def main():
         "CrossModalPred": (CrossModalPred, "CrossModalPred"),
         "GNN": (GNN, "GNN"),
         "RandomForest": ("RandomForest", None),
+        "XGBoost": ("XGBoost", None),
         "SVM": ("SVM", None),
         "RandomSurvivalForest": ("RandomSurvivalForest", None)
     }
@@ -219,7 +220,7 @@ def main():
                                             downsample = args.subsample)
     train_dataset, test_dataset = data_importer.import_data()
     
-    if args.model_class in ["RandomForest", "SVM"]:
+    if args.model_class in ["RandomForest", "SVM", "XGBoost"]:
         if args.target_variables:
             var =  args.target_variables.strip().split(',')[0]
             print(f"Training {args.model_class} on variable: {var}")
@@ -230,7 +231,7 @@ def main():
             # we skip everything related to deep learning models here
             sys.exit(0) 
         else:
-            raise ValueError(f"At least one target variable is required to run RandomForest/SVM models. Set --target_variables argument")
+            raise ValueError(f"At least one target variable is required to run RandomForest/SVM/XGBoost models. Set --target_variables argument")
 
     if args.model_class == "RandomSurvivalForest":
         if args.surv_event_var and args.surv_time_var:
@@ -365,7 +366,7 @@ def main():
         if var != model.surv_event_var: 
             metrics = flexynesis.evaluate_baseline_performance(train, test, 
                                                                variable_name = var, 
-                                                               methods = ['RandomForest', 'SVM'],
+                                                               methods = ['RandomForest', 'SVM', 'XGBoost'],
                                                                n_folds = 5,
                                                                n_jobs = int(args.threads))
         if model.surv_event_var and model.surv_time_var:

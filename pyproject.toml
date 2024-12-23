@@ -41,7 +41,8 @@ dependencies = [
     "lifelines",
     "papermill",
     "scikit-survival",
-    "python-louvain" 
+    "python-louvain",
+    "xgboost"
 ]
 
 [project.scripts]
