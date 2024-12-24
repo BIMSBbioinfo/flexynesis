@@ -46,37 +46,6 @@ https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/das
 The code for the benchmarking pipeline is at: https://github.com/BIMSBbioinfo/flexynesis-benchmarks
 
 
-# Defining Kernel for the Jupyter Notebook
-
-For interactively using flexynesis on Jupyter notebooks, one can define the kernel to make
-flexynesis and its dependencies available on the jupyter session. 
-
-Assuming you have already defined an environment and installed the package: 
-```
-conda activate flexynesisenv 
-python -m ipykernel install --user --name "flexynesisenv" --display-name "flexynesisenv"
-```
-
-# Compiling Notebooks
-
-`papermill` can be used to compile the tutorials under `examples/tutorials`. 
-
-If the purpose is to quickly check if the notebook can be run; set HPO_ITER to 1. 
-This sets hyperparameter optimisation steps to 1. 
-For longer training runs to see more meaningful results from the notebook, increase this number to e.g. 50. 
-
-Example: 
-
-```
-papermill examples/tutorials/brca_subtypes.ipynb brca_subtypes.ipynb -p HPO_ITER 1 
-```
-
-The output from papermill can be converted to an html file as follows:
-
-```
-jupyter nbconvert --to html brca_subtypes.ipynb 
-```
-
 # Documentation
 
 Documentation generated using [mkdocs](https://mkdocstrings.github.io/) 
