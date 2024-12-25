@@ -379,14 +379,19 @@ class CrossModalPred(pl.LightningModule):
         x_list_input = [dataset.dat[x] for x in self.input_layers]
         X_hat, z, mean, log_var, outputs = self.forward(x_list_input)
         
-        predictions = {}
+        predictions = {var: [] for var in self.variables}  # Initialize prediction storage
+        # Collect predictions for each variable
         for var in self.variables:
-            y_pred = outputs[var].detach().numpy()
-            if self.variable_types[var] == 'categorical':
-                predictions[var] = np.argmax(y_pred, axis=1)
-            else:
-                predictions[var] = y_pred
+            logits = outputs[var].detach().cpu()  # Raw model outputs (logits)
 
+            if dataset.variable_types[var] == 'categorical':
+                probs = torch.softmax(logits, dim=1).numpy() # class probabilities between 0 and 1
+                predictions[var].extend(probs)
+            else:
+                predictions[var].extend(logits.numpy()) # return raw output for regression problems
+        # Convert lists to arrays 
+        predictions = {var: np.array(predictions[var]) for var in predictions}
+            
         return predictions
     
     

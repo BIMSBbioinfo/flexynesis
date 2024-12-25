@@ -16,7 +16,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib
 from sklearn.decomposition import PCA
-from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report
+from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report, roc_auc_score
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 from scipy.stats import pearsonr, linregress
@@ -200,16 +200,16 @@ def evaluate_survival(outputs, durations, events):
     c_index = concordance_index(durations, -outputs, events)
     return {'cindex': c_index}
 
-def evaluate_classifier(y_true, y_pred, print_report = False):
+def evaluate_classifier(y_true, y_probs, print_report=False):
     """
     Evaluate the performance of a classifier using multiple metrics and optionally print a detailed classification report.
 
-    This function computes balanced accuracy, F1 score (macro), and Cohen's Kappa score for the given true and predicted labels.
+    This function computes balanced accuracy, F1 score (macro), Cohen's Kappa score, and average AUROC score for the given true labels and predicted probabilities.
     If `print_report` is set to True, it prints a detailed classification report.
 
     Args:
         y_true (array-like): True labels of the data, must be 1D list or array of labels.
-        y_pred (array-like): Predicted labels as returned by a classifier, must match the dimensions of y_true.
+        y_probs (array-like): Predicted probabilities for each class, must be 2D (n_samples, n_classes).
         print_report (bool, optional): If True, prints a detailed classification report. Defaults to False.
 
     Returns:
@@ -217,19 +217,42 @@ def evaluate_classifier(y_true, y_pred, print_report = False):
               - 'balanced_acc': The balanced accuracy of the predictions.
               - 'f1_score': The macro-average F1 score of the predictions.
               - 'kappa': Cohen's Kappa score indicating the level of agreement between the true and predicted labels.
+              - 'average_auroc': The average AUROC score across all classes.
     """
+    # Convert probabilities to predicted labels
+    y_pred = np.argmax(y_probs, axis=1)
+
     # Balanced accuracy
     balanced_acc = balanced_accuracy_score(y_true, y_pred)
+
     # F1 score (macro)
     f1 = f1_score(y_true, y_pred, average='macro', zero_division=0)
+
     # Cohen's Kappa
     kappa = cohen_kappa_score(y_true, y_pred)
+
+    # Average AUROC (One-vs-Rest)
+    try:
+        if y_probs.shape[1] == 2:  # Binary classification
+            y_probs_binary = y_probs[:, 1]  # Use positive class probabilities
+            average_auroc = roc_auc_score(y_true, y_probs_binary)
+        else:  # Multiclass classification
+            average_auroc = roc_auc_score(y_true, y_probs, multi_class='ovr', average='macro')
+    except ValueError:
+        average_auroc = None  # Handle cases where AUROC cannot be computed
+    
     # Full classification report
     if print_report:
         print("\nClassification Report:")
         report = classification_report(y_true, y_pred, zero_division=0)
         print(report)
-    return {"balanced_acc": balanced_acc, "f1_score": f1, "kappa": kappa}
+
+    return {
+        "balanced_acc": balanced_acc,
+        "f1_score": f1,
+        "kappa": kappa,
+        "average_auroc": average_auroc
+    }
 
 def evaluate_regressor(y_true, y_pred):
     """
@@ -300,24 +323,75 @@ def evaluate_wrapper(method, y_pred_dict, dataset, surv_event_var = None, surv_t
     return pd.DataFrame(metrics_list)
 
 def get_predicted_labels(y_pred_dict, dataset, split):
+    """
+    Generate a DataFrame with class probabilities and associated metadata.
+
+    Args:
+        y_pred_dict (dict): Dictionary containing predicted probabilities for each variable.
+        dataset: Dataset object containing variable types, label mappings, and sample information.
+        split (str): Split identifier (e.g., 'train', 'test', or 'val').
+
+    Returns:
+        pd.DataFrame: A DataFrame containing:
+            - sample_id
+            - variable
+            - class label
+            - probability for that class label
+            - known label (y_true)
+            - predicted label (argmax of the probabilities)
+            - train/test split
+    """
     dfs = []
+
     for var in y_pred_dict.keys():
-        y = [x.item() for x in dataset.ann[var]]
-        y_hat = [x.item() for x in y_pred_dict[var]]
-        # map to labels if available (works for categorical variables)
-        if var in dataset.label_mappings.keys():
-            # Handle y_label with NaN checks correctly
-            y = [dataset.label_mappings[var][int(x.item())] if not math.isnan(x.item()) else np.nan for x in dataset.ann[var]]
-            y_hat = [dataset.label_mappings[var][int(x.item())] if not math.isnan(x.item()) else np.nan for x in y_pred_dict[var]]
-        df = pd.DataFrame({
-            'sample_id': dataset.samples,
-            'var': var,
-            'y': y,
-            'y_hat': y_hat,
-            'split': split
-        })
-        dfs.append(df)
-    return pd.concat(dfs, ignore_index=True)
+        if dataset.variable_types[var] == 'categorical':
+            # Predicted probabilities
+            probabilities = y_pred_dict[var]
+
+            # Convert class indices to labels if mappings exist
+            if var in dataset.label_mappings.keys():
+                class_labels = [dataset.label_mappings[var][idx] for idx in range(probabilities.shape[1])]
+            else:
+                class_labels = [f'class_{i}' for i in range(probabilities.shape[1])]
+
+            # Get true labels (y_true)
+            y_true = [dataset.label_mappings[var][int(x.item())] if var in dataset.label_mappings.keys() and not np.isnan(x.item()) else np.nan for x in dataset.ann[var]]
+
+            # Predicted labels (argmax of probabilities)
+            y_pred_indices = np.argmax(probabilities, axis=1)
+            y_pred = [dataset.label_mappings[var][idx] if var in dataset.label_mappings.keys() else idx for idx in y_pred_indices]
+
+            # Create a DataFrame for each sample and its probabilities
+            for i, sample_id in enumerate(dataset.samples):
+                for j, class_label in enumerate(class_labels):
+                    dfs.append({
+                        'sample_id': sample_id,
+                        'variable': var,
+                        'class_label': class_label,
+                        'probability': probabilities[i, j],
+                        'known_label': y_true[i],
+                        'predicted_label': y_pred[i],
+                        'split': split
+                    })
+        else:
+            # For numerical variables, set class_label and probability to NA
+            y_true = [x.item() for x in dataset.ann[var]]
+            y_pred = [x.item() for x in y_pred_dict[var]]
+            for i, sample_id in enumerate(dataset.samples):
+                dfs.append({
+                    'sample_id': sample_id,
+                    'variable': var,
+                    'class_label': np.nan,
+                    'probability': np.nan,
+                    'known_label': y_true[i],
+                    'predicted_label': y_pred[i],
+                    'split': split
+                })
+
+    # Combine all rows into a DataFrame
+    return pd.DataFrame(dfs)
+
+
 
 def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, methods, n_folds=5, n_jobs=4):
     """
@@ -370,10 +444,10 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
                 model = RandomForestClassifier(random_state=42)
                 params = {'n_estimators': [100, 200, 300], 'max_depth': [10, 20, None]}
             elif method == 'SVM':
-                model = SVC(random_state=42)
+                model = SVC(probability=True, random_state=42)
                 params = {'C': [0.1, 1, 10], 'kernel': ['rbf', 'poly']}
             elif method == 'XGBoost':
-                model = XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
+                model = XGBClassifier(eval_metric='logloss', random_state=42)
                 params = {'n_estimators': [100, 200, 300], 'max_depth': [3, 6, 9], 'learning_rate': [0.01, 0.1, 0.2]}
         elif variable_type == 'numerical':
             if method == 'RandomForest':
@@ -386,18 +460,20 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
                 model = XGBRegressor(random_state=42)
                 params = {'n_estimators': [100, 200, 300], 'max_depth': [3, 6, 9], 'learning_rate': [0.01, 0.1, 0.2]}
 
+        print("Training method:", method)
         grid_search = GridSearchCV(model, params, cv=kf, n_jobs=n_jobs)
         grid_search.fit(X_train, y_train)
         best_model = grid_search.best_estimator_
 
         # Predict on test data
-        y_pred = best_model.predict(X_test)
-
-        # Evaluate predictions
         if variable_type == 'categorical':
-            metrics = evaluate_classifier(y_test, y_pred)
+            # Get probabilities
+            y_probs = best_model.predict_proba(X_test)  # Use predict_proba for probabilities
+            metrics = evaluate_classifier(y_test, y_probs, print_report=True)  # Pass probabilities
         elif variable_type == 'numerical':
+            y_pred = best_model.predict(X_test)
             metrics = evaluate_regressor(y_test, y_pred)
+
 
         for metric, value in metrics.items():
             metrics_list.append({

@@ -400,13 +400,14 @@ class supervised_vae(pl.LightningModule):
 
             # Collect predictions for each variable
             for var in self.variables:
-                y_pred = outputs[var].detach().cpu().numpy()  # Move outputs back to CPU and convert to numpy
+                logits = outputs[var].detach().cpu()  # Raw model outputs (logits)
+                
                 if dataset.variable_types[var] == 'categorical':
-                    predictions[var].extend(np.argmax(y_pred, axis=1))
+                    probs = torch.softmax(logits, dim=1).numpy() # class probabilities between 0 and 1
+                    predictions[var].extend(probs)
                 else:
-                    predictions[var].extend(y_pred)
-
-        # Convert lists to arrays if necessary, depending on the downstream use-case
+                    predictions[var].extend(logits.numpy()) # return raw output for regression problems
+        # Convert lists to arrays 
         predictions = {var: np.array(predictions[var]) for var in predictions}
 
         return predictions
