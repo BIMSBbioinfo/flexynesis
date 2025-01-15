@@ -14,6 +14,7 @@ from tqdm import tqdm
 
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler, MinMaxScaler, PowerTransformer
 from .feature_selection import filter_by_laplacian
+from .utils import get_variable_types, create_covariate_matrix
 
 from itertools import chain
 
@@ -87,7 +88,7 @@ class DataImporter:
             Encodes categorical labels in the annotation dataframe.
     """
 
-    def __init__(self, path, data_types, processed_dir="processed", log_transform = False, concatenate = False, restrict_to_features = None, min_features=None,
+    def __init__(self, path, data_types, covariates = None, processed_dir="processed", log_transform = False, concatenate = False, restrict_to_features = None, min_features=None,
                  top_percentile=20, correlation_threshold = 0.9, variance_threshold=0.01, na_threshold=0.1, downsample=0):
         self.path = path
         self.data_types = data_types
@@ -106,7 +107,8 @@ class DataImporter:
         # initialize data transformers
         self.transformers = None
         self.downsample = downsample
-
+        self.covariates = covariates 
+        
         # read user-specified feature list to restrict the analysis to that
         self.restrict_to_features = restrict_to_features
         self.get_user_features()
@@ -164,9 +166,6 @@ class DataImporter:
         # harmonize feature sets in train/test
         train_dat, test_dat = self.harmonize(train_dat, test_dat)
 
-        train_feature_ann = {}
-        test_feature_ann = {}
-
         # log_transform 
         if self.log_transform:
             print("[INFO] transforming data to log scale")
@@ -177,13 +176,19 @@ class DataImporter:
         # learned from training data to apply on test data (see fit = False)
         train_dat = self.normalize_data(train_dat, scaler_type="standard", fit=True)
         test_dat = self.normalize_data(test_dat, scaler_type="standard", fit=False)
-
+        
+        # if covariates are defined, create a covariate matrix and add to the dictionary of data matrices
+        if self.covariates:
+            print("[INFO] Attempting to create a covariate matrix for the covariates:",self.covariates)
+            train_dat['covariates'] = create_covariate_matrix(self.covariates, get_variable_types(train_ann), train_ann)
+            test_dat['covariates'] = create_covariate_matrix(self.covariates, get_variable_types(test_ann), test_ann)
+            # harmonize again to match the covariate features 
+            train_dat, test_dat = self.harmonize(train_dat, test_dat)
+        
         # encode the variable annotations, convert data matrices and annotations pytorch datasets 
-        training_dataset = self.get_torch_dataset(train_dat, train_ann, train_samples, train_feature_ann)
-        testing_dataset = self.get_torch_dataset(test_dat, test_ann, test_samples, test_feature_ann)
+        training_dataset = self.get_torch_dataset(train_dat, train_ann, train_samples)
+        testing_dataset = self.get_torch_dataset(test_dat, test_ann, test_samples)
 
-        # NOTE: Exporting to the disk happens in get_torch_dataset, so the concatenate doesn't work.
-        # TODO: Find better way for early integration, or move it to get_torch_dataset. Otherwise it will be ignored.
         # for early fusion, concatenate all data matrices and feature lists
         if self.concatenate:
             training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in training_dataset.dat.keys()], dim = 1)}
@@ -359,11 +364,13 @@ class DataImporter:
 
     def harmonize(self, dat1, dat2):
         print("\n[INFO] ----------------- Harmonizing Data Sets ----------------- ")
+        # common data layers
+        common_layers = dat1.keys() & dat2.keys()
         # Get common features
-        common_features = {x: dat1[x].index.intersection(dat2[x].index) for x in self.data_types}
+        common_features = {x: dat1[x].index.intersection(dat2[x].index) for x in common_layers}
         # Subset both datasets to only include common features
-        dat1 = {x: dat1[x].loc[common_features[x]] for x in dat1.keys()}
-        dat2 = {x: dat2[x].loc[common_features[x]] for x in dat2.keys()}
+        dat1 = {x: dat1[x].loc[common_features[x]] for x in common_layers}
+        dat2 = {x: dat2[x].loc[common_features[x]] for x in common_layers}
         print("\n[INFO] ----------------- Finished Harmonizing ----------------- ")
 
         return dat1, dat2
@@ -391,7 +398,7 @@ class DataImporter:
                            for x in data.keys()}
         return normalized_data
     
-    def get_torch_dataset(self, dat, ann, samples, feature_ann):
+    def get_torch_dataset(self, dat, ann, samples):
         
         features = {x: dat[x].index for x in dat.keys()}
         dat = {x: torch.from_numpy(np.array(dat[x].T)).float() for x in dat.keys()}
@@ -431,6 +438,7 @@ class DataImporter:
         variable_types.update({col: 'numerical' for col in df.select_dtypes(exclude=['object', 'category']).columns})
 
         return df_encoded, variable_types, label_mappings
+    
 
     def validate_input_data(self, train_dat, test_dat):   
         print("\n[INFO] ----------------- Checking for problems with the input data ----------------- ")
@@ -536,21 +544,21 @@ class MultiOmicDataset(Dataset):
         return len(self.samples)
     
     def subset(self, indices):
-            """Create a new dataset object containing only the specified indices.
+        """Create a new dataset object containing only the specified indices.
 
-            Args:
-                indices (list of int): The indices of the samples to include in the subset.
+        Args:
+            indices (list of int): The indices of the samples to include in the subset.
 
-            Returns:
-                MultiOmicDataset: A new dataset object with the same structure but only containing the selected samples.
-            """
-            subset_dat = {x: self.dat[x][indices] for x in self.dat.keys()}
-            subset_ann = {x: self.ann[x][indices] for x in self.ann.keys()}
-            subset_samples = [self.samples[idx] for idx in indices]
+        Returns:
+            MultiOmicDataset: A new dataset object with the same structure but only containing the selected samples.
+        """
+        subset_dat = {x: self.dat[x][indices] for x in self.dat.keys()}
+        subset_ann = {x: self.ann[x][indices] for x in self.ann.keys()}
+        subset_samples = [self.samples[idx] for idx in indices]
 
-            # Create a new dataset object
-            return MultiOmicDataset(subset_dat, subset_ann, self.variable_types, self.features,
-                                    subset_samples, self.label_mappings, self.feature_ann)
+        # Create a new dataset object
+        return MultiOmicDataset(subset_dat, subset_ann, self.variable_types, self.features,
+                                subset_samples, self.label_mappings, self.feature_ann)
     
     def get_feature_subset(self, feature_df):
         """Get a subset of data matrices corresponding to specified features and concatenate them into a pandas DataFrame.
