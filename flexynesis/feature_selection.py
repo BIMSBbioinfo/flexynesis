@@ -199,7 +199,7 @@ def filter_by_laplacian(X, layer, k=5, t=None, topN=100, correlation_threshold=0
     - The process may select additional features beyond `topN` before correlation filtering to ensure
       that the best candidates are considered. The final number of features, however, is pruned to `topN`.
     """    
-    print("[INFO] Implementing feature selection using laplacian score for layer:",layer,"with ",X.shape[1],"features")
+    print("[INFO] Implementing feature selection using laplacian score for layer:",layer,"with ",X.shape[1],"features"," and ",X.shape[0], " samples ")
     
     feature_log = pd.DataFrame({'feature': X.columns, 'laplacian_score': np.nan})
     # only apply filtering if topN < n_features
