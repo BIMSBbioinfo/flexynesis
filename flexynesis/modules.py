@@ -118,7 +118,8 @@ class MLP(nn.Module):
             hidden_dim (int, optional): The size of the hidden layer. Default is 32.
             output_dim (int): The output dimension. Set to 1 for regression tasks, and > 1 for classification tasks.
         """
-        super(MLP, self).__init__()
+        super().__init__()
+        hidden_dim = max(hidden_dim, 2) # make sure there are at least 2 units
         self.layer_1 = nn.Linear(input_dim, hidden_dim)
         self.layer_out = nn.Linear(hidden_dim, output_dim) if output_dim > 1 else nn.Linear(hidden_dim, 1, bias=False)
         self.relu = nn.ReLU() 
