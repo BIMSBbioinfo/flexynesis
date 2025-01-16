@@ -209,7 +209,18 @@ def main():
     # Set concatenate to True to use early fusion, otherwise it will run intermediate fusion
     # Currently, GNNs will only work in early fusion mode, but requires the data to be not concatenated 
     concatenate = args.fusion_type == 'early' and args.model_class != 'GNN' 
-    covariates = args.covariates.strip().split(',') if args.covariates else None 
+    
+    # handle covariates 
+    if args.covariates:
+        if args.model_class == 'GNN': # Covariates not yet supported for GNNs
+            warning_message = "\n".join([
+                "\n\n!!! Covariates are currently not supported for GNN models, they will be ignored. !!!\n\n"
+            ])
+            warnings.warn(warning_message)
+            time.sleep(3)
+            covariates = None
+        else:
+            covariates = args.covariates.strip().split(',')
         
     data_importer = flexynesis.DataImporter(path = args.data_path, 
                                             data_types = datatypes,
