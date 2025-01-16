@@ -998,6 +998,7 @@ def get_variable_types(df):
 def create_covariate_matrix(covariates, variable_types, ann):
     """
     Convert clinical variables used as covariates into a covariate matrix as a Pandas DataFrame.
+    Missing values in numerical variables are imputed using the median.
 
     Args:
         covariates (list of str): List of variable names that must exist in the "clin.csv".
@@ -1005,7 +1006,7 @@ def create_covariate_matrix(covariates, variable_types, ann):
         ann (pd.DataFrame): Annotation DataFrame containing batch variable values.
 
     Returns:
-        pd.DataFrame: A covariate matrix DataFrame where categorical variables are one-hot-encoded as 0/1 and numerical variables are used as is,
+        pd.DataFrame: A covariate matrix DataFrame where categorical variables are one-hot-encoded as 0/1 and numerical variables are imputed,
                       with features as rows and samples as columns.
     """
     covariate_features = []
@@ -1018,8 +1019,11 @@ def create_covariate_matrix(covariates, variable_types, ann):
             covariate_features.append(one_hot.T)  # Transpose to make features rows
             feature_names.extend(one_hot.columns.tolist())
         elif variable_types.get(var) == 'numerical':
-            # Use numerical variables as they are
-            covariate_features.append(ann[[var]].T)  # Transpose to make features rows
+            # Handle numerical variables with missing values
+            numerical_data = ann[[var]].copy()
+            # Impute missing values using the median and assign back
+            numerical_data[var] = numerical_data[var].fillna(numerical_data[var].median())
+            covariate_features.append(numerical_data.T)  # Transpose to make features rows
             feature_names.append(var)
         else:
             raise ValueError(f"Unknown variable type for {var}: {variable_types.get(var)}")
@@ -1032,7 +1036,7 @@ def create_covariate_matrix(covariates, variable_types, ann):
     covariate_matrix.columns = ann.index
 
     return covariate_matrix
-  
+
 def generate_synthetic_batches (n_samples_per_batch = 150,  n_features = 50):    
     # Generate batch 1 data (mean centered at 0, standard deviation 1)
     batch1_data = np.random.normal(loc=0.0, scale=1.0, size=(n_samples_per_batch, n_features))
