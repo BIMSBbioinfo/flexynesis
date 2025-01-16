@@ -1196,4 +1196,53 @@ class CBioPortalData:
         return {x: self.data_tables[x].shape for x in self.data_tables.keys()}
 
     
-    
+def compute_correlation_loss(embeddings, batch_labels):
+    # Ensure batch_labels is a float tensor
+    batch_labels = batch_labels.float()
+
+    # Normalize embeddings
+    embeddings = (embeddings - embeddings.mean(dim=0, keepdim=True)) / (embeddings.std(dim=0, keepdim=True) + 1e-8)
+
+    # Normalize batch labels
+    batch_labels = (batch_labels - batch_labels.mean()) / (batch_labels.std() + 1e-8)
+
+    # Reshape batch_labels to (num_samples, 1) for broadcasting
+    batch_labels = batch_labels.unsqueeze(1)
+
+    # Compute covariance (dot product of batch_labels and embeddings)
+    covariance = torch.matmul(batch_labels.T, embeddings) / (embeddings.shape[0] - 1)
+
+    # Compute sum of squared correlations
+    loss = torch.sum(torch.abs(covariance))
+    return loss
+
+# from geomloss import SamplesLoss
+def compute_transport_cost(embeddings, batch_labels, blur=0.5):
+    """
+    Compute a transport cost using Sinkhorn loss to align embeddings between batches.
+
+    Parameters:
+    - embeddings (torch.Tensor): Tensor of embeddings (shape: [num_samples, num_features]).
+    - batch_labels (torch.Tensor): Tensor of batch labels (shape: [num_samples]).
+    - blur (float): Regularization parameter for Sinkhorn OT.
+
+    Returns:
+    - loss (torch.Tensor): Sinkhorn loss value.
+    """
+    # Ensure batch labels are integers
+    batch_labels = batch_labels.long()
+
+    # Split embeddings by batch
+    batch1_embeddings = embeddings[batch_labels == 0]
+    batch2_embeddings = embeddings[batch_labels == 1]
+
+    if batch1_embeddings.size(0) == 0 or batch2_embeddings.size(0) == 0:
+        raise ValueError("Both batches must have at least one sample for transport cost computation.")
+
+    # Initialize the Sinkhorn loss function
+    loss_fn = SamplesLoss("sinkhorn", blur=blur)
+
+    # Compute the Sinkhorn loss between the two batches
+    loss = loss_fn(batch1_embeddings, batch2_embeddings)
+
+    return loss
