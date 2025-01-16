@@ -221,6 +221,8 @@ def main():
             covariates = None
         else:
             covariates = args.covariates.strip().split(',')
+    else:
+        covariates = None
         
     data_importer = flexynesis.DataImporter(path = args.data_path, 
                                             data_types = datatypes,
