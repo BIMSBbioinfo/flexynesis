@@ -63,6 +63,9 @@ def main():
                         help="(Optional if survival variables are not set to None)." 
                         "Which variables in 'clin.csv' to use for predictions, comma-separated if multiple", 
                         type = str, default = None)
+    parser.add_argument("--covariates", 
+                        help="Which variables in 'clin.csv' to be used as feature covariates, comma-separated if multiple", 
+                        type = str, default = None)
     parser.add_argument("--surv_event_var", help="Which column in 'clin.csv' to use as event/status indicator for survival modeling", type = str, default = None)
     parser.add_argument("--surv_time_var", help="Which column in 'clin.csv' to use as time/duration indicator for survival modeling", type = str, default = None)
     parser.add_argument('--config_path', type=str, default=None, help='Optional path to an external hyperparameter configuration file in YAML format.')
@@ -206,9 +209,22 @@ def main():
     # Set concatenate to True to use early fusion, otherwise it will run intermediate fusion
     # Currently, GNNs will only work in early fusion mode, but requires the data to be not concatenated 
     concatenate = args.fusion_type == 'early' and args.model_class != 'GNN' 
+    
+    # handle covariates 
+    if args.covariates:
+        if args.model_class == 'GNN': # Covariates not yet supported for GNNs
+            warning_message = "\n".join([
+                "\n\n!!! Covariates are currently not supported for GNN models, they will be ignored. !!!\n\n"
+            ])
+            warnings.warn(warning_message)
+            time.sleep(3)
+            covariates = None
+        else:
+            covariates = args.covariates.strip().split(',')
         
     data_importer = flexynesis.DataImporter(path = args.data_path, 
                                             data_types = datatypes,
+                                            covariates = covariates,
                                             concatenate = concatenate, 
                                             log_transform = args.log_transform == 'True',
                                             variance_threshold = args.variance_threshold/100,  

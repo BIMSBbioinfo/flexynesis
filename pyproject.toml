@@ -42,7 +42,9 @@ dependencies = [
     "papermill",
     "scikit-survival",
     "python-louvain",
-    "xgboost"
+    "xgboost",
+    "pot",
+    "geomloss"
 ]
 
 [project.scripts]

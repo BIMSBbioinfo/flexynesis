@@ -42,6 +42,9 @@ from sklearn.metrics.pairwise import euclidean_distances
 import networkx as nx
 import community as community_louvain
 
+from sklearn.preprocessing import StandardScaler
+import ot 
+
 def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', scatter_kwargs=None, legend_kwargs=None, figsize=(10, 8)):
     """
     Plots the first two dimensions of the transformed input matrix in a 2D scatter plot,
@@ -945,6 +948,166 @@ def plot_label_concordance_heatmap(labels1, labels2, figsize=(12, 10)):
     plt.title('Concordance between label groups')
     plt.show()
     
+def scale_and_standardize_by_labels(data_matrix, labels):
+    
+    """
+    Scale and standardize data_matrix by factor labels.
+    Data is split by factors and each subset is scaled/standardized. 
+
+    Parameters:
+    - data_matrix (numpy.ndarray): The matrix of shape (n_samples, n_features).
+    - labels (numpy.ndarray): A 1D array of labels corresponding to each sample.
+
+    Returns:
+    - scaled_data_matrix (numpy.ndarray): The scaled and standardized data.
+    """
+    # Ensure inputs are numpy arrays
+    data_matrix = np.asarray(data_matrix)
+    labels = np.asarray(labels)
+
+    # Initialize array for scaled embeddings
+    scaled_data_matrix = np.zeros_like(data_matrix)
+
+    # Process each batch independently
+    unique_batches = np.unique(labels)
+    for batch in unique_batches:
+        # Get indices for the current batch
+        batch_indices = np.where(labels == batch)[0]
+
+        # Extract embeddings for the current batch
+        batch_data = data_matrix[batch_indices, :]
+
+        # Standardize: Zero mean, unit variance
+        scaler = StandardScaler()
+        batch_data_scaled = scaler.fit_transform(batch_data)
+
+        # Assign scaled embeddings back to the result array
+        scaled_data_matrix[batch_indices, :] = batch_data_scaled
+
+    return scaled_data_matrix
+
+# df: annotation data frame ('clin.csv')
+# given a pandas data frame, go through each column and find out if the column is numeric or categorical
+def get_variable_types(df):
+    # Select only the categorical columns
+    df_categorical = df.select_dtypes(include=['object', 'category']) 
+    variable_types = {col: 'categorical' for col in df_categorical.columns}
+    variable_types.update({col: 'numerical' for col in df.select_dtypes(exclude=['object', 'category']).columns})
+    return variable_types
+
+def create_covariate_matrix(covariates, variable_types, ann):
+    """
+    Convert clinical variables used as covariates into a covariate matrix as a Pandas DataFrame.
+    Missing values in numerical variables are imputed using the median.
+
+    Args:
+        covariates (list of str): List of variable names that must exist in the "clin.csv".
+        variable_types (dict): Dictionary mapping variable names to their types ('categorical' or 'numerical').
+        ann (pd.DataFrame): Annotation DataFrame containing batch variable values.
+
+    Returns:
+        pd.DataFrame: A covariate matrix DataFrame where categorical variables are one-hot-encoded as 0/1 and numerical variables are imputed,
+                      with features as rows and samples as columns.
+    """
+    covariate_features = []
+    feature_names = []
+
+    for var in covariates:
+        if variable_types.get(var) == 'categorical':
+            # One-hot-encode categorical variables with 0/1 encoding
+            one_hot = pd.get_dummies(ann[var], prefix=var).astype(int)
+            covariate_features.append(one_hot.T)  # Transpose to make features rows
+            feature_names.extend(one_hot.columns.tolist())
+        elif variable_types.get(var) == 'numerical':
+            # Handle numerical variables with missing values
+            numerical_data = ann[[var]].copy()
+            # Impute missing values using the median and assign back
+            numerical_data[var] = numerical_data[var].fillna(numerical_data[var].median())
+            covariate_features.append(numerical_data.T)  # Transpose to make features rows
+            feature_names.append(var)
+        else:
+            raise ValueError(f"Unknown variable type for {var}: {variable_types.get(var)}")
+
+    # Concatenate all covariate features into a single DataFrame
+    covariate_matrix = pd.concat(covariate_features, axis=0)
+
+    # Ensure row order matches appended feature names and preserve sample names as columns
+    covariate_matrix.index = feature_names
+    covariate_matrix.columns = ann.index
+
+    return covariate_matrix
+
+def generate_synthetic_batches (n_samples_per_batch = 150,  n_features = 50):    
+    # Generate batch 1 data (mean centered at 0, standard deviation 1)
+    batch1_data = np.random.normal(loc=0.0, scale=1.0, size=(n_samples_per_batch, n_features))
+
+    # Generate batch 2 data (mean shifted by +2, standard deviation 1.5)
+    batch2_data = np.random.normal(loc=2.0, scale=1.5, size=(n_samples_per_batch, n_features))
+
+    # Combine into a single dataset
+    combined_data = np.vstack([batch1_data, batch2_data])
+    batch_labels = np.array([0] * n_samples_per_batch + [1] * n_samples_per_batch)  # Batch labels
+
+    # Convert to Pandas DataFrame
+    feature_columns = [f"feature_{i+1}" for i in range(n_features)]
+    synthetic_data = pd.DataFrame(combined_data, columns=feature_columns)
+    return synthetic_data, batch_labels
+
+def optimal_transport_align(embeddings, batch_labels):
+    """
+    Align embeddings from two batches using Optimal Transport, preserving the order of samples.
+
+    Parameters:
+    - embeddings (pd.DataFrame): A DataFrame where rows are samples and columns are features.
+    - batch_labels (np.ndarray or pd.Series): Batch labels corresponding to the rows of embeddings.
+
+    Returns:
+    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned embeddings for all samples.
+    - aligned_batch_labels (pd.Series): A Series containing the corresponding batch labels for the aligned embeddings.
+    """
+    # Ensure batch labels are a NumPy array
+    batch_labels_np = np.array(batch_labels)
+
+    # Identify unique batches
+    unique_batches = np.unique(batch_labels_np)
+    if len(unique_batches) != 2:
+        raise ValueError("Optimal transport supports aligning exactly two batches.")
+
+    # Split embeddings by batch, preserving the original indices
+    batch1_indices = np.where(batch_labels_np == unique_batches[0])[0]
+    batch2_indices = np.where(batch_labels_np == unique_batches[1])[0]
+
+    batch1_embeddings = embeddings.iloc[batch1_indices].to_numpy()
+    batch2_embeddings = embeddings.iloc[batch2_indices].to_numpy()
+
+    # Compute the cost matrix (e.g., Euclidean distances)
+    cost_matrix = ot.dist(batch1_embeddings, batch2_embeddings, metric='euclidean')
+
+    # Solve the optimal transport problem
+    n_samples_1 = batch1_embeddings.shape[0]
+    n_samples_2 = batch2_embeddings.shape[0]
+    uniform_dist_1 = np.ones(n_samples_1) / n_samples_1
+    uniform_dist_2 = np.ones(n_samples_2) / n_samples_2
+    transport_plan = ot.emd(uniform_dist_1, uniform_dist_2, cost_matrix)
+    
+    # Align batch 2 embeddings by transporting them to batch 1's distribution
+    aligned_batch2 = np.dot(transport_plan.T, batch1_embeddings)  # Map batch2 to batch1's space
+
+    # Create an array to store the aligned embeddings in the original order
+    aligned_embeddings = np.zeros_like(embeddings.to_numpy())
+    # Standardize: Zero mean, unit variance
+    scaler = StandardScaler()
+    batch1_embeddings = scaler.fit_transform(batch1_embeddings)
+    aligned_batch2 = scaler.fit_transform(aligned_batch2)
+    aligned_embeddings[batch1_indices] = batch1_embeddings
+    aligned_embeddings[batch2_indices] = aligned_batch2
+
+    # Convert back to pandas DataFrame and Series
+    aligned_embeddings_df = pd.DataFrame(aligned_embeddings, columns=embeddings.columns)
+    aligned_batch_labels = pd.Series(batch_labels, name="batch_labels")
+
+    return aligned_embeddings_df, aligned_batch_labels
+
 
 class CBioPortalData:
     def __init__(self, base_url=None, study_id=None, data_files=None):
@@ -1031,3 +1194,55 @@ class CBioPortalData:
     def list_data_files(self):
         # Create a DataFrame with file names
         return {x: self.data_tables[x].shape for x in self.data_tables.keys()}
+
+    
+def compute_correlation_loss(embeddings, batch_labels):
+    # Ensure batch_labels is a float tensor
+    batch_labels = batch_labels.float()
+
+    # Normalize embeddings
+    embeddings = (embeddings - embeddings.mean(dim=0, keepdim=True)) / (embeddings.std(dim=0, keepdim=True) + 1e-8)
+
+    # Normalize batch labels
+    batch_labels = (batch_labels - batch_labels.mean()) / (batch_labels.std() + 1e-8)
+
+    # Reshape batch_labels to (num_samples, 1) for broadcasting
+    batch_labels = batch_labels.unsqueeze(1)
+
+    # Compute covariance (dot product of batch_labels and embeddings)
+    covariance = torch.matmul(batch_labels.T, embeddings) / (embeddings.shape[0] - 1)
+
+    # Compute sum of squared correlations
+    loss = torch.sum(torch.abs(covariance))
+    return loss
+
+# from geomloss import SamplesLoss
+def compute_transport_cost(embeddings, batch_labels, blur=0.5):
+    """
+    Compute a transport cost using Sinkhorn loss to align embeddings between batches.
+
+    Parameters:
+    - embeddings (torch.Tensor): Tensor of embeddings (shape: [num_samples, num_features]).
+    - batch_labels (torch.Tensor): Tensor of batch labels (shape: [num_samples]).
+    - blur (float): Regularization parameter for Sinkhorn OT.
+
+    Returns:
+    - loss (torch.Tensor): Sinkhorn loss value.
+    """
+    # Ensure batch labels are integers
+    batch_labels = batch_labels.long()
+
+    # Split embeddings by batch
+    batch1_embeddings = embeddings[batch_labels == 0]
+    batch2_embeddings = embeddings[batch_labels == 1]
+
+    if batch1_embeddings.size(0) == 0 or batch2_embeddings.size(0) == 0:
+        raise ValueError("Both batches must have at least one sample for transport cost computation.")
+
+    # Initialize the Sinkhorn loss function
+    loss_fn = SamplesLoss("sinkhorn", blur=blur)
+
+    # Compute the Sinkhorn loss between the two batches
+    loss = loss_fn(batch1_embeddings, batch2_embeddings)
+
+    return loss

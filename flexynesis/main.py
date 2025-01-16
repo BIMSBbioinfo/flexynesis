@@ -140,9 +140,11 @@ class HyperparameterTuning:
     
     def setup_trainer(self, params, current_step, total_steps, full_train = False):
         # Configure callbacks and trainer for the current fold
-        mycallbacks = [self.progress_bar]
+        mycallbacks = []
         if self.plot_losses:
             mycallbacks.append(LiveLossPlot(hyperparams=params, current_step=current_step, total_steps=total_steps))
+        else:
+            mycallbacks.append(self.progress_bar)
         # when training on a full dataset; no cross-validation or no validation splits; 
         # we don't do early stopping
         early_stop_callback = None
