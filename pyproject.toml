@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flexynesis"
-version = "0.2.12"
+version = "0.2.13"
 license = {file = "LICENSE"}
 authors = [
     {name = "Bora Uyar", email = "bora.uyar@mdc-berlin.de"},
@@ -16,8 +16,6 @@ description = "A deep-learning based multi-omics bulk sequencing data integratio
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 classifiers=[
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
