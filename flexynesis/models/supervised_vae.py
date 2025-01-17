@@ -73,15 +73,16 @@ class supervised_vae(pl.LightningModule):
         input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
         # create a list of Encoder instances for separately encoding each omics layer
         self.encoders = nn.ModuleList([Encoder(input_dims[i], 
-                                               # define hidden_dim size as a factor of input_dim  
-                                               [int(input_dims[i] * config['hidden_dim_factor'])], 
+                                               # define hidden_dim size as a factor of input_dim; keep at least 2 units
+                                               [max(int(input_dims[i] * config['hidden_dim_factor']), 2)], 
                                                config['latent_dim']) for i in range(len(layers))])
         # Fully connected layers for concatenated means and log_vars
         self.FC_mean = nn.Linear(len(layers) * config['latent_dim'], config['latent_dim'])
         self.FC_log_var = nn.Linear(len(layers) * config['latent_dim'], config['latent_dim'])
         # list of decoders to decode each omics layer separately 
         self.decoders = nn.ModuleList([Decoder(config['latent_dim'], 
-                                               [int(input_dims[i] * config['hidden_dim_factor'])], 
+                                               # define hidden_dim size as a factor of input_dim; keep at least 2 units
+                                               [max(int(input_dims[i] * config['hidden_dim_factor']),2)], 
                                                input_dims[i]) for i in range(len(layers))])
 
         # define supervisor heads
