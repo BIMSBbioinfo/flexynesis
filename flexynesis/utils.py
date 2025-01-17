@@ -396,47 +396,55 @@ def get_predicted_labels(y_pred_dict, dataset, split):
 
 
 
-def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, methods, n_folds=5, n_jobs=4):
-    """
-    Evaluates the performance of RandomForest, Support Vector Machine, and/or XGBoost models on a given variable from the provided datasets using cross-validation.
+from sklearn.decomposition import PCA
 
-    This function preprocesses the training and testing data, performs grid search with cross-validation to find the best
-    hyperparameters for the specified methods, and then evaluates the performance of these models on the testing set.
-    It supports evaluation for both categorical and numerical variables using appropriate machine learning models.
+def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, methods, n_folds=5, n_jobs=4, use_pca=True, n_components=100):
+    """
+    Evaluates the performance of machine learning models on a given variable with optional PCA for dimensionality reduction.
 
     Args:
-        train_dataset (Dataset): A MultiOmicDataset object containing training data and metadata such as variable types.
+        train_dataset (Dataset): A MultiOmicDataset object containing training data and metadata.
         test_dataset (Dataset): A MultiOmicDataset object containing testing data.
         variable_name (str): The name of the target variable for prediction.
         methods (list of str): List of machine learning methods to evaluate, e.g., ['RandomForest', 'SVM', 'XGBoost'].
-        n_folds (int, optional): Number of folds to use in K-fold cross-validation. Defaults to 5.
-        n_jobs (int, optional): Number of jobs to run in parallel during grid search. Defaults to 4.
+        n_folds (int, optional): Number of folds for K-fold cross-validation. Defaults to 5.
+        n_jobs (int, optional): Number of jobs to run in parallel. Defaults to 4.
+        use_pca (bool, optional): Whether to apply PCA for dimensionality reduction. Defaults to False.
+        n_components (int, optional): Number of principal components to keep if PCA is applied. Defaults to 50.
 
     Returns:
-        pd.DataFrame: A DataFrame containing the method, variable name, variable type, metric name, and metric value for each tested method.
-
+        pd.DataFrame: A DataFrame containing metrics for each method.
     """
-    def prepare_data(data_object):
+    def prepare_data(data_object, pca_model=None, fit_pca=False):
         # Concatenate Data Matrices
         X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=1)
-
-        # Prepare Labels
         y = np.array(data_object.ann[variable_name])
 
         # Filter out samples without a valid label
         valid_indices = ~np.isnan(y)
         X = X[valid_indices]
         y = y[valid_indices]
+
+        if use_pca:
+            if fit_pca:
+                pca_model.fit(X)
+                print(f"PCA fitted: Reduced to {n_components} components")
+            X = pca_model.transform(X)
+            print(f"PCA applied: Transformed to {n_components} components")
+
         return X, y
+
+    # Initialize PCA model if PCA is used
+    pca_model = PCA(n_components=n_components) if use_pca else None
 
     # Determine variable type
     variable_type = train_dataset.variable_types[variable_name]
 
     # Cross-Validation and Training
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
-    X_train, y_train = prepare_data(train_dataset)
+    X_train, y_train = prepare_data(train_dataset, pca_model=pca_model, fit_pca=True)
     print("Train:", X_train.shape)
-    X_test, y_test = prepare_data(test_dataset)
+    X_test, y_test = prepare_data(test_dataset, pca_model=pca_model, fit_pca=False)
     print("Test:", X_test.shape)
 
     metrics_list = []
@@ -470,13 +478,11 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
 
         # Predict on test data
         if variable_type == 'categorical':
-            # Get probabilities
-            y_probs = best_model.predict_proba(X_test)  # Use predict_proba for probabilities
-            metrics = evaluate_classifier(y_test, y_probs, print_report=True)  # Pass probabilities
+            y_probs = best_model.predict_proba(X_test)
+            metrics = evaluate_classifier(y_test, y_probs, print_report=True)
         elif variable_type == 'numerical':
             y_pred = best_model.predict(X_test)
             metrics = evaluate_regressor(y_test, y_pred)
-
 
         for metric, value in metrics.items():
             metrics_list.append({
@@ -487,8 +493,8 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
                 'value': value
             })
 
-    # Convert the list of metrics to a DataFrame
     return pd.DataFrame(metrics_list)
+
 
 
 def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration_col, event_col, n_folds=5, n_jobs=4):
@@ -1053,7 +1059,7 @@ def generate_synthetic_batches (n_samples_per_batch = 150,  n_features = 50):
     synthetic_data = pd.DataFrame(combined_data, columns=feature_columns)
     return synthetic_data, batch_labels
 
-def optimal_transport_align(embeddings, batch_labels):
+def optimal_transport_align(embeddings, batch_labels, standardize_by_labels = False):
     """
     Align embeddings from two batches using Optimal Transport, preserving the order of samples.
 
@@ -1062,7 +1068,7 @@ def optimal_transport_align(embeddings, batch_labels):
     - batch_labels (np.ndarray or pd.Series): Batch labels corresponding to the rows of embeddings.
 
     Returns:
-    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned embeddings for all samples.
+    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned embeddings for all samples, with original indices preserved.
     - aligned_batch_labels (pd.Series): A Series containing the corresponding batch labels for the aligned embeddings.
     """
     # Ensure batch labels are a NumPy array
@@ -1089,22 +1095,26 @@ def optimal_transport_align(embeddings, batch_labels):
     uniform_dist_1 = np.ones(n_samples_1) / n_samples_1
     uniform_dist_2 = np.ones(n_samples_2) / n_samples_2
     transport_plan = ot.emd(uniform_dist_1, uniform_dist_2, cost_matrix)
-    
+
     # Align batch 2 embeddings by transporting them to batch 1's distribution
-    aligned_batch2 = np.dot(transport_plan.T, batch1_embeddings)  # Map batch2 to batch1's space
+    aligned_batch2 = np.dot(transport_plan.T, batch1_embeddings)
 
     # Create an array to store the aligned embeddings in the original order
     aligned_embeddings = np.zeros_like(embeddings.to_numpy())
-    # Standardize: Zero mean, unit variance
-    scaler = StandardScaler()
-    batch1_embeddings = scaler.fit_transform(batch1_embeddings)
-    aligned_batch2 = scaler.fit_transform(aligned_batch2)
     aligned_embeddings[batch1_indices] = batch1_embeddings
     aligned_embeddings[batch2_indices] = aligned_batch2
 
-    # Convert back to pandas DataFrame and Series
-    aligned_embeddings_df = pd.DataFrame(aligned_embeddings, columns=embeddings.columns)
-    aligned_batch_labels = pd.Series(batch_labels, name="batch_labels")
+    # Standardize the aligned embeddings separately for each batch
+    if standardize_by_labels: 
+        scaler1 = StandardScaler()
+        scaler2 = StandardScaler()
+
+        aligned_embeddings[batch1_indices] = scaler1.fit_transform(aligned_embeddings[batch1_indices])
+        aligned_embeddings[batch2_indices] = scaler2.fit_transform(aligned_embeddings[batch2_indices])
+
+    # Convert back to pandas DataFrame and Series, preserving indices
+    aligned_embeddings_df = pd.DataFrame(aligned_embeddings, columns=embeddings.columns, index=embeddings.index)
+    aligned_batch_labels = pd.Series(batch_labels, index=embeddings.index, name="batch_labels")
 
     return aligned_embeddings_df, aligned_batch_labels
 
