@@ -121,6 +121,7 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
     plt.show()
 
 
+
 def plot_scatter(true_values, predicted_values):
     """
     Plots a scatterplot of true vs predicted values, with a regression line and annotated with the Pearson correlation coefficient.
@@ -398,7 +399,7 @@ def get_predicted_labels(y_pred_dict, dataset, split):
 
 from sklearn.decomposition import PCA
 
-def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, methods, n_folds=5, n_jobs=4, use_pca=True, n_components=100):
+def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, methods, n_folds=5, n_jobs=4, use_pca=False, n_components=100):
     """
     Evaluates the performance of machine learning models on a given variable with optional PCA for dimensionality reduction.
 
@@ -1114,6 +1115,101 @@ def optimal_transport_align(embeddings, batch_labels, standardize_by_labels = Fa
 
     # Convert back to pandas DataFrame and Series, preserving indices
     aligned_embeddings_df = pd.DataFrame(aligned_embeddings, columns=embeddings.columns, index=embeddings.index)
+    aligned_batch_labels = pd.Series(batch_labels, index=embeddings.index, name="batch_labels")
+
+    return aligned_embeddings_df, aligned_batch_labels
+
+
+from sklearn.decomposition import PCA
+from sklearn.neighbors import NearestNeighbors
+import numpy as np
+import pandas as pd
+
+def reciprocal_pca_mnn(embeddings, batch_labels, n_components=10, n_neighbors=5, standardize_by_labels=False, random_state=None):
+    """
+    Align embeddings from two batches using Reciprocal PCA (rPCA) and Mutual Nearest Neighbors (MNN).
+
+    Parameters:
+    - embeddings (pd.DataFrame): A DataFrame where rows are samples and columns are features.
+    - batch_labels (np.ndarray or pd.Series): Batch labels corresponding to the rows of embeddings.
+    - n_components (int): Number of principal components to use for alignment.
+    - n_neighbors (int): Number of mutual nearest neighbors to use for finding anchors.
+    - standardize_by_labels (bool): Whether to standardize embeddings for each batch separately.
+    - random_state (int, optional): Random seed for reproducibility.
+
+    Returns:
+    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned embeddings for all samples, with original indices preserved.
+    - aligned_batch_labels (pd.Series): A Series containing the corresponding batch labels for the aligned embeddings.
+    """
+    # Ensure batch labels are a NumPy array
+    batch_labels_np = np.array(batch_labels)
+
+    # Identify unique batches
+    unique_batches = np.unique(batch_labels_np)
+    if len(unique_batches) != 2:
+        raise ValueError("Reciprocal PCA supports aligning exactly two batches.")
+
+    # Split embeddings by batch, preserving the original indices
+    batch1_indices = np.where(batch_labels_np == unique_batches[0])[0]
+    batch2_indices = np.where(batch_labels_np == unique_batches[1])[0]
+
+    batch1_embeddings = embeddings.iloc[batch1_indices].to_numpy()
+    batch2_embeddings = embeddings.iloc[batch2_indices].to_numpy()
+
+    # Standardize embeddings separately for each batch if required
+    if standardize_by_labels:
+        batch1_embeddings = (batch1_embeddings - batch1_embeddings.mean(axis=0)) / batch1_embeddings.std(axis=0)
+        batch2_embeddings = (batch2_embeddings - batch2_embeddings.mean(axis=0)) / batch2_embeddings.std(axis=0)
+
+    # Perform PCA on both batches
+    pca1 = PCA(n_components=n_components, random_state=random_state)
+    pca2 = PCA(n_components=n_components, random_state=random_state)
+
+    batch1_pca = pca1.fit_transform(batch1_embeddings)
+    batch2_pca = pca2.fit_transform(batch2_embeddings)
+
+    # Reciprocal PCA: Project each dataset into the other's PCA space
+    batch1_to_batch2 = pca2.transform(batch1_embeddings)
+    batch2_to_batch1 = pca1.transform(batch2_embeddings)
+
+    # Use MNN to identify anchors
+    neighbors1 = NearestNeighbors(n_neighbors=n_neighbors).fit(batch2_to_batch1)
+    neighbors2 = NearestNeighbors(n_neighbors=n_neighbors).fit(batch1_to_batch2)
+
+    distances1, indices1 = neighbors1.kneighbors(batch1_pca)
+    distances2, indices2 = neighbors2.kneighbors(batch2_pca)
+
+    # Identify mutual nearest neighbors
+    mutual_anchors = []
+    for i, neighbors in enumerate(indices1):
+        for neighbor in neighbors:
+            if i in indices2[neighbor]:
+                mutual_anchors.append((i, neighbor))
+
+    if not mutual_anchors:
+        raise ValueError("No mutual nearest neighbors (MNN) found between the batches.")
+
+    # Align the datasets using anchors
+    mutual_anchors = np.array(mutual_anchors)
+    batch1_anchor_indices = mutual_anchors[:, 0]
+    batch2_anchor_indices = mutual_anchors[:, 1]
+
+    # Compute the transformation to align the datasets
+    batch1_aligned = batch1_pca[batch1_anchor_indices]
+    batch2_aligned = batch2_pca[batch2_anchor_indices]
+
+    alignment_matrix = np.linalg.pinv(batch2_aligned) @ batch1_aligned
+    aligned_batch2 = batch2_pca @ alignment_matrix
+
+    # Combine aligned embeddings
+    aligned_embeddings = np.zeros((embeddings.shape[0], n_components))
+    aligned_embeddings[batch1_indices] = batch1_pca
+    aligned_embeddings[batch2_indices] = aligned_batch2
+
+    # Convert back to pandas DataFrame and Series, preserving indices
+    aligned_embeddings_df = pd.DataFrame(aligned_embeddings, 
+                                         columns=[f"rPCA_{i+1}" for i in range(n_components)], 
+                                         index=embeddings.index)
     aligned_batch_labels = pd.Series(batch_labels, index=embeddings.index, name="batch_labels")
 
     return aligned_embeddings_df, aligned_batch_labels
