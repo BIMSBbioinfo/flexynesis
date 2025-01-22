@@ -10,7 +10,7 @@
   (if (getenv "FLEXYNESIS_USE_CPU")
       identity  ;don't do anything
       (let ((cpu-torch (specification->package "python-pytorch"))
-            (gpu-torch (specification->package "python-pytorch-with-cuda11")))
+            (gpu-torch (specification->package "python-pytorch-with-cuda12")))
         (package-input-rewriting `((,cpu-torch . ,gpu-torch))))))
 
 (define %packages
