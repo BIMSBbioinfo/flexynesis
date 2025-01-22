@@ -15,20 +15,25 @@
 
 (package
   (name "flexynesis")
-  (version "0.1.7")
+  (version "0.2.13")
   (source (git-checkout (url (dirname (current-filename)))))
   (build-system pyproject-build-system)
   (arguments
    (list
     #:phases
     #~(modify-phases %standard-phases
+        (add-after 'unpack 'disable-doctests
+          (lambda _
+            ;; Disable doctests because they are broken.  See
+            ;; https://github.com/BIMSBbioinfo/flexynesis/issues/93
+            (substitute* "pyproject.toml"
+              ((".*--doctest-modules.*") ""))))
         (add-before 'check 'set-numba-cache-dir
           (lambda _
             (setenv "NUMBA_CACHE_DIR" "/tmp")))
         (add-after 'wrap 'isolate-python
           (lambda _
-            (substitute* (list (string-append #$output "/bin/.flexynesis-real")
-                                (string-append #$output "/bin/.flexynesis-cli-real"))
+            (substitute* (string-append #$output "/bin/.flexynesis-real")
               (("/bin/python") "/bin/python -I")))))))
   (propagated-inputs %packages)
   (native-inputs %dev-packages)
