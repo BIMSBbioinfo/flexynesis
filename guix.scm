@@ -15,7 +15,7 @@
 
 (package
   (name "flexynesis")
-  (version "0.1.7")
+  (version "0.2.13")
   (source (git-checkout (url (dirname (current-filename)))))
   (build-system pyproject-build-system)
   (arguments
