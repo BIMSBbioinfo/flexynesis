@@ -83,6 +83,18 @@ jobs:
         conda activate my_env
         flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut,cna --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --surv_event_var OS_STATUS --surv_time_var OS_MONTHS
 
+    - name: Run DirectPred_TestCovariates
+      shell: bash -l {0}
+      run: |
+        conda activate my_env
+        flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --covariates BCR_STATUS
+
+    - name: Run DirectPred_Test_Explainers
+      shell: bash -l {0}
+      run: |
+        conda activate my_env
+        flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --feature_importance_method Both 
+
     - name: Run supervised_vae
       shell: bash -l {0}
       run: |
