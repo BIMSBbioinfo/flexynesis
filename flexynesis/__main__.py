@@ -47,6 +47,7 @@ def main():
         --threads (int): How many threads to use when using CPU. Default is 4.
         --num_workers (int): How many workers to use for model training. Default is 0
         --use_gpu (bool): If set, the system will attempt to use CUDA/GPU if available.
+        --feature_importance_method (str): which method(s) to use to compute feature importance scores. Options are: IntegratedGradients, GradientShap, or Both. Default: Both
         --disable_marker_finding (bool): If set, marker discovery after model training is disabled.
         --string_organism (int): STRING DB organism id. Default is 9606.
         --string_node_name (str): Type of node name. Choices are ["gene_name", "gene_id"]. Default is "gene_name".
@@ -103,6 +104,8 @@ def main():
     parser.add_argument("--num_workers", help="(Optional) How many workers to use for model training (default is 0)", type=int, default = 0)
     parser.add_argument("--use_gpu", action="store_true", 
                         help="(Optional) If set, the system will attempt to use CUDA/GPU if available.")
+    parser.add_argument("--feature_importance_method", help="Choose feature importance score method", type=str, 
+                        choices=["IntegratedGradients", "GradientShap", "Both"], default="IntegratedGradients")
     parser.add_argument("--disable_marker_finding", action="store_true", 
                         help="(Optional) If set, marker discovery after model training is disabled.")
     # GNN args.
@@ -339,12 +342,20 @@ def main():
     if any([args.target_variables, args.surv_event_var]):
         if not args.disable_marker_finding: # unless marker discovery is disabled
             # compute feature importance values
-            print("[INFO] Computing variable importance scores")
-            for var in model.target_variables:
-                model.compute_feature_importance(train_dataset, var, steps = 25)
-            df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], 
-                               ignore_index = True)
-            df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance.csv'])), header=True, index=False)
+            
+            if args.feature_importance_method == 'Both':
+                explainers = ['IntegratedGradients', 'GradientShap']
+            else: 
+                explainers = [args.feature_importance_method]
+            
+            for explainer in explainers:
+                print("[INFO] Computing variable importance scores using explainer:",explainer)
+                for var in model.target_variables:
+                    model.compute_feature_importance(train_dataset, var, steps_or_samples = 25, method=explainer)
+                df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], 
+                                   ignore_index = True)
+                df_imp['explainer'] = explainer
+                df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance', explainer, 'csv'])), header=True, index=False)
 
         # print known/predicted labels 
         predicted_labels = pd.concat([flexynesis.get_predicted_labels(model.predict(train_dataset), train_dataset, 'train'),
