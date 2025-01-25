@@ -10,7 +10,7 @@ import numpy as np
 import lightning as pl
 from scipy import stats
 
-from captum.attr import IntegratedGradients
+from captum.attr import IntegratedGradients, GradientShap
 
 from ..modules import *
 
@@ -482,32 +482,34 @@ class CrossModalPred(pl.LightningModule):
             outputs_list.append(outputs[target_var])
         return torch.cat(outputs_list, dim = 0)
         
-    def compute_feature_importance(self, dataset, target_var, steps = 5, batch_size = 64):
+    def compute_feature_importance(self, dataset, target_var, method="IntegratedGradients", steps_or_samples=5, batch_size=64):
         """
-        Computes the feature importance for each variable in the dataset using the Integrated Gradients method.
-        This method measures the importance of each feature by attributing the prediction output to each input feature.
-    
+        Computes the feature importance for each variable in the dataset using either Integrated Gradients or Gradient SHAP.
+
         Args:
             dataset: The dataset object containing the features and data.
             target_var (str): The target variable for which feature importance is calculated.
-            steps (int, optional): The number of steps to use for integrated gradients approximation. Defaults to 5.
+            method (str, optional): The attribution method to use ("IntegratedGradients" or "GradientShap").
+                                    Defaults to "IntegratedGradients".
+            steps_or_samples (int, optional): Number of steps for Integrated Gradients or samples for Gradient SHAP.
+                                              Defaults to 5.
             batch_size (int, optional): The size of the batch to process the dataset. Defaults to 64.
-    
+
         Returns:
             pd.DataFrame: A DataFrame containing feature importances across different variables and data modalities.
-                          Columns include 'target_variable', 'target_class', 'target_class_label', 'layer', 'name',
-                          and 'importance'.
-    
-        This function adjusts the device setting based on the availability of GPUs and performs the computation using
-        Integrated Gradients. It processes batches of data, aggregates results across batches, and formats the output
-        into a readable DataFrame which is then stored in the model's attribute for later use or analysis.
         """
         device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
         self.to(device)
         
         print("[INFO] Computing feature importance for variable:",target_var,"on device:",device)
-        # Initialize the Integrated Gradients method
-        ig = IntegratedGradients(self.forward_target)
+        
+        # Choose the attribution method dynamically
+        if method == "IntegratedGradients":
+            explainer = IntegratedGradients(self.forward_target)
+        elif method == "GradientShap":
+            explainer = GradientShap(self.forward_target)
+        else:
+            raise ValueError(f"Unsupported method '{method}'. Choose 'IntegratedGradients' or 'GradientShap'.")
 
         # Get the number of classes for the target variable
         if self.variable_types[target_var] == 'numerical':
@@ -523,19 +525,38 @@ class CrossModalPred(pl.LightningModule):
             dat, _, _ = batch
             x_list = [dat[x].to(device) for x in self.input_layers]
             input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
-            baseline = tuple(torch.zeros_like(x) for x in input_data)
+            
+            if method == 'IntegratedGradients':
+                baseline = tuple(torch.zeros_like(x) for x in input_data)
+            elif method == 'GradientShap': # provide multiple baselines for Gr.Shap
+                baseline = tuple(
+                    torch.cat([torch.zeros_like(x) for _ in range(steps_or_samples)], dim=0)
+                    for x in input_data
+                )
+
             if num_class == 1:
-                # returns a tuple of tensors (one per data modality)
-                attributions = ig.attribute(input_data, baseline, 
-                                             additional_forward_args=(target_var, steps), 
-                                             n_steps=steps)
+                if method == 'IntegratedGradients':
+                    attributions = explainer.attribute(input_data, baseline, 
+                                                 additional_forward_args=(target_var, steps_or_samples), 
+                                                 n_steps=steps_or_samples)
+                elif method == 'GradientShap':
+                    attributions = explainer.attribute(input_data, baseline, 
+                                                 additional_forward_args=(target_var, steps_or_samples), 
+                                                 n_samples=steps_or_samples)
                 aggregated_attributions[0].append(attributions)
             else:
                 for target_class in range(num_class):
                     # returns a tuple of tensors (one per data modality)
-                    attributions = ig.attribute(input_data, baseline, 
-                                                 additional_forward_args=(target_var, steps), 
-                                                 target=target_class, n_steps=steps)
+                    if method == 'IntegratedGradients':
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                           additional_forward_args=(target_var, steps_or_samples), 
+                                                           target=target_class,
+                                                           n_steps=steps_or_samples)
+                    elif method == 'GradientShap':
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                           additional_forward_args=(target_var, steps_or_samples), 
+                                                           target=target_class,
+                                                           n_samples=steps_or_samples)
                     aggregated_attributions[target_class].append(attributions)
 
         # For each target class and for each data modality/layer, concatenate attributions accross batches 
@@ -571,9 +592,12 @@ class CrossModalPred(pl.LightningModule):
             for j in range(len(layers)):
                 features = dataset.features[layers[j]]
                 importances = imp[i][j][0].detach().numpy()
+                target_class_label = dataset.label_mappings[target_var].get(i) if target_var in dataset.label_mappings else ''
                 df_list.append(pd.DataFrame({'target_variable': target_var, 
-                                             'target_class': i, 'layer': layers[j], 
-                                             'name': features, 'importance': importances}))    
+                                             'target_class': i, 
+                                             'target_class_label': target_class_label,
+                                             'layer': layers[j], 
+                                             'name': features, 'importance': importances}))  
         df_imp = pd.concat(df_list, ignore_index = True)
         
         # save scores in model
