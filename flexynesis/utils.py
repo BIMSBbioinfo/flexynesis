@@ -16,7 +16,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib
 from sklearn.decomposition import PCA
-from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report, roc_auc_score
+from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report, roc_auc_score, average_precision_score
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 from scipy.stats import pearsonr, linregress
@@ -208,11 +208,12 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     """
     Evaluate the performance of a classifier using multiple metrics and optionally print a detailed classification report.
 
-    This function computes balanced accuracy, F1 score (weighted), Cohen's Kappa score, and average AUROC score for the given true labels and predicted probabilities.
+    This function computes balanced accuracy, F1 score (weighted), Cohen's Kappa score, average AUROC score, and 
+    weighted-average AUC-PR score for the given true labels and predicted probabilities.
     If `print_report` is set to True, it prints a detailed classification report.
 
     Args:
-        y_true (array-like): True labels of the data, must be 1D list or array of labels.
+        y_true (array-like): True labels of the data, must be a 1D list or array of labels.
         y_probs (array-like): Predicted probabilities for each class, must be 2D (n_samples, n_classes).
         print_report (bool, optional): If True, prints a detailed classification report. Defaults to False.
 
@@ -222,6 +223,7 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
               - 'f1_score': The weighted-average F1 score of the predictions.
               - 'kappa': Cohen's Kappa score indicating the level of agreement between the true and predicted labels.
               - 'average_auroc': The weighted average AUROC score across all classes.
+              - 'average_aupr': The weighted average AUC-PR score across all classes.
     """
     # Convert probabilities to predicted labels
     y_pred = np.argmax(y_probs, axis=1)
@@ -235,16 +237,19 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     # Cohen's Kappa
     kappa = cohen_kappa_score(y_true, y_pred)
 
-    # Average AUROC (One-vs-Rest)
+    # Compute AUROC/AUPR 
     try:
         if y_probs.shape[1] == 2:  # Binary classification
             y_probs_binary = y_probs[:, 1]  # Use positive class probabilities
             average_auroc = roc_auc_score(y_true, y_probs_binary)
+            average_aupr = average_precision_score(y_true, y_probs_binary)  # AUC-PR for binary case
         else:  # Multiclass classification
             average_auroc = roc_auc_score(y_true, y_probs, multi_class='ovr', average='weighted')
+            average_aupr = average_precision_score(y_true, y_probs, average='weighted')  # Weighted AUC-PR for multiclass
     except ValueError:
         average_auroc = None  # Handle cases where AUROC cannot be computed
-    
+        average_aupr = None  # Handle cases where AUC-PR cannot be computed
+
     # Full classification report
     if print_report:
         print("\nClassification Report:")
@@ -255,7 +260,8 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
         "balanced_acc": balanced_acc,
         "f1_score": f1,
         "kappa": kappa,
-        "average_auroc": average_auroc
+        "average_auroc": average_auroc,
+        "average_aupr": average_aupr  # Added AUC-PR
     }
 
 def evaluate_regressor(y_true, y_pred):
