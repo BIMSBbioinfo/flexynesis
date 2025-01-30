@@ -208,7 +208,7 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     """
     Evaluate the performance of a classifier using multiple metrics and optionally print a detailed classification report.
 
-    This function computes balanced accuracy, F1 score (macro), Cohen's Kappa score, and average AUROC score for the given true labels and predicted probabilities.
+    This function computes balanced accuracy, F1 score (weighted), Cohen's Kappa score, and average AUROC score for the given true labels and predicted probabilities.
     If `print_report` is set to True, it prints a detailed classification report.
 
     Args:
@@ -219,9 +219,9 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     Returns:
         dict: A dictionary containing:
               - 'balanced_acc': The balanced accuracy of the predictions.
-              - 'f1_score': The macro-average F1 score of the predictions.
+              - 'f1_score': The weighted-average F1 score of the predictions.
               - 'kappa': Cohen's Kappa score indicating the level of agreement between the true and predicted labels.
-              - 'average_auroc': The average AUROC score across all classes.
+              - 'average_auroc': The weighted average AUROC score across all classes.
     """
     # Convert probabilities to predicted labels
     y_pred = np.argmax(y_probs, axis=1)
@@ -229,8 +229,8 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     # Balanced accuracy
     balanced_acc = balanced_accuracy_score(y_true, y_pred)
 
-    # F1 score (macro)
-    f1 = f1_score(y_true, y_pred, average='macro', zero_division=0)
+    # F1 score (weighted)
+    f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
 
     # Cohen's Kappa
     kappa = cohen_kappa_score(y_true, y_pred)
@@ -241,7 +241,7 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
             y_probs_binary = y_probs[:, 1]  # Use positive class probabilities
             average_auroc = roc_auc_score(y_true, y_probs_binary)
         else:  # Multiclass classification
-            average_auroc = roc_auc_score(y_true, y_probs, multi_class='ovr', average='macro')
+            average_auroc = roc_auc_score(y_true, y_probs, multi_class='ovr', average='weighted')
     except ValueError:
         average_auroc = None  # Handle cases where AUROC cannot be computed
     
