@@ -42,6 +42,7 @@ def main():
         --early_stop_patience (int): How many epochs to wait when no improvements in validation loss are observed. Default is 10; set to -1 to disable early stopping.
         --hpo_patience (int): How many hyperparameter optimisation iterations to wait for when no improvements are observed. Default is 10; set to 0 to disable early stopping.
         --use_cv (bool): If set, a 5-fold cross-validation training will be done. Otherwise, a single training on 80 percent of the dataset is done.
+        --val_size (float): Proportion of training data to be used as validation split (default: 0.2)
         --use_loss_weighting (str): Whether to apply loss-balancing using uncertainty weights method. Choices are ['True', 'False']. Default is 'True'.
         --evaluate_baseline_performance (bool): Enables modeling also with Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset. 
         --threads (int): How many threads to use when using CPU. Default is 4.
@@ -95,6 +96,7 @@ def main():
     parser.add_argument("--log_transform", help="whether to apply log-transformation to input data matrices", type=str, choices=['True', 'False'], default = 'False')
     parser.add_argument("--early_stop_patience", help="How many epochs to wait when no improvements in validation loss is observed (default 10; set to -1 to disable early stopping)", type=int, default = 10)
     parser.add_argument("--hpo_patience", help="How many hyperparamater optimisation iterations to wait for when no improvements are observed (default is 10; set to 0 to disable early stopping)", type=int, default = 20)
+    parser.add_argument("--val_size", help="Proportion of training data to be used as validation split (default: 0.2)", type=float, default = 0.2)
     parser.add_argument("--use_cv", action="store_true", 
                         help="(Optional) If set, the a 5-fold cross-validation training will be done. Otherwise, a single trainig on 80 percent of the dataset is done.")
     parser.add_argument("--use_loss_weighting", help="whether to apply loss-balancing using uncertainty weights method", type=str, choices=['True', 'False'], default = 'True')
@@ -239,7 +241,9 @@ def main():
                                             top_percentile= args.features_top_percentile,
                                             processed_dir = '_'.join(['processed', args.prefix]),
                                             downsample = args.subsample)
+    t1 = time.time() # measure the time it takes to import data 
     train_dataset, test_dataset = data_importer.import_data()
+    data_import_time = time.time() - t1
     
     if args.model_class in ["RandomForest", "SVM", "XGBoost"]:
         if args.target_variables:
@@ -298,6 +302,7 @@ def main():
                                             config_path = args.config_path,
                                             n_iter=int(args.hpo_iter),
                                             use_loss_weighting = args.use_loss_weighting == 'True',
+                                            val_size = args.val_size, 
                                             use_cv = args.use_cv, 
                                             early_stop_patience = int(args.early_stop_patience), 
                                             device_type = device_type,
@@ -307,7 +312,9 @@ def main():
                                             num_workers = args.num_workers)    
     
     # do a hyperparameter search training multiple models and get the best_configuration 
+    t1 = time.time() # measure the time it takes to train the model
     model, best_params = tuner.perform_tuning(hpo_patience = args.hpo_patience)
+    hpo_time = time.time() - t1
         
     # if fine-tuning is enabled; fine tune the model on a portion of test samples 
     if args.finetuning_samples > 0:
@@ -412,8 +419,9 @@ def main():
     
     # save the trained model in file
     torch.save(model, os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.pth'])))
-    
-    
+    print(f"[INFO] Time spent in HPO: {hpo_time:.2f} sec")
+    print(f"[INFO] Time spent in data import: {data_import_time:.2f} sec")
+        
 if __name__ == "__main__":
     main()
     print("[INFO] Finished the analysis!") 
