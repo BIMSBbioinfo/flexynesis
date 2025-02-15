@@ -43,8 +43,7 @@ dependencies = [
     "xgboost",
     "pot",
     "geomloss",
-    "plotnine",
-    "patchworklib"
+    "plotnine"
 ]
 
 [project.scripts]
