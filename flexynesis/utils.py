@@ -45,28 +45,19 @@ import community as community_louvain
 from sklearn.preprocessing import StandardScaler
 import ot 
 
-def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', scatter_kwargs=None, legend_kwargs=None, figsize=(10, 8)):
+from plotnine import ggplot, aes, geom_point, scale_color_manual, scale_color_gradient, labs, theme_minimal
+
+def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical'):
     """
-    Plots the first two dimensions of the transformed input matrix in a 2D scatter plot,
+    Plots the first two dimensions of the transformed input matrix using plotnine (ggplot2-like API),
     with points colored based on the provided labels. The transformation method can be either PCA or UMAP.
-    
-    This function allows users to control several aspects of the plot such as the figure size, scatter plot properties, and legend properties.
 
     Args:
         matrix (np.array): Input data matrix (n_samples, n_features).
         labels (list): List of labels (strings or integers).
         method (str): Transformation method ('pca' or 'umap'). Default is 'pca'.
         color_type (str): Type of the color scale ('categorical' or 'numerical'). Default is 'categorical'.
-        scatter_kwargs (dict, optional): Additional keyword arguments for plt.scatter. Default is None.
-        legend_kwargs (dict, optional): Additional keyword arguments for plt.legend. Default is None.
-        figsize (tuple): Size of the figure (width, height). Default is (10, 8).
     """
-    
-    plt.figure(figsize=figsize)
-    
-    scatter_kwargs = scatter_kwargs if scatter_kwargs else {}
-    legend_kwargs = legend_kwargs if legend_kwargs else {}
-
     # Compute transformation
     if method.lower() == 'pca':
         transformer = PCA(n_components=2)
@@ -74,53 +65,47 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', sca
         transformer = UMAP(n_components=2)
     else:
         raise ValueError("Invalid method. Expected 'pca' or 'umap'")
-        
+    
     transformed_matrix = transformer.fit_transform(matrix)
-
-    # Create a pandas DataFrame for easier plotting
+    
+    # Create DataFrame
     transformed_df = pd.DataFrame(transformed_matrix, columns=[f"{method.upper()}1", f"{method.upper()}2"])
-
-    if color_type == 'numerical':
-        # Convert to numerical values, handling non-numeric and missing values
-        labels = np.array([float(x) if not pd.isnull(x) and x not in {'nan', 'None'} else np.nan for x in labels])
-    elif color_type == 'categorical':
-        # Convert all to strings, handling missing values distinctly if necessary
-        labels = np.array([str(x) if not pd.isnull(x) and x not in {'nan', 'None'} else 'Missing' for x in labels])
+    transformed_df["Label"] = list(labels)
+    
+    # Handle color scaling
+    if color_type == 'categorical':
+        transformed_df["Label"] = transformed_df["Label"].astype(str)  # Ensure categorical labels are strings
+        plot = (
+            ggplot(transformed_df, aes(x=f"{method.upper()}1", y=f"{method.upper()}2", color='Label')) +
+            geom_point() +
+            labs(
+                title=f"{method.upper()} Scatter Plot with Colored Labels",
+                x=f"{method.upper()} Dimension 1",
+                y=f"{method.upper()} Dimension 2",
+                color="Labels"
+            ) +
+            theme_minimal()
+        )
+    elif color_type == 'numerical':
+        transformed_df["Label"] = pd.to_numeric(transformed_df["Label"], errors='coerce')
+        plot = (
+            ggplot(transformed_df, aes(x=f"{method.upper()}1", y=f"{method.upper()}2", color='Label')) +
+            geom_point() +
+            scale_color_gradient(low="blue", high="red") +
+            labs(
+                title=f"{method.upper()} Scatter Plot with Numerical Labels",
+                x=f"{method.upper()} Dimension 1",
+                y=f"{method.upper()} Dimension 2",
+                color="Label"
+            ) +
+            theme_minimal()
+        )
     else:
         raise ValueError("Invalid color_type specified. Must be 'numerical' or 'categorical'.")
-    #labels = [-1 if pd.isnull(x) or x in {'nan', 'None'} else x for x in labels]
+    
+    return plot
 
-    # Add the labels to the DataFrame
-    transformed_df["Label"] = labels
-
-    if color_type == 'categorical':
-        unique_labels = sorted(set(labels))
-        colormap = plt.get_cmap("tab20", len(unique_labels))
-        
-        for i, label in enumerate(unique_labels):
-            plt.scatter(
-                transformed_df[transformed_df["Label"] == label][f"{method.upper()}1"],
-                transformed_df[transformed_df["Label"] == label][f"{method.upper()}2"],
-                color=colormap(i),
-                label=label,
-                **scatter_kwargs
-            )
-        if method.lower() == 'pca':
-            plt.xlabel(f"PC1 (explained variance: {transformer.explained_variance_ratio_[0]*100:.2f}%)", fontsize=14)
-            plt.ylabel(f"PC2 (explained variance: {transformer.explained_variance_ratio_[1]*100:.2f}%)", fontsize=14)
-        else:
-            plt.xlabel(f"{method.upper()} Dimension 1", fontsize=14)
-            plt.ylabel(f"{method.upper()} Dimension 2", fontsize=14)
-
-        plt.title(f"{method.upper()} Scatter Plot with Colored Labels", fontsize=18)
-        plt.legend(title="Labels", **legend_kwargs)
-    elif color_type == 'numerical':
-        sc = plt.scatter(transformed_df[f"{method.upper()}1"], transformed_df[f"{method.upper()}2"], 
-                         c=labels, **scatter_kwargs)
-        plt.colorbar(sc, label='Label')
-    plt.show()
-
-
+from plotnine import ggplot, aes, geom_point, geom_smooth, labs, theme_minimal, annotate
 
 def plot_scatter(true_values, predicted_values):
     """
@@ -138,27 +123,29 @@ def plot_scatter(true_values, predicted_values):
     not_nan_indices = ~np.isnan(true_values) & ~np.isnan(predicted_values)
     true_values = true_values[not_nan_indices]
     predicted_values = predicted_values[not_nan_indices]
-
+    
     # Calculate correlation coefficient
     corr, _ = pearsonr(true_values, predicted_values)
     corr_text = f"Pearson r: {corr:.2f}"
     
-    # Generate scatter plot
-    plt.scatter(true_values, predicted_values, alpha=0.5)
+    # Create DataFrame
+    df = pd.DataFrame({"True Values": true_values, "Predicted Values": predicted_values})
     
-    # Add regression line
-    m, b = np.polyfit(true_values, predicted_values, 1)
-    plt.plot(true_values, m*true_values + b, color='red')
+    # Generate scatter plot with regression line
+    plot = (
+        ggplot(df, aes(x="True Values", y="Predicted Values")) +
+        geom_point(alpha=0.5) +
+        geom_smooth(method='lm', color='red') +
+        annotate("text", x=min(true_values), y=max(predicted_values), label=corr_text, ha='left', va='top', size=10) +
+        labs(
+            title="True vs Predicted Values",
+            x="True Values",
+            y="Predicted Values"
+        ) +
+        theme_minimal()
+    )
     
-    # Add correlation text
-    plt.text(min(true_values), max(predicted_values), corr_text, fontsize=12, ha='left', va='top')
-    
-    # Add labels and title
-    plt.xlabel('True Values')
-    plt.ylabel('Predicted Values')
-    plt.title('True vs Predicted Values')
-    
-    plt.show()
+    return plot
     
     
 def plot_boxplot(categorical_x, numerical_y, title_x = 'Categories', title_y = 'Values'):
