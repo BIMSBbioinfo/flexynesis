@@ -390,7 +390,6 @@ def get_predicted_labels(y_pred_dict, dataset, split):
 
 
 
-from sklearn.decomposition import PCA
 
 def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, methods, n_folds=5, n_jobs=4, use_pca=False, n_components=100):
     """
@@ -1113,10 +1112,7 @@ def optimal_transport_align(embeddings, batch_labels, standardize_by_labels = Fa
     return aligned_embeddings_df, aligned_batch_labels
 
 
-from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
-import numpy as np
-import pandas as pd
 
 def reciprocal_pca_mnn(embeddings, batch_labels, n_components=10, n_neighbors=5, standardize_by_labels=False, random_state=None):
     """
@@ -1208,92 +1204,136 @@ def reciprocal_pca_mnn(embeddings, batch_labels, n_components=10, n_neighbors=5,
     return aligned_embeddings_df, aligned_batch_labels
 
 
+import tarfile
+import requests
+from io import StringIO
+
 class CBioPortalData:
-    def __init__(self, base_url=None, study_id=None, data_files=None):
-        self.base_url = base_url if base_url is not None else "https://cbioportal-datahub.s3.amazonaws.com"
+    def __init__(self, study_id, base_url="https://cbioportal-datahub.s3.amazonaws.com"):
+        self.base_url = base_url
         self.study_id = study_id
-        self.data_files = data_files if data_files is not None else []
-        self.data_tables = {}  # Initialize data_tables as an empty dictionary
-        
-        logging.basicConfig(level=logging.INFO, format='[INFO] %(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-        self.logger = logging.getLogger(__name__)
-        self.logger.info("Initializing CBioPortalData")
-        archive_path = self.download_study_archive()
-        study_dir = self.extract_archive(archive_path)
-        self.read_data()
-        self.list_data_files()
-
+        self.data_files = None
+        self.data = None
+    
     def download_study_archive(self):
-        url = os.path.join(self.base_url, f"{self.study_id}.tar.gz")
+        url = f"{self.base_url}/{self.study_id}.tar.gz"
         dest_file = f"{self.study_id}.tar.gz"
+        
         if not os.path.exists(dest_file):
-            self.logger.info(f"Downloading {self.study_id} data archive")
-            r = requests.get(url)
-            with open(dest_file, 'wb') as f:
-                f.write(r.content)
+            print(f"Downloading {url}...")
+            response = requests.get(url, stream=True)
+            with open(dest_file, "wb") as file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    file.write(chunk)
         return dest_file
-
+    
     def extract_archive(self, archive_path):
-        self.logger.info(f"Extracting {archive_path}")
-        base = archive_path.split('.')[0]
+        base = archive_path.split(".")[0]
+        
         if not os.path.exists(base):
+            print(f"Extracting {archive_path}...")
             with tarfile.open(archive_path, "r:gz") as tar:
                 tar.extractall()
-        self.data_files = [f for f in glob(os.path.join(base, "data_*.txt"))]
+        
+        self.data_files = [f for f in os.listdir(base) if f.startswith("data_") and f.endswith(".txt")]
         return base
-
+    
     def read_data(self, files=None):
         if files is None:
             files = self.data_files
         
-        self.data_tables = {}
-        for file_path in tqdm(files, desc="Processing Files"):
-            file_name = os.path.basename(file_path)
-            self.logger.info(f"Importing data file: {file_name}")
-            df = pd.read_csv(file_path, comment='#', sep='\t', low_memory=False)
-
-            if re.search('mutations', file_name):
-                self.logger.info(f"Binarizing and converting to matrix: {file_name}")
+        data = {}
+        for datatype, file in files.items():
+            print(f"Importing {file}...")
+            file_path = os.path.join(self.study_id, file)
+            df = pd.read_csv(file_path, sep='\t', comment='#', low_memory=False)
+            
+            if 'mutations' in file:
+                print(f"Binarizing and converting {file} to matrix...")
                 df = self.binarize_mutations(df)
-            elif not re.search('clinical|drug_treatment', file_name) and "Hugo_Symbol" in df.columns:
-                self.logger.info(f"Converting {file_name} to matrix")
+            elif 'clinical' not in file and 'drug_treatment' not in file:
+                print(f"Converting {file} to matrix...")
                 df = self.process_data(df)
-
-            clean_name = re.sub(r"data_|\.txt", "", file_name)
-            self.data_tables[clean_name] = df
-
-    def process_data(self, df):
-        # Exclude 'Hugo_Symbol' and 'Entrez_Gene_Id' fields
-        cols = [col for col in df.columns if col not in ('Hugo_Symbol', 'Entrez_Gene_Id')]
-        # Remove non-unique rows based on 'Hugo_Symbol'; keep first among duplicates. 
-        df_unique = df.drop_duplicates(subset=['Hugo_Symbol'], keep='first')
-        # Set 'Hugo_Symbol' as index and select the desired columns
-        df_processed = df_unique.set_index('Hugo_Symbol')[cols]
-        return df_processed
-
-    def binarize_mutations(self, df):
-        # Check if required columns exist
-        if 'Hugo_Symbol' not in df.columns or 'Tumor_Sample_Barcode' not in df.columns:
-            raise ValueError("Required columns are missing.")
-
-        # Group by 'Hugo_Symbol' and 'Tumor_Sample_Barcode', count mutations
-        mutation_counts = df.groupby(['Hugo_Symbol', 'Tumor_Sample_Barcode']).size().reset_index(name='counts')
-
-        # Pivot table to create a matrix (genes vs samples)
-        df_pivot = mutation_counts.pivot(index='Hugo_Symbol', columns='Tumor_Sample_Barcode', values='counts').fillna(0)
-
-        # Binarize the matrix
-        df_binary = (df_pivot > 0).astype(int)
-
-        # Process the binary data further if needed, similar to process_data method
-        df_processed = self.process_data(df_binary.reset_index())
-
-        return df_processed
+            
+            data[datatype] = df        
+        return data
     
-    def list_data_files(self):
-        # Create a DataFrame with file names
-        return {x: self.data_tables[x].shape for x in self.data_tables.keys()}
+    def process_data(self, df):
+        if 'Hugo_Symbol' in df.columns and 'Entrez_Gene_Id' in df.columns:
+            df = df.drop(columns=['Entrez_Gene_Id'], errors='ignore')
+        
+        if 'Hugo_Symbol' in df.columns:
+            df = df.drop_duplicates(subset=['Hugo_Symbol'])
+            df.set_index('Hugo_Symbol', inplace=True)
+        
+        return df
+    
+    def binarize_mutations(self, df):
+        required_cols = ["Hugo_Symbol", "Tumor_Sample_Barcode"]
+        
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"Can't map mutations to sample IDs. Column {col} not found.")
+        
+        mutation_counts = df.groupby(["Hugo_Symbol", "Tumor_Sample_Barcode"]).size().reset_index(name='count')
+        mutation_matrix = mutation_counts.pivot(index='Hugo_Symbol', columns='Tumor_Sample_Barcode', values='count').fillna(0)
+        mutation_matrix[mutation_matrix > 0] = 1
+        
+        return mutation_matrix
+    
+    def print_data_files(self):
+        df = pd.DataFrame(self.data_files, columns=["Available Data Files"])
+        print(df.to_string(index=False))
+        
+    def get_cbioportal_data(self, study_id, files=None):
+        archive_path = self.download_study_archive()
+        study_dir = self.extract_archive(archive_path)
 
+        if files is None:
+            self.print_data_files()
+            print("\n\nPlease select a list of files to import. Example:\n get_cbioportal_data('study_id', files={'mut': 'data_mutations.txt', 'clin': 'data_clinical_patient.txt'})")
+            return
+
+        data = self.read_data(files)
+
+        if 'clin' in files:
+            clin = data['clin']
+            clin = clin.drop_duplicates(subset=clin.columns[0])
+            clin.set_index(clin.columns[0], inplace=True)
+            data['clin'] = clin
+
+        print({x: data[x].shape for x in data.keys()})
+        self.data = data 
+        
+    def split_data(self, samples=None, ratio=0.7):
+        if samples is None:
+            samples = self.data['clin'].index.tolist()
+
+        train_samples = list(pd.Series(samples).sample(frac=ratio, random_state=42))
+        test_samples = list(set(samples) - set(train_samples))
+
+        train_data = {}
+        test_data = {}
+
+        for key, df in self.data.items():
+            train_data[key] = df.loc[df.index.intersection(train_samples)] if key == 'clin' else df.loc[:, df.columns.intersection(train_samples)]
+            test_data[key] = df.loc[df.index.intersection(test_samples)] if key == 'clin' else df.loc[:, df.columns.intersection(test_samples)]
+
+        return {'train': train_data, 'test': test_data}
+
+    def print_dataset(self, dataset, outdir):
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+
+        for split, data in dataset.items():
+            split_dir = os.path.join(outdir, split)
+            if not os.path.exists(split_dir):
+                os.makedirs(split_dir)
+
+            for file, df in data.items():
+                df.to_csv(os.path.join(split_dir, f"{file}.csv"), sep=',')
+                
+    
     
 def compute_correlation_loss(embeddings, batch_labels):
     # Ensure batch_labels is a float tensor
