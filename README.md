@@ -9,13 +9,13 @@
 
 # flexynesis
 
-A deep-learning based multi-omics bulk sequencing data integration suite with a focus on (pre-)clinical 
-endpoint prediction. The package includes multiple types of deep learning architectures such as simple 
-fully connected networks, supervised variational autoencoders, graph convolutional networks, multi-triplet networks
-different options of data layer fusion, and automates feature selection and hyperparameter optimisation. The tools are continuosly benchmarked on publicly available datasets mostly related to the study of cancer. Some of the applications of the methods 
-we develop are drug response modeling in cancer patients or preclinical models (such as cell lines and 
-patient-derived xenografts), cancer subtype prediction, or any other clinically relevant outcome prediction
-that can be formulated as a regression, classification, survival, or cross-modality prediction problem. 
+Flexynesis: a flexible deep learning toolkit for interpretable multi-omics integration and clinical outcome prediction.
+
+Flexynesis is a deep learning suite for multi-omics data integration, designed for (pre-)clinical endpoint prediction. It supports diverse neural architectures — from fully connected networks and supervised variational autoencoders to graph convolutional and multi-triplet models — with flexible options for omics layer fusion, automated feature selection, and hyperparameter optimization.
+
+Built with interpretability in mind, Flexynesis incorporates integrated gradients (via Captum) for marker discovery, helping researchers move beyond black-box models.
+
+The framework is continuously benchmarked on public datasets, particularly in oncology, and has been applied to tasks such as drug response prediction in patients and preclinical models (cell lines, PDXs), cancer subtype classification, and clinically relevant outcomes in regression, classification, survival, and cross-modality settings.
 
 <p align="center">
   <img alt="workflow" src="https://github.com/BIMSBbioinfo/flexynesis/raw/main/img/graphical_abstract.jpg">
