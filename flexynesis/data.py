@@ -292,9 +292,9 @@ class DataImporter:
             
             # Filter based on both variance and NA percentage thresholds
             # Identify features that meet both criteria
-            df = df.loc[(feature_variances > feature_variances.quantile(self.variance_threshold)) & (na_percentages < self.na_threshold)]
+            df = df.loc[(feature_variances >= feature_variances.quantile(self.variance_threshold)) & (na_percentages < self.na_threshold)]
             # set selected features to True
-            log_df['selected'] = (log_df['variance'] > feature_variances.quantile(self.variance_threshold)) & (log_df['na_percent'] < self.na_threshold)
+            log_df['selected'] = (log_df['variance'] >= feature_variances.quantile(self.variance_threshold)) & (log_df['na_percent'] < self.na_threshold)
             feature_logs[key] = log_df
             
             # Step 3: Fill NA values with the median of the feature
