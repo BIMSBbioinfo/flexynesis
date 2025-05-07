@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flexynesis"
-version = "0.2.17"
+version = "0.2.18"
 license = {file = "LICENSE"}
 authors = [
     {name = "Bora Uyar", email = "bora.uyar@mdc-berlin.de"},
