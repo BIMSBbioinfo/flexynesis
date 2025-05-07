@@ -251,6 +251,115 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
         "average_aupr": average_aupr  # Added AUC-PR
     }
 
+from plotnine import ggplot, aes, geom_line, geom_abline, labs, theme_minimal
+from sklearn.metrics import roc_curve, roc_auc_score
+from sklearn.preprocessing import label_binarize
+from sklearn.metrics import precision_recall_curve, average_precision_score
+
+def plot_roc_curves(y_true, y_probs):
+    """
+    Plot ROC curves using plotnine for binary or multiclass classification.
+
+    Args:
+        y_true (array-like): True class labels.
+        y_probs (array-like): Predicted probabilities (n_samples, n_classes).
+    """
+    y_true = np.array(y_true)
+    n_classes = y_probs.shape[1]
+    plot_data = []
+
+    if n_classes == 2:
+        # Binary classification
+        fpr, tpr, _ = roc_curve(y_true, y_probs[:, 1])
+        auc_score = roc_auc_score(y_true, y_probs[:, 1])
+        plot_data.append(pd.DataFrame({'fpr': fpr, 'tpr': tpr, 'label': [f'Class 1 (AUC = {auc_score:.2f})'] * len(fpr)}))
+    else:
+        # Multiclass classification
+        classes = np.arange(n_classes)
+        y_true_bin = label_binarize(y_true, classes=classes)
+
+        for i in classes:
+            fpr, tpr, _ = roc_curve(y_true_bin[:, i], y_probs[:, i])
+            auc_score = roc_auc_score(y_true_bin[:, i], y_probs[:, i])
+            df = pd.DataFrame({
+                'fpr': fpr,
+                'tpr': tpr,
+                'label': [f'Class {i} (AUC = {auc_score:.2f})'] * len(fpr)
+            })
+            plot_data.append(df)
+
+    # Combine all data
+    all_data = pd.concat(plot_data, ignore_index=True)
+
+    # Plot using plotnine
+    roc_plot = (
+        ggplot(all_data, aes(x='fpr', y='tpr', color='label')) +
+        geom_line(size=1.2) +
+        geom_abline(intercept=0, slope=1, linetype='dashed', color='gray') +
+        labs(
+            title='ROC Curve',
+            x='False Positive Rate',
+            y='True Positive Rate'
+        ) +
+        theme_minimal()
+    )
+
+    return roc_plot
+
+def plot_pr_curves(y_true, y_probs):
+    """
+    Plot Precision-Recall (PR) curves using plotnine for binary or multiclass classification.
+
+    Args:
+        y_true (array-like): True class labels.
+        y_probs (array-like): Predicted probabilities (n_samples, n_classes).
+    """
+    y_true = np.array(y_true)
+    n_classes = y_probs.shape[1]
+    plot_data = []
+
+    if n_classes == 2:
+        # Binary classification
+        precision, recall, _ = precision_recall_curve(y_true, y_probs[:, 1])
+        aupr = average_precision_score(y_true, y_probs[:, 1])
+        plot_data.append(pd.DataFrame({
+            'recall': recall,
+            'precision': precision,
+            'label': [f'Class 1 (AUPR = {aupr:.2f})'] * len(recall)
+        }))
+    else:
+        # Multiclass classification (one-vs-rest)
+        classes = np.arange(n_classes)
+        y_true_bin = label_binarize(y_true, classes=classes)
+
+        for i in classes:
+            precision, recall, _ = precision_recall_curve(y_true_bin[:, i], y_probs[:, i])
+            aupr = average_precision_score(y_true_bin[:, i], y_probs[:, i])
+            df = pd.DataFrame({
+                'recall': recall,
+                'precision': precision,
+                'label': [f'Class {i} (AUPR = {aupr:.2f})'] * len(recall)
+            })
+            plot_data.append(df)
+
+    # Combine all data
+    all_data = pd.concat(plot_data, ignore_index=True)
+
+    # Plot using plotnine
+    pr_plot = (
+        ggplot(all_data, aes(x='recall', y='precision', color='label')) +
+        geom_line(size=1.2) +
+        labs(
+            title='Precision-Recall Curve',
+            x='Recall',
+            y='Precision'
+        ) +
+        theme_minimal()
+    )
+
+    return pr_plot
+
+
 def evaluate_regressor(y_true, y_pred):
     """
     Evaluate the performance of a regression model using mean squared error, R-squared, and Pearson correlation coefficient.
