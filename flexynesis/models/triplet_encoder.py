@@ -78,6 +78,15 @@ class MultiTripletNetwork(pl.LightningModule):
                 hidden_dim=int(self.input_dims[i] * self.config['hidden_dim_factor']),
                 output_dim=self.config['latent_dim']) for i in range(len(self.layers))])
         
+        if len(self.input_dims) > 1:
+            self.fusion_block = nn.Linear(
+                in_features=self.config['latent_dim'] * len(self.layers),
+                out_features=self.config['latent_dim']
+            )
+        else:
+            self.fusion_block = None
+
+        
         # define supervisor heads for both target and batch variables 
         self.MLPs = nn.ModuleDict() # using ModuleDict to store multiple MLPs
         for var in self.variables:
@@ -85,7 +94,7 @@ class MultiTripletNetwork(pl.LightningModule):
                 num_class = 1
             else:
                 num_class = len(np.unique(self.ann[var]))
-            self.MLPs[var] = MLP(input_dim=self.config['latent_dim'] * len(self.layers),
+            self.MLPs[var] = MLP(input_dim=self.config['latent_dim'],
                                  hidden_dim=self.config['supervisor_hidden_dim'],
                                  output_dim=num_class)
     
@@ -96,7 +105,9 @@ class MultiTripletNetwork(pl.LightningModule):
         for i, x in enumerate(x_list):
             embeddings_list.append(self.encoders[i](x))
         embeddings_concat = torch.cat(embeddings_list, dim=1)
-        return embeddings_concat
+        # if multiple embeddings, fuse them 
+        embeddings = self.fusion_block(embeddings_concat) if self.fusion_block else embeddings_concat
+        return embeddings
         
     def forward(self, anchor, positive, negative):
         """
