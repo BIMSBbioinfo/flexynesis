@@ -35,6 +35,14 @@ from sksurv.metrics import concordance_index_censored
 from lifelines import KaplanMeierFitter
 from lifelines.utils import concordance_index
 from lifelines import CoxPHFitter
+from lifelines.statistics import logrank_test, multivariate_logrank_test
+
+from plotnine import (
+    ggplot, aes, geom_step, labs, theme_minimal,
+    ggtitle, annotate, theme, element_text, 
+    scale_color_manual, scale_color_gradient, scale_color_brewer
+)
+
 
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
@@ -45,7 +53,6 @@ import community as community_louvain
 from sklearn.preprocessing import StandardScaler
 import ot 
 
-from plotnine import ggplot, aes, geom_point, scale_color_manual, scale_color_gradient, labs, theme_minimal
 
 def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical'):
     """
@@ -801,42 +808,59 @@ def print_summary_stats(dataset):
 
 def plot_kaplan_meier_curves(durations, events, categorical_variable):
     """
-    Plots Kaplan-Meier survival curves for different groups defined by a categorical variable.
-
-    Parameters:
-    - durations: An array-like object of survival times or durations.
-    - events: An array-like object indicating whether an event (e.g., death) occurred (1) or was censored (0).
-    - categorical_variable: An array-like object defining groups for plotting different survival curves.
+    Plots Kaplan-Meier survival curves using plotnine and annotates log-rank test p-values.
     """
-    # Initialize the Kaplan-Meier fitter
-    kmf = KaplanMeierFitter()
-
-    # Ensure data is in a pandas DataFrame for easy handling
+    # Prepare DataFrame
     data = pd.DataFrame({
         'Duration': durations,
         'Event': events,
         'Group': categorical_variable
     })
-    
-    # Plot survival curves for each category
-    plt.figure(figsize=(10, 6))
+
+    kmf = KaplanMeierFitter()
+    survival_curves = []
+
+    # Fit Kaplan-Meier for each group and collect survival data
+    for group in data['Group'].unique():
+        group_data = data[data['Group'] == group]
+        kmf.fit(group_data['Duration'], group_data['Event'], label=str(group))
+        surv_df = kmf.survival_function_.reset_index()
+        surv_df.columns = ['Time', 'Survival']
+        surv_df['Group'] = str(group)
+        survival_curves.append(surv_df)
+
+    # Combine all curves
+    plot_data = pd.concat(survival_curves)
+
+    # Compute log-rank p-value
     categories = data['Group'].unique()
-    for category in categories:
-        # Select data for the group
-        group_data = data[data['Group'] == category]
-        
-        # Fit the model
-        kmf.fit(durations=group_data['Duration'], event_observed=group_data['Event'], label=str(category))
-        
-        # Plot the survival curve for the group
-        kmf.plot_survival_function()
-    
-    plt.title('Kaplan-Meier Survival Curves by Group')
-    plt.xlabel('Time')
-    plt.ylabel('Survival Probability')
-    plt.legend(title='Group')
-    plt.grid(True)
-    plt.show()
+    p_text = ""
+    if len(categories) == 2:
+        group1 = data[data['Group'] == categories[0]]
+        group2 = data[data['Group'] == categories[1]]
+        result = logrank_test(group1['Duration'], group2['Duration'],
+                              event_observed_A=group1['Event'],
+                              event_observed_B=group2['Event'])
+        p_text = f"Log-rank p = {result.p_value:.4f}"
+    elif len(categories) > 2:
+        result = multivariate_logrank_test(data['Duration'], data['Group'], data['Event'])
+        p_text = f"Multivariate log-rank p = {result.p_value:.4f}"
+    else:
+        p_text = "Only one group — log-rank test not applicable"
+
+    # Create plot
+    p = (
+        ggplot(plot_data, aes(x='Time', y='Survival', color='Group'))
+        + geom_step()
+        + labs(x='Time', y='Survival Probability', color='Group')
+        + ggtitle('Kaplan-Meier Survival Curves by Group')
+        + annotate("text", x=plot_data['Time'].max() * 0.6, y=0.1, label=p_text, size=10, ha='left')
+        + theme_minimal()
+        + theme(legend_title=element_text(size=10, weight='bold'))
+        + scale_color_brewer(type='qual', palette='Set1')
+    )
+
+    return p
     
 
 def plot_hazard_ratios(cox_model):
