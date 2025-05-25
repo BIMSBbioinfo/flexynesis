@@ -154,7 +154,7 @@ class HyperparameterTuning:
     
         trainer = pl.Trainer(
             #deterministic = True, 
-            precision = '16-mixed', # mixed precision training 
+            #precision = '16-mixed', # mixed precision training 
             max_epochs=int(params['epochs']),
             gradient_clip_val=1.0,  
             gradient_clip_algorithm='norm',
