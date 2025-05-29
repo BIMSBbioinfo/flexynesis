@@ -57,63 +57,67 @@ from sklearn.preprocessing import StandardScaler
 import ot 
 
 
-def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical'):
+def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', title=None):
     """
-    Plots the first two dimensions of the transformed input matrix using plotnine (ggplot2-like API),
-    with points colored based on the provided labels. The transformation method can be either PCA or UMAP.
+    Plots the first two dimensions of the transformed input matrix using plotnine,
+    with PCA or UMAP, and includes explained variance for PCA.
 
     Args:
         matrix (np.array): Input data matrix (n_samples, n_features).
-        labels (list): List of labels (strings or integers).
-        method (str): Transformation method ('pca' or 'umap'). Default is 'pca'.
-        color_type (str): Type of the color scale ('categorical' or 'numerical'). Default is 'categorical'.
+        labels (list or array): Labels for coloring.
+        method (str): 'pca' or 'umap'.
+        color_type (str): 'categorical' or 'numerical'.
+        title (str or None): Optional title for the plot.
     """
-    # Compute transformation
-    if method.lower() == 'pca':
+    method = method.lower()
+
+    # Fit transformation
+    if method == 'pca':
         transformer = PCA(n_components=2)
-    elif method.lower() == 'umap':
+        transformed_matrix = transformer.fit_transform(matrix)
+        var_exp = transformer.explained_variance_ratio_ * 100
+        xlab = f"PC1 ({var_exp[0]:.1f}%)"
+        ylab = f"PC2 ({var_exp[1]:.1f}%)"
+        colnames = ['PC1', 'PC2']
+    elif method == 'umap':
         transformer = UMAP(n_components=2)
+        transformed_matrix = transformer.fit_transform(matrix)
+        xlab = "UMAP1"
+        ylab = "UMAP2"
+        colnames = ['UMAP1', 'UMAP2']
     else:
-        raise ValueError("Invalid method. Expected 'pca' or 'umap'")
-    
-    transformed_matrix = transformer.fit_transform(matrix)
-    
+        raise ValueError("Invalid method. Expected 'pca' or 'umap'.")
+
     # Create DataFrame
-    transformed_df = pd.DataFrame(transformed_matrix, columns=[f"{method.upper()}1", f"{method.upper()}2"])
-    transformed_df["Label"] = list(labels)
-    
-    # Handle color scaling
+    df = pd.DataFrame(transformed_matrix, columns=colnames)
+    df["Label"] = list(labels)
+
+    # Title
+    plot_title = title if title else f"{method.upper()} Scatter Plot"
+
+    # Plot
     if color_type == 'categorical':
-        transformed_df["Label"] = transformed_df["Label"].astype(str)  # Ensure categorical labels are strings
+        df["Label"] = df["Label"].astype(str)
         plot = (
-            ggplot(transformed_df, aes(x=f"{method.upper()}1", y=f"{method.upper()}2", color='Label')) +
+            ggplot(df, aes(x=colnames[0], y=colnames[1], color='Label')) +
             geom_point() +
-            labs(
-                title=f"{method.upper()} Scatter Plot with Colored Labels",
-                x=f"{method.upper()} Dimension 1",
-                y=f"{method.upper()} Dimension 2",
-                color="Labels"
-            ) +
+            labs(title=plot_title, x=xlab, y=ylab, color="Labels") +
             theme_minimal()
         )
     elif color_type == 'numerical':
-        transformed_df["Label"] = pd.to_numeric(transformed_df["Label"], errors='coerce')
+        df["Label"] = pd.to_numeric(df["Label"], errors='coerce')
         plot = (
-            ggplot(transformed_df, aes(x=f"{method.upper()}1", y=f"{method.upper()}2", color='Label')) +
+            ggplot(df, aes(x=colnames[0], y=colnames[1], color='Label')) +
             geom_point() +
             scale_color_gradient(low="blue", high="red") +
-            labs(
-                title=f"{method.upper()} Scatter Plot with Numerical Labels",
-                x=f"{method.upper()} Dimension 1",
-                y=f"{method.upper()} Dimension 2",
-                color="Label"
-            ) +
+            labs(title=plot_title, x=xlab, y=ylab, color="Label") +
             theme_minimal()
         )
     else:
-        raise ValueError("Invalid color_type specified. Must be 'numerical' or 'categorical'.")
-    
+        raise ValueError("Invalid color_type. Choose 'categorical' or 'numerical'.")
+
     return plot
+
 
 
 def plot_scatter(true_values, predicted_values):
