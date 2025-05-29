@@ -38,10 +38,13 @@ from lifelines import CoxPHFitter
 from lifelines.statistics import logrank_test, multivariate_logrank_test
 
 from plotnine import (
-    ggplot, aes, geom_step, labs, theme_minimal,
-    ggtitle, annotate, theme, element_text, 
-    scale_color_manual, scale_color_gradient, scale_color_brewer
+    ggplot, aes, geom_point, geom_smooth, geom_line, geom_abline, geom_step,
+    labs, ggtitle, annotate, theme_minimal, theme, element_text,
+    scale_color_manual, scale_color_gradient, scale_color_brewer,
+    geom_errorbarh, geom_text,
+    theme_bw, theme, element_blank, scale_y_discrete
 )
+    
 
 
 from sklearn.cluster import KMeans
@@ -112,7 +115,6 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical'):
     
     return plot
 
-from plotnine import ggplot, aes, geom_point, geom_smooth, labs, theme_minimal, annotate
 
 def plot_scatter(true_values, predicted_values):
     """
@@ -155,13 +157,45 @@ def plot_scatter(true_values, predicted_values):
     return plot
     
     
-def plot_boxplot(categorical_x, numerical_y, title_x = 'Categories', title_y = 'Values'):
+from scipy.stats import mannwhitneyu, kruskal
+
+def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Values'):
     df = pd.DataFrame({title_x: categorical_x, title_y: numerical_y})
-    # Create a boxplot
-    plt.figure(figsize=(10,6))
-    sns.boxplot(x=title_x, y=title_y, data=df, palette='Set2')
-    plt.show()
     
+    # Compute p-value
+    groups = df[title_x].unique()
+    if len(groups) == 2:
+        group1 = df[df[title_x] == groups[0]][title_y]
+        group2 = df[df[title_x] == groups[1]][title_y]
+        stat, p = mannwhitneyu(group1, group2, alternative='two-sided')
+        test_name = "Mann-Whitney U"
+    else:
+        group_data = [df[df[title_x] == group][title_y] for group in groups]
+        stat, p = kruskal(*group_data)
+        test_name = "Kruskal-Wallis"
+
+    # Create a boxplot
+    plt.figure(figsize=(10, 6))
+    sns.boxplot(x=title_x, y=title_y, hue=title_x, data=df, palette='Set2', legend=False)
+    
+    # Plot labels and title
+    #plt.title(f'{title_y} by {title_x}')
+    plt.xlabel(title_x)
+    plt.ylabel(title_y)
+
+    # Annotate p-value on top-left
+    plt.text(
+        x=-0.4,
+        y=plt.ylim()[1],
+        s=f'{test_name} p = {p:.3e}',
+        verticalalignment='top',
+        horizontalalignment='left',
+        fontsize=12,
+        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', edgecolor='gray')
+    )
+
+    plt.tight_layout()
+    plt.show()    
     
 # given a vector of numerical values which may contain 
 # NAN values, return a binary grouping based on median values 
@@ -258,7 +292,6 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
         "average_aupr": average_aupr  # Added AUC-PR
     }
 
-from plotnine import ggplot, aes, geom_line, geom_abline, labs, theme_minimal
 from sklearn.metrics import roc_curve, roc_auc_score
 from sklearn.preprocessing import label_binarize
 from sklearn.metrics import precision_recall_curve, average_precision_score
@@ -865,44 +898,59 @@ def plot_kaplan_meier_curves(durations, events, categorical_variable):
 
 def plot_hazard_ratios(cox_model):
     """
-    Plots the sorted log hazard ratios from a fitted Cox Proportional Hazards model,
-    sorted by their p-values and annotated with stars to indicate levels of
-    statistical significance.
-
-    Parameters:
-    - cox_model: A fitted CoxPH model from the lifelines package.
+    Plots the sorted log hazard ratios using plotnine from a fitted Cox Proportional Hazards model,
+    with 95% CI and statistical significance annotations. Displays the C-index in the top-right.
     """
-    # Extract the coefficients (log hazard ratios), their confidence intervals, and p-values
-    coef_summary = cox_model.summary[['coef', 'coef lower 95%', 'coef upper 95%', 'p']]
-    
-    # Sort the DataFrame by the p-values
-    coef_summary_sorted = coef_summary.sort_values(by='p')
-    
-    # Calculate the error bars
-    errors = np.abs(coef_summary_sorted[['coef lower 95%', 'coef upper 95%']].subtract(coef_summary_sorted['coef'], axis=0).values.T)
-    
-    # Plot
-    fig, ax = plt.subplots(figsize=(10, 6))
-    y_positions = np.arange(len(coef_summary_sorted))
-    ax.errorbar(coef_summary_sorted['coef'], y_positions, xerr=errors, fmt='o', color='skyblue', capsize=4)
-    ax.set_yticks(y_positions)
-    ax.set_yticklabels(coef_summary_sorted.index)
-    ax.axvline(x=0, color='grey', linestyle='--')
-    
-    p_thresholds = [(0.0001, '***'), (0.001, '**'), (0.05, '*'), (0.1, '.')]
-    annotations = ['' if p > 0.05 else next(stars for threshold, stars in p_thresholds if p < threshold) 
-                   for p in coef_summary_sorted['p']]
+    # Extract summary
+    coef_summary = cox_model.summary[['coef', 'coef lower 95%', 'coef upper 95%', 'p']].copy()
+    coef_summary.columns = ['coef', 'coef_lower_95', 'coef_upper_95', 'p']
+    coef_summary['variable'] = coef_summary.index
 
-    for i, annotation in enumerate(annotations):
-        ax.text(coef_summary_sorted['coef'][i], y_positions[i], f'  {annotation}', verticalalignment='center')
+    # Sort by p-value
+    coef_summary_sorted = coef_summary.sort_values('p').reset_index(drop=True)
+
+    # Add significance stars
+    def significance(p):
+        if p < 0.0001:
+            return '***'
+        elif p < 0.001:
+            return '**'
+        elif p < 0.05:
+            return '*'
+        elif p < 0.1:
+            return '.'
+        else:
+            return ''
     
-    ax.invert_yaxis()  # Invert y-axis so the most significant variables are at the top
-    plt.xlabel('Log Hazard Ratio')
-    plt.title('Log Hazard Ratios Sorted by P-Value with 95% CI')
-    plt.grid(axis='x', linestyle='--', linewidth=0.7)
-    plt.tight_layout()
-    plt.show()
-    
+    coef_summary_sorted['stars'] = coef_summary_sorted['p'].apply(significance)
+
+    # Reverse the order for top-to-bottom importance
+    coef_summary_sorted['variable'] = pd.Categorical(
+        coef_summary_sorted['variable'],
+        categories=coef_summary_sorted['variable'][::-1],
+        ordered=True
+    )
+    c_index = cox_model.concordance_index_
+
+    # Plot
+    p = (
+        ggplot(coef_summary_sorted, aes(x='coef', y='variable'))
+        + geom_errorbarh(
+            aes(xmin='coef_lower_95', xmax='coef_upper_95'),
+            height=0.2, color='skyblue'
+        )
+        + geom_point(color='skyblue', size=3)
+        + geom_text(aes(label='stars'), nudge_y=0.1, size=10)
+        + annotate('vline', xintercept=0, linetype='dashed', color='gray')
+        + labs(x='Log Hazard Ratio', y='', title=f'Log Hazard Ratios Sorted by P-Value with 95% CI\n Model C-index: {c_index:.2f}')
+        + theme_bw()
+        + theme(
+            axis_text_y=element_text(size=10),
+            axis_text_x=element_text(size=10),
+            plot_title=element_text(weight='bold'),
+        )
+    )
+    return p    
 
 def build_cox_model(df, duration_col, event_col):
     """
@@ -936,8 +984,6 @@ def build_cox_model(df, duration_col, event_col):
         # Report removed features
         if low_variance_features:
             print("Removed low variance features due to conditioning on event:", low_variance_features)
-        else:
-            print("No low variance features were removed based on event conditioning.")
         return df_filtered    
     
     # remove uninformative features 
