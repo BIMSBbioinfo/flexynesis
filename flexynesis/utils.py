@@ -163,7 +163,7 @@ def plot_scatter(true_values, predicted_values):
     
 from scipy.stats import mannwhitneyu, kruskal
 
-def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Values'):
+def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Values', figsize=(10, 6)):
     df = pd.DataFrame({title_x: categorical_x, title_y: numerical_y})
     
     # Compute p-value
@@ -178,16 +178,14 @@ def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Valu
         stat, p = kruskal(*group_data)
         test_name = "Kruskal-Wallis"
 
-    # Create a boxplot
-    plt.figure(figsize=(10, 6))
+    # Create a boxplot with jittered points
+    plt.figure(figsize=figsize)
     sns.boxplot(x=title_x, y=title_y, hue=title_x, data=df, palette='Set2', legend=False)
-    
-    # Plot labels and title
-    #plt.title(f'{title_y} by {title_x}')
+    sns.stripplot(x=title_x, y=title_y, data=df, color='black', size=6, jitter=True, dodge=True, alpha=0.5)
+
+    # Labels and p-value annotation
     plt.xlabel(title_x)
     plt.ylabel(title_y)
-
-    # Annotate p-value on top-left
     plt.text(
         x=-0.4,
         y=plt.ylim()[1],
@@ -199,7 +197,7 @@ def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Valu
     )
 
     plt.tight_layout()
-    plt.show()    
+    plt.show()
     
 # given a vector of numerical values which may contain 
 # NAN values, return a binary grouping based on median values 
@@ -956,50 +954,66 @@ def plot_hazard_ratios(cox_model):
     )
     return p    
 
-def build_cox_model(df, duration_col, event_col):
+def build_cox_model(df, duration_col, event_col, crossval=False, n_splits=5, random_state=42):
     """
-    Fits a Cox Proportional Hazards model to the data.
+    Fits a Cox Proportional Hazards model to the data with optional cross-validation.
 
     Parameters:
-    - df: Pandas DataFrame containing the clinical variables, predicted risk scores,
-          durations, and event indicators.
-    - duration_col: The name of the column in df that contains the survival times.
-    - event_col: The name of the column in df that contains the event occurrence indicator (1 if event occurred, 0 otherwise).
+    - df: Pandas DataFrame containing features, survival times, and event indicators.
+    - duration_col: Column name for survival times.
+    - event_col: Column name for event indicator (1 = event occurred, 0 = censored).
+    - crossval: If True, performs K-fold cross-validation and returns average C-index.
+    - n_splits: Number of folds for cross-validation.
+    - random_state: Random seed for reproducibility.
 
     Returns:
-    - cox_model: Fitted CoxPH model.
+    - cox_model: Fitted CoxPH model on the full data.
+    - mean_c_index (optional): Mean C-index from cross-validation if crossval=True.
     """
-    
+
     def remove_low_variance_survival_features(df, duration_col, event_col, threshold=0.01):
         events = df[event_col].astype(bool)
         low_variance_features = []
 
         for feature in df.drop(columns=[duration_col, event_col]).columns:
-            # Calculate variance within each group (event occurred and not occurred)
             variance_when_event = df.loc[events, feature].var()
             variance_when_no_event = df.loc[~events, feature].var()
-
-            # If variance in both groups is below the threshold, mark for removal
             if variance_when_event < threshold or variance_when_no_event < threshold:
                 low_variance_features.append(feature)
-    
-        # Remove identified low variance features
+
         df_filtered = df.drop(columns=low_variance_features)
-        # Report removed features
         if low_variance_features:
-            print("Removed low variance features due to conditioning on event:", low_variance_features)
-        return df_filtered    
-    
-    # remove uninformative features 
+            print("Removed low variance features:", low_variance_features)
+        return df_filtered
+
     df = remove_low_variance_survival_features(df, duration_col, event_col)
-                                      
-    # Initialize the Cox Proportional Hazards model
-    cox_model = CoxPHFitter()
 
-    # Fit the model
-    cox_model.fit(df, duration_col=duration_col, event_col=event_col)
+    if crossval:
+        kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+        c_indices = []
 
-    return cox_model
+        for train_idx, test_idx in kf.split(df):
+            train_df = df.iloc[train_idx]
+            test_df = df.iloc[test_idx]
+
+            model = CoxPHFitter()
+            model.fit(train_df, duration_col=duration_col, event_col=event_col)
+
+            # Compute risk scores on test set and C-index
+            risk_scores = model.predict_partial_hazard(test_df)
+            ci = concordance_index(test_df[duration_col], -risk_scores, test_df[event_col])
+            c_indices.append(ci)
+
+        mean_c_index = np.mean(c_indices)
+        print(f"Cross-validated C-index (mean over {n_splits} folds): {mean_c_index:.3f}")
+    else:
+        mean_c_index = None
+
+    # Fit on full data
+    final_model = CoxPHFitter()
+    final_model.fit(df, duration_col=duration_col, event_col=event_col)
+
+    return final_model
 
 
 def k_means_clustering(data, k):
