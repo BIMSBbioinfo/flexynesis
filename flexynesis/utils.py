@@ -45,8 +45,6 @@ from plotnine import (
     theme_bw, theme, element_blank, scale_y_discrete
 )
     
-
-
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import euclidean_distances
@@ -163,7 +161,7 @@ def plot_scatter(true_values, predicted_values):
     
 from scipy.stats import mannwhitneyu, kruskal
 
-def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Values', figsize=(10, 6)):
+def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Values', figsize=(10, 6), jittersize = 4):
     df = pd.DataFrame({title_x: categorical_x, title_y: numerical_y})
     
     # Compute p-value
@@ -180,8 +178,8 @@ def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Valu
 
     # Create a boxplot with jittered points
     plt.figure(figsize=figsize)
-    sns.boxplot(x=title_x, y=title_y, hue=title_x, data=df, palette='Set2', legend=False)
-    sns.stripplot(x=title_x, y=title_y, data=df, color='black', size=6, jitter=True, dodge=True, alpha=0.5)
+    sns.boxplot(x=title_x, y=title_y,  hue=title_x, data=df, palette='Set2', legend=False, fill= False)
+    sns.stripplot(x=title_x, y=title_y, data=df, color='black', size=jittersize, jitter=True, dodge=True, alpha=0.4)
 
     # Labels and p-value annotation
     plt.xlabel(title_x)
@@ -876,7 +874,7 @@ def plot_kaplan_meier_curves(durations, events, categorical_variable):
         result = logrank_test(group1['Duration'], group2['Duration'],
                               event_observed_A=group1['Event'],
                               event_observed_B=group2['Event'])
-        p_text = f"Log-rank p = {result.p_value:.4f}"
+        p_text = f"Log-rank p = {result.p_value:.2e}"
     elif len(categories) > 2:
         result = multivariate_logrank_test(data['Duration'], data['Group'], data['Event'])
         p_text = f"Multivariate log-rank p = {result.p_value:.4f}"
@@ -889,7 +887,7 @@ def plot_kaplan_meier_curves(durations, events, categorical_variable):
         + geom_step()
         + labs(x='Time', y='Survival Probability', color='Group')
         + ggtitle('Kaplan-Meier Survival Curves by Group')
-        + annotate("text", x=plot_data['Time'].max() * 0.6, y=0.1, label=p_text, size=10, ha='left')
+        + annotate("text", x=0.1, y=0.1, label=p_text, size=10, ha='left')
         + theme_minimal()
         + theme(legend_title=element_text(size=10, weight='bold'))
         + scale_color_brewer(type='qual', palette='Set1')
@@ -897,7 +895,44 @@ def plot_kaplan_meier_curves(durations, events, categorical_variable):
 
     return p
     
+def find_optimal_cutoff(expression, time, event, min_percent=0.1, max_percent=0.9, step=0.01):
+    """
+    Find the optimal cutoff in a continuous variable (e.g., gene expression)
+    that best separates survival curves based on log-rank test.
+    
+    Parameters:
+    - expression: pd.Series (continuous values)
+    - time: survival time vector (aligned)
+    - event: event indicator vector (aligned)
+    - min_percent, max_percent: range of quantiles to search within
+    - step: fraction of quantile steps to test
 
+    Returns:
+    - best_cutoff: value of expression that best separates survival
+    - best_p: log-rank test p-value at that split
+    """
+    quantiles = np.arange(min_percent, max_percent, step)
+    cutoffs = expression.quantile(quantiles).unique()
+    
+    best_p = 1
+    best_cutoff = None
+
+    for cutoff in cutoffs:
+        group = expression > cutoff
+        if group.nunique() < 2:
+            continue
+        results = logrank_test(
+            time[group], time[~group],
+            event[group], event[~group],
+            alpha=0.99
+        )
+        if results.p_value < best_p:
+            best_p = results.p_value
+            best_cutoff = cutoff
+
+    return best_cutoff, best_p
+
+    
 def plot_hazard_ratios(cox_model):
     """
     Plots the sorted log hazard ratios using plotnine from a fitted Cox Proportional Hazards model,
