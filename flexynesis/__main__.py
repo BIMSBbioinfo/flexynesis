@@ -8,6 +8,7 @@ import flexynesis
 from flexynesis.models import *
 from lightning.pytorch.callbacks import EarlyStopping
 from .data import STRING, MultiOmicDatasetNW
+import tracemalloc, psutil
 
 def main():
     """
@@ -128,7 +129,7 @@ def main():
                                   "you must provide at least one of --target_variables, ",
                                   "or survival variables (--surv_event_var and --surv_time_var)"]))
 
-    # 3. Check for compatibility of fusion_type with GNN
+    # 3. Check for compatibility of fusion_type with CrossModalPred
     if args.fusion_type == "early":
         if args.model_class == 'CrossModalPred': 
             parser.error("The 'CrossModalPred' model cannot be used with early fusion type. "
@@ -241,17 +242,23 @@ def main():
                                             top_percentile= args.features_top_percentile,
                                             processed_dir = '_'.join(['processed', args.prefix]),
                                             downsample = args.subsample)
+    # Start peak memory tracking
+    tracemalloc.start()
+    process = psutil.Process(os.getpid())
     t1 = time.time() # measure the time it takes to import data 
     train_dataset, test_dataset = data_importer.import_data()
     data_import_time = time.time() - t1
+    data_import_ram = process.memory_info().rss
     
+
     if args.model_class in ["RandomForest", "SVM", "XGBoost"]:
         if args.target_variables:
             var =  args.target_variables.strip().split(',')[0]
             print(f"Training {args.model_class} on variable: {var}")
-            metrics = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, variable_name=var,  
+            metrics, predictions = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, variable_name=var,  
                                                     methods=[args.model_class], n_folds=5, n_jobs=args.threads)
             metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
+            predictions.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
             print(f"{args.model_class} evaluation complete. Results saved.")
             # we skip everything related to deep learning models here
             sys.exit(0) 
@@ -261,12 +268,13 @@ def main():
     if args.model_class == "RandomSurvivalForest":
         if args.surv_event_var and args.surv_time_var:
             print(f"Training {args.model_class} on survival variables: {args.surv_event_var} and {args.surv_time_var}")
-            metrics = flexynesis.evaluate_baseline_survival_performance(train_dataset, test_dataset,
+            metrics, predictions = flexynesis.evaluate_baseline_survival_performance(train_dataset, test_dataset,
                                                               args.surv_time_var, 
                                                                  args.surv_event_var, 
                                                                  n_folds = 5,
                                                                  n_jobs = int(args.threads))
             metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
+            predictions.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
             print(f"{args.model_class} evaluation complete. Results saved.")
             # we skip everything related to deep learning models here
             sys.exit(0) 
@@ -315,7 +323,9 @@ def main():
     t1 = time.time() # measure the time it takes to train the model
     model, best_params = tuner.perform_tuning(hpo_patience = args.hpo_patience)
     hpo_time = time.time() - t1
-        
+    hpo_system_ram = process.memory_info().rss
+
+    
     # if fine-tuning is enabled; fine tune the model on a portion of test samples 
     if args.finetuning_samples > 0:
         finetuneSampleN = args.finetuning_samples
@@ -365,8 +375,8 @@ def main():
                 df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance', explainer, 'csv'])), header=True, index=False)
 
         # print known/predicted labels 
-        predicted_labels = pd.concat([flexynesis.get_predicted_labels(model.predict(train_dataset), train_dataset, 'train'),
-                                      flexynesis.get_predicted_labels(model.predict(test_dataset), test_dataset, 'test')], 
+        predicted_labels = pd.concat([flexynesis.get_predicted_labels(model.predict(train_dataset), train_dataset, 'train', args.model_class),
+                                      flexynesis.get_predicted_labels(model.predict(test_dataset), test_dataset, 'test', args.model_class)], 
                                     ignore_index=True)
         predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
         
@@ -400,11 +410,13 @@ def main():
         test = test_dataset.multiomic_dataset if args.model_class == 'GNN' else test_dataset
         
         if var != model.surv_event_var: 
-            metrics = flexynesis.evaluate_baseline_performance(train, test, 
+            metrics, predictions = flexynesis.evaluate_baseline_performance(train, test, 
                                                                variable_name = var, 
                                                                methods = ['RandomForest', 'SVM', 'XGBoost'],
                                                                n_folds = 5,
                                                                n_jobs = int(args.threads))
+            predictions.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'baseline.predicted_labels.csv'])), header=True, index=False)
+        
         if model.surv_event_var and model.surv_time_var:
             print("[INFO] Computing off-the-shelf method performance on survival variable:",model.surv_time_var)
             metrics_baseline_survival = flexynesis.evaluate_baseline_survival_performance(train, test, 
@@ -419,9 +431,14 @@ def main():
     
     # save the trained model in file
     torch.save(model, os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.pth'])))
-    print(f"[INFO] Time spent in HPO: {hpo_time:.2f} sec")
     print(f"[INFO] Time spent in data import: {data_import_time:.2f} sec")
-        
+    print(f"[INFO] RAM after data import: {data_import_ram / (1024**2):.2f} MB")
+    print(f"[INFO] Time spent in HPO: {hpo_time:.2f} sec")
+    if torch.cuda.is_available():
+        peak_mem_mb = torch.cuda.max_memory_allocated() / (1024**2)
+        print(f"[INFO] Peak GPU RAM allocated: {peak_mem_mb:.2f} MB")
+    print(f"[INFO] CPU RAM after HPO: {hpo_system_ram / (1024**2):.2f} MB")
+    
 if __name__ == "__main__":
     main()
     print("[INFO] Finished the analysis!") 

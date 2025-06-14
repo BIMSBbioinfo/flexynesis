@@ -19,7 +19,10 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report, roc_auc_score, average_precision_score
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
+from sklearn.utils import resample
+
 from scipy.stats import pearsonr, linregress
+
 
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.svm import SVC, SVR
@@ -231,6 +234,23 @@ def evaluate_survival(outputs, durations, events):
     # reverse the directionality of risk_scores to make it compatible with lifelines' assumption
     c_index = concordance_index(durations, -outputs, events)
     return {'cindex': c_index}
+
+def generate_bootstrap_indices(n, n_bootstraps=1000, seed=42):
+    rng = np.random.default_rng(seed)
+    return [rng.choice(n, size=n, replace=True) for _ in range(n_bootstraps)]
+
+# bootstrapping function for regression/classification tasks 
+def bootstrap_metric(y_true, y_pred, indices_list, metric_fn, ci = 95, **kwargs):
+    scores = []
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+
+    for idx in indices_list:
+        score = metric_fn(y_true[idx], y_pred[idx], **kwargs)
+        scores.append(score)
+    lower = np.percentile(scores, (100 - ci) / 2)
+    upper = np.percentile(scores, 100 - (100 - ci) / 2)
+    return scores, (np.mean(scores), lower, upper)
 
 def evaluate_classifier(y_true, y_probs, print_report=False):
     """
@@ -468,7 +488,7 @@ def evaluate_wrapper(method, y_pred_dict, dataset, surv_event_var = None, surv_t
     # Convert the list of metrics to a DataFrame
     return pd.DataFrame(metrics_list)
 
-def get_predicted_labels(y_pred_dict, dataset, split):
+def get_predicted_labels(y_pred_dict, dataset, split, method_name):
     """
     Generate a DataFrame with class probabilities and associated metadata.
 
@@ -476,6 +496,7 @@ def get_predicted_labels(y_pred_dict, dataset, split):
         y_pred_dict (dict): Dictionary containing predicted probabilities for each variable.
         dataset: Dataset object containing variable types, label mappings, and sample information.
         split (str): Split identifier (e.g., 'train', 'test', or 'val').
+        method_name: Name of the method used for prediction task
 
     Returns:
         pd.DataFrame: A DataFrame containing:
@@ -486,6 +507,7 @@ def get_predicted_labels(y_pred_dict, dataset, split):
             - known label (y_true)
             - predicted label (argmax of the probabilities)
             - train/test split
+            - method_name 
     """
     dfs = []
 
@@ -517,7 +539,8 @@ def get_predicted_labels(y_pred_dict, dataset, split):
                         'probability': probabilities[i, j],
                         'known_label': y_true[i],
                         'predicted_label': y_pred[i],
-                        'split': split
+                        'split': split,
+                        'method': method_name
                     })
         else:
             # For numerical variables, set class_label and probability to NA
@@ -531,7 +554,8 @@ def get_predicted_labels(y_pred_dict, dataset, split):
                     'probability': np.nan,
                     'known_label': y_true[i],
                     'predicted_label': y_pred[i],
-                    'split': split
+                    'split': split,
+                    'method': method_name
                 })
 
     # Combine all rows into a DataFrame
@@ -574,7 +598,7 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
             X = pca_model.transform(X)
             print(f"PCA applied: Transformed to {n_components} components")
 
-        return X, y
+        return X, y, np.where(valid_indices)[0]
 
     # Initialize PCA model if PCA is used
     pca_model = PCA(n_components=n_components) if use_pca else None
@@ -584,13 +608,14 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
 
     # Cross-Validation and Training
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
-    X_train, y_train = prepare_data(train_dataset, pca_model=pca_model, fit_pca=True)
+    X_train, y_train, train_indices = prepare_data(train_dataset, pca_model=pca_model, fit_pca=True)
     print("Train:", X_train.shape)
-    X_test, y_test = prepare_data(test_dataset, pca_model=pca_model, fit_pca=False)
+    X_test, y_test, test_indices = prepare_data(test_dataset, pca_model=pca_model, fit_pca=False)
     print("Test:", X_test.shape)
 
     metrics_list = []
-
+    predictions = []  # Collect all predictions
+    
     for method in methods:
         if variable_type == 'categorical':
             if method == 'RandomForest':
@@ -622,10 +647,16 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
         if variable_type == 'categorical':
             y_probs = best_model.predict_proba(X_test)
             metrics = evaluate_classifier(y_test, y_probs, print_report=True)
+            y_pred_dict = {variable_name: y_probs}
         elif variable_type == 'numerical':
             y_pred = best_model.predict(X_test)
             metrics = evaluate_regressor(y_test, y_pred)
+            y_pred_dict = {variable_name: y_pred}
 
+        # need to get test indices to only consider samples with labels
+        df_preds = get_predicted_labels(y_pred_dict, test_dataset.subset(test_indices), 'test', method)
+        predictions.append(df_preds)
+            
         for metric, value in metrics.items():
             metrics_list.append({
                 'method': method + ('Classifier' if variable_type == 'categorical' else 'Regressor'),
@@ -635,7 +666,9 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
                 'value': value
             })
 
-    return pd.DataFrame(metrics_list)
+    predictions = pd.concat(predictions, ignore_index=True)
+    
+    return pd.DataFrame(metrics_list), predictions
 
 
 
@@ -675,11 +708,11 @@ def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration
         valid_indices = ~np.isnan(durations) & ~np.isnan(events)
         X = X[valid_indices]
         y = y[valid_indices]
-        return X, y
+        return X, y, np.where(valid_indices)[0]
 
     # Prepare train and test data
-    X_train, y_train = prepare_data(train_dataset, duration_col, event_col)
-    X_test, y_test = prepare_data(test_dataset, duration_col, event_col)
+    X_train, y_train, train_indices = prepare_data(train_dataset, duration_col, event_col)
+    X_test, y_test, test_indices = prepare_data(test_dataset, duration_col, event_col)
 
     # Initialize Random Survival Forest
     rsf = RandomSurvivalForest(n_estimators=100, max_depth=5, min_samples_split=10,
@@ -708,6 +741,9 @@ def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration
     test_c_index = concordance_index_censored(y_test['Event'], y_test['Time'], test_prediction)
     print(f"[INFO] C-index on test data: {test_c_index[0]}")
 
+    
+    # need to get test indices to only consider samples with labels
+    predicted_labels = get_predicted_labels({event_col: test_prediction}, test_dataset.subset(test_indices), 'test', 'RandomSurvivalForest')
     # Reporting
     metrics_list = [{
         'method': 'RandomSurvivalForest',
@@ -717,7 +753,7 @@ def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration
         'value': test_c_index[0]
     }]
     
-    return pd.DataFrame(metrics_list)
+    return pd.DataFrame(metrics_list), predicted_labels
 
 def remove_batch_associated_variables(data, variable_types, target_dict, batch_dict = None, mi_threshold=0.1):
     """
@@ -877,7 +913,7 @@ def plot_kaplan_meier_curves(durations, events, categorical_variable):
         p_text = f"Log-rank p = {result.p_value:.2e}"
     elif len(categories) > 2:
         result = multivariate_logrank_test(data['Duration'], data['Group'], data['Event'])
-        p_text = f"Multivariate log-rank p = {result.p_value:.4f}"
+        p_text = f"Multivariate log-rank p = {result.p_value:.2e}"
     else:
         p_text = "Only one group — log-rank test not applicable"
 
