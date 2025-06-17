@@ -210,28 +210,29 @@ def evaluate_survival(outputs, durations, events):
     Computes the concordance index (c-index) for survival predictions.
 
     Parameters:
-    - durations: A numpy array or a torch tensor of true survival times or durations.
-    - events: A numpy array or a torch tensor indicating whether an event (e.g., death) occurred.
-    - risk_scores: Predicted risk scores from the model. Higher scores should indicate higher risk of event.
+    - outputs: Predicted risk scores (torch.Tensor or np.array).
+    - durations: True survival times or durations (torch.Tensor or np.array).
+    - events: Event indicators (1=event, 0=censored) (torch.Tensor or np.array).
 
     Returns:
     - A dictionary containing the c-index.
     """
-    valid_indices = ~torch.isnan(durations) & ~torch.isnan(events)
-    if valid_indices.sum() > 0:
-        outputs = outputs[valid_indices]
-        events = events[valid_indices]
-        durations = durations[valid_indices]
-    # Ensure inputs are in the correct format (numpy arrays)
+    # Ensure all inputs are NumPy arrays
     if isinstance(durations, torch.Tensor):
         durations = durations.numpy()
     if isinstance(events, torch.Tensor):
         events = events.numpy()
     if isinstance(outputs, torch.Tensor):
         outputs = outputs.numpy()
-    
-    # Compute the c-index
-    # reverse the directionality of risk_scores to make it compatible with lifelines' assumption
+
+    # Remove entries with NaNs
+    valid_mask = ~np.isnan(durations) & ~np.isnan(events)
+    if valid_mask.sum() > 0:
+        durations = durations[valid_mask]
+        events = events[valid_mask]
+        outputs = outputs[valid_mask]
+
+    # Compute concordance index (lifelines expects higher risk → lower survival)
     c_index = concordance_index(durations, -outputs, events)
     return {'cindex': c_index}
 
