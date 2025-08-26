@@ -1,0 +1,34 @@
+site_name: Flexynesis Documentation
+theme:
+  name: readthedocs #mkdocs
+  highlightjs: true
+  hljs_languages:
+    - yaml
+
+nav:
+  - Home: index.md
+  - Getting Started: getting_started.md
+  - Command Line Interface: commandline.md
+  - Using Flexynesis on usegalaxy.eu: running_on_galaxy.md
+  - API: 
+    - Model Classes: 
+      - DirectPred: models.direct_pred.md
+      - GNN: models.gnn.md 
+      - Supervised VAE: models.supervised_vae.md 
+      - MultiTripletNetwork: models.triplet_encoder.md
+      - CrossModalPred: models.crossmodel_pred.md 
+    - Network modules: modules.md
+    - Data Importer: data.md 
+    - Feature Selection: feature_selection.md
+    - Training: main.md
+    - Utility Functions: utils.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          selection:
+            docstring_style: "google"
+          rendering:
+            show_source: true
