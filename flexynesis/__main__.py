@@ -10,6 +10,7 @@ from flexynesis.models import *
 from lightning.pytorch.callbacks import EarlyStopping
 from .data import STRING, MultiOmicDatasetNW
 import tracemalloc, psutil
+import json
 
 def main():
     """
@@ -439,6 +440,33 @@ def main():
         torch.save(model, os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.pth'])))
     else:
         save_file(model.state_dict(), os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.safetensors'])))
+        # save model config as JSON
+        config = {
+            "model_class": model.__class__.__name__,
+            "model_module": model.__class__.__module__,
+        }
+
+        # Common attributes to save
+        common_attrs = [
+            'input_dims', 'layers',
+            'device_type', 'target_variables',
+            'surv_event_var', 'surv_time_var',
+            'config', 'current_epoch'
+        ]
+
+        for attr in common_attrs:
+            if hasattr(model, attr):
+                config[attr] = getattr(model, attr)
+
+        config['num_layers'] = len(model.layers)
+        # Model-specific configurations
+        if hasattr(model, 'config'):
+            model_specific_config = model.config
+            config.update(model_specific_config)
+
+        with open(os.path.join(args.outdir, '.'.join([args.prefix, 'final_model_config.json'])), 'w') as f:
+            json.dump(config, f, indent=2, default=str)
+
     print(f"[INFO] Time spent in data import: {data_import_time:.2f} sec")
     print(f"[INFO] RAM after data import: {data_import_ram / (1024**2):.2f} MB")
     print(f"[INFO] Time spent in HPO: {hpo_time:.2f} sec")
