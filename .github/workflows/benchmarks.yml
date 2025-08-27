@@ -23,30 +23,9 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Set up Miniconda
-      uses: conda-incubator/setup-miniconda@v3
-      with:
-        auto-update-conda: true
-        python-version: '3.11'
-
-    - name: Cache Conda environment
-      uses: actions/cache@v4
-      with:
-        path: ~/miniconda/envs
-        key: ${{ runner.os }}-conda-${{ hashFiles('spec-file.txt', 'pyproject.toml', 'setup.cfg', 'setup.py') }}
-        restore-keys: |
-          ${{ runner.os }}-conda-
-
-    - name: Create environment with dependencies
-      shell: bash -l {0}
-      run: |
-        conda create --name my_env --file spec-file.txt
-        conda activate my_env
-
     - name: Install my package from source
       shell: bash -l {0}
       run: |
-        conda activate my_env
         pip install -e .
 
     - name: Download dataset1
