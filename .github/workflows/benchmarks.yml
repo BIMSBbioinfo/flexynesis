@@ -33,7 +33,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/miniconda/envs
-        key: ${{ runner.os }}-conda-${{ hashFiles('spec-file.txt') }}
+        key: ${{ runner.os }}-conda-${{ hashFiles('spec-file.txt', 'pyproject.toml', 'setup.cfg', 'setup.py') }}
         restore-keys: |
           ${{ runner.os }}-conda-
 
