@@ -4,7 +4,7 @@
 </p>
 
 [![Downloads](https://static.pepy.tech/badge/flexynesis)](https://pepy.tech/project/flexynesis)
-![benchmarks](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/benchmarks.yml/badge.svg)
+![benchmarks](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/models.yml/badge.svg)
 ![tutorials](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tutorials.yml/badge.svg)
 
 # flexynesis
