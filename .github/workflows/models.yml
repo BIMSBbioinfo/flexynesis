@@ -1,3 +1,4 @@
+name: Check Models 
 on:
   push:
     branches:
