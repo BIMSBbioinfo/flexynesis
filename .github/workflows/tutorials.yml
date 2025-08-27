@@ -19,42 +19,19 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Set up Miniconda
-      uses: conda-incubator/setup-miniconda@v3
-      with:
-        auto-update-conda: true
-        python-version: '3.11'
-
-    - name: Cache Conda environment
-      uses: actions/cache@v4
-      with:
-        path: ~/miniconda/envs
-        key: ${{ runner.os }}-conda-${{ hashFiles('spec-file.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-conda-
-
-    - name: Create environment with dependencies
-      shell: bash -l {0}
-      run: |
-        conda create --name my_env --file spec-file.txt
-        conda activate my_env
-
     - name: Install my package from source
       shell: bash -l {0}
       run: |
-        conda activate my_env
         pip install -e .
     
     - name: Install Jupyter Kernel
       shell: bash -l {0}
       run: |
-        conda activate my_env
         python -m ipykernel install --user --name my_env_kernel --display-name "my_env_kernel"
 
     - name: Compile brca_subtypes.ipynb
       shell: bash -l {0}
       run: |
-        conda activate my_env
         notebook='examples/tutorials/brca_subtypes'
         papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
         
@@ -62,13 +39,11 @@ jobs:
     - name: Compile survival_subtypes_LGG_GBM
       shell: bash -l {0}
       run: |
-        conda activate my_env
         notebook='examples/tutorials/survival_subtypes_LGG_GBM'
         papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
 
     - name: Compile unsupervised-analysis
       shell: bash -l {0}
       run: |
-        conda activate my_env
         notebook='examples/tutorials/unsupervised_analysis_single_cell'
         papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
