@@ -1,18 +1,129 @@
-from lightning import seed_everything
-import lightning as pl
-from typing import NamedTuple
-import os, yaml, torch, time, random, warnings, argparse, sys
+import os, sys 
 os.environ["OMP_NUM_THREADS"] = "1"
-from safetensors.torch import save_file
-import pandas as pd
-import flexynesis
-from flexynesis.models import *
-from lightning.pytorch.callbacks import EarlyStopping
-from .data import STRING, MultiOmicDatasetNW
-import tracemalloc, psutil
-import json
+
+
+def print_test_installation():
+    print("Test Installation:")
+    print("  # Download and extract test dataset")
+    print("  curl -L -o dataset1.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz")
+    print("  tar -xzvf dataset1.tgz")
+    print()
+    print("  # Test the installation (should finish within a minute on a typical CPU)")
+    print("  flexynesis --data_path dataset1 --model_class DirectPred --target_variables Erlotinib --hpo_iter 1 --features_top_percentile 5 --data_types gex,cnv")
+
+def print_help():
+    print("usage: flexynesis [-h] --data_path DATA_PATH --model_class {DirectPred,supervised_vae,MultiTripletNetwork,CrossModalPred,GNN,RandomForest,SVM,XGBoost,RandomSurvivalForest} --data_types DATA_TYPES")
+    print()
+    print("Flexynesis model training interface")
+    print()
+    print("options:")
+    print("  -h, --help            show this help message and exit")
+    print("  --data_path DATA_PATH")
+    print("                        (Required) Path to the folder with train/test data files")
+    print("  --model_class {DirectPred,supervised_vae,MultiTripletNetwork,CrossModalPred,GNN,RandomForest,SVM,XGBoost,RandomSurvivalForest}")
+    print("                        (Required) The kind of model class to instantiate")
+    print("  --data_types DATA_TYPES")
+    print("                        (Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'")
+    print("  --hpo_iter HPO_ITER   Number of iterations for hyperparameter optimisation (default: 100)")
+    print("  --use_gpu             (Optional) If set, the system will attempt to use CUDA/GPU if available.")
+    print()
+    print_test_installation()
+    print()
+    print(" For complete help with all options, run: flexynesis -h")
+    print()
+
+def print_full_help():
+    print("usage: flexynesis [-h] --data_path DATA_PATH --model_class {DirectPred,supervised_vae,MultiTripletNetwork,CrossModalPred,GNN,RandomForest,SVM,XGBoost,RandomSurvivalForest} [--gnn_conv_type {GC,GCN,SAGE}] [--target_variables TARGET_VARIABLES] [--covariates COVARIATES] [--surv_event_var SURV_EVENT_VAR] [--surv_time_var SURV_TIME_VAR] [--config_path CONFIG_PATH] [--fusion_type {early,intermediate}] [--hpo_iter HPO_ITER] [--finetuning_samples FINETUNING_SAMPLES] [--variance_threshold VARIANCE_THRESHOLD] [--correlation_threshold CORRELATION_THRESHOLD] [--restrict_to_features RESTRICT_TO_FEATURES] [--subsample SUBSAMPLE] [--features_min FEATURES_MIN] [--features_top_percentile FEATURES_TOP_PERCENTILE] --data_types DATA_TYPES [--input_layers INPUT_LAYERS] [--output_layers OUTPUT_LAYERS] [--outdir OUTDIR] [--prefix PREFIX] [--log_transform {True,False}] [--early_stop_patience EARLY_STOP_PATIENCE] [--hpo_patience HPO_PATIENCE] [--val_size VAL_SIZE] [--use_cv] [--use_loss_weighting {True,False}] [--evaluate_baseline_performance] [--threads THREADS] [--num_workers NUM_WORKERS] [--use_gpu] [--feature_importance_method {IntegratedGradients,GradientShap,Both}] [--disable_marker_finding] [--string_organism STRING_ORGANISM] [--string_node_name {gene_name,gene_id}] [--safetensors]")
+    print()
+    print("Flexynesis model training interface")
+    print()
+    print("options:")
+    print("  -h, --help            show this help message and exit")
+    print("  --data_path DATA_PATH")
+    print("                        (Required) Path to the folder with train/test data files")
+    print("  --model_class {DirectPred,supervised_vae,MultiTripletNetwork,CrossModalPred,GNN,RandomForest,SVM,XGBoost,RandomSurvivalForest}")
+    print("                        (Required) The kind of model class to instantiate")
+    print("  --gnn_conv_type {GC,GCN,SAGE}")
+    print("                        If model_class is set to GNN, choose which graph convolution type to use")
+    print("  --target_variables TARGET_VARIABLES")
+    print("                        (Optional if survival variables are not set to None).")
+    print("                        Which variables in 'clin.csv' to use for predictions, comma-separated if multiple")
+    print("  --covariates COVARIATES")
+    print("                        Which variables in 'clin.csv' to be used as feature covariates, comma-separated if multiple")
+    print("  --surv_event_var SURV_EVENT_VAR")
+    print("                        Which column in 'clin.csv' to use as event/status indicator for survival modeling")
+    print("  --surv_time_var SURV_TIME_VAR")
+    print("                        Which column in 'clin.csv' to use as time/duration indicator for survival modeling")
+    print("  --config_path CONFIG_PATH")
+    print("                        Optional path to an external hyperparameter configuration file in YAML format.")
+    print("  --fusion_type {early,intermediate}")
+    print("                        How to fuse the omics layers (default: intermediate)")
+    print("  --hpo_iter HPO_ITER   Number of iterations for hyperparameter optimisation (default: 100)")
+    print("  --finetuning_samples FINETUNING_SAMPLES")
+    print("                        Number of samples from the test dataset to use for fine-tuning the model. Set to 0 to disable fine-tuning (default: 0)")
+    print("  --variance_threshold VARIANCE_THRESHOLD")
+    print("                        Variance threshold (as percentile) to drop low variance features (default is 1; set to 0 for no variance filtering)")
+    print("  --correlation_threshold CORRELATION_THRESHOLD")
+    print("                        Correlation threshold to drop highly redundant features (default is 0.8; set to 1 for no redundancy filtering)")
+    print("  --restrict_to_features RESTRICT_TO_FEATURES")
+    print("                        Restrict the analysis to the list of features provided by the user (default is None)")
+    print("  --subsample SUBSAMPLE")
+    print("                        Downsample training set to randomly drawn N samples for training. Disabled when set to 0 (default: 0)")
+    print("  --features_min FEATURES_MIN")
+    print("                        Minimum number of features to retain after feature selection (default: 500)")
+    print("  --features_top_percentile FEATURES_TOP_PERCENTILE")
+    print("                        Top percentile features (among the features remaining after variance filtering and data cleanup to retain after feature selection (default: 20)")
+    print("  --data_types DATA_TYPES")
+    print("                        (Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'")
+    print("  --input_layers INPUT_LAYERS")
+    print("                        If model_class is set to CrossModalPred, choose which data types to use as input/encoded layers")
+    print("                        Comma-separated if multiple")
+    print("  --output_layers OUTPUT_LAYERS")
+    print("                        If model_class is set to CrossModalPred, choose which data types to use as output/decoded layers")
+    print("                        Comma-separated if multiple")
+    print("  --outdir OUTDIR       Path to the output folder to save the model outputs (default: current working directory)")
+    print("  --prefix PREFIX       Job prefix to use for output files (default: 'job')")
+    print("  --log_transform {True,False}")
+    print("                        whether to apply log-transformation to input data matrices (default: False)")
+    print("  --early_stop_patience EARLY_STOP_PATIENCE")
+    print("                        How many epochs to wait when no improvements in validation loss is observed (default 10; set to -1 to disable early stopping)")
+    print("  --hpo_patience HPO_PATIENCE")
+    print("                        How many hyperparameter optimisation iterations to wait for when no improvements are observed (default is 10; set to 0 to disable early stopping)")
+    print("  --val_size VAL_SIZE   Proportion of training data to be used as validation split (default: 0.2)")
+    print("  --use_cv              (Optional) If set, a 5-fold cross-validation training will be done. Otherwise, a single training on 80 percent of the dataset is done.")
+    print("  --use_loss_weighting {True,False}")
+    print("                        whether to apply loss-balancing using uncertainty weights method (default: True)")
+    print("  --evaluate_baseline_performance")
+    print("                        whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset")
+    print("  --threads THREADS     (Optional) How many threads to use when using CPU (default is 4)")
+    print("  --num_workers NUM_WORKERS")
+    print("                        (Optional) How many workers to use for model training (default is 0)")
+    print("  --use_gpu             (Optional) If set, the system will attempt to use CUDA/GPU if available.")
+    print("  --feature_importance_method {IntegratedGradients,GradientShap,Both}")
+    print("                        Choose feature importance score method (default: IntegratedGradients)")
+    print("  --disable_marker_finding")
+    print("                        (Optional) If set, marker discovery after model training is disabled.")
+    print("  --string_organism STRING_ORGANISM")
+    print("                        STRING DB organism id. (default: 9606)")
+    print("  --string_node_name {gene_name,gene_id}")
+    print("                        Type of node name. (default: gene_name)")
+    print("  --safetensors         If set, the model will be saved in the SafeTensors format. Default is False.")
+    print()
+    print_test_installation()
+    print()
+
 
 def main():
+    # Check for help early before any heavy operations
+    if len(sys.argv) == 1:
+        # No arguments provided - show minimal help
+        print_help()
+        return
+    elif any(arg in ['-h', '--help'] for arg in sys.argv):
+        # Help explicitly requested - show full help
+        print_full_help()
+        return
+
     """
     Main function to parse command-line arguments and initiate the training interface for PyTorch models.
 
@@ -57,7 +168,8 @@ def main():
         --string_node_name (str): Type of node name. Choices are ["gene_name", "gene_id"]. Default is "gene_name".
         --safetensors (bool): If set, the model will be saved in the SafeTensors format. Default is False.
     """
-    parser = argparse.ArgumentParser(description="Flexynesis - Your PyTorch model training interface",
+    import argparse
+    parser = argparse.ArgumentParser(description="Flexynesis model training interface",
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
@@ -121,7 +233,37 @@ def main():
     # safetensors args
     parser.add_argument("--safetensors", help="If set, the model will be saved in the SafeTensors format. Default is False.", action="store_true")
 
+    # Import argparse and other basic modules needed for argument parsing
+    import argparse
+    import yaml
+    import time
+    import random
+    import warnings
+    
     args = parser.parse_args()
+
+    # Now import heavy dependencies only when actually needed
+    print("[INFO] Loading Flexynesis modules...")
+    from lightning import seed_everything
+    import lightning as pl
+    from typing import NamedTuple
+    import torch
+    from safetensors.torch import save_file
+    import pandas as pd
+    
+    # Import specific models as needed
+    from .models.direct_pred import DirectPred
+    from .models.supervised_vae import supervised_vae
+    from .models.triplet_encoder import MultiTripletNetwork
+    from .models.crossmodal_pred import CrossModalPred
+    from .models.gnn_early import GNN
+    
+    from lightning.pytorch.callbacks import EarlyStopping
+    from .data import STRING, MultiOmicDatasetNW, DataImporter
+    from .main import HyperparameterTuning, FineTuner
+    from .utils import evaluate_baseline_performance, evaluate_baseline_survival_performance, get_predicted_labels, evaluate_wrapper
+    import tracemalloc, psutil
+    import json
 
     # do some sanity checks on input arguments
     # 1. Check for survival variables consistency
@@ -236,7 +378,7 @@ def main():
     else:
         covariates = None
 
-    data_importer = flexynesis.DataImporter(path = args.data_path,
+    data_importer = DataImporter(path = args.data_path,
                                             data_types = datatypes,
                                             covariates = covariates,
                                             concatenate = concatenate,
@@ -261,7 +403,7 @@ def main():
         if args.target_variables:
             var =  args.target_variables.strip().split(',')[0]
             print(f"Training {args.model_class} on variable: {var}")
-            metrics, predictions = flexynesis.evaluate_baseline_performance(train_dataset, test_dataset, variable_name=var,
+            metrics, predictions = evaluate_baseline_performance(train_dataset, test_dataset, variable_name=var,
                                                     methods=[args.model_class], n_folds=5, n_jobs=args.threads)
             metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
             predictions.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
@@ -274,7 +416,7 @@ def main():
     if args.model_class == "RandomSurvivalForest":
         if args.surv_event_var and args.surv_time_var:
             print(f"Training {args.model_class} on survival variables: {args.surv_event_var} and {args.surv_time_var}")
-            metrics, predictions = flexynesis.evaluate_baseline_survival_performance(train_dataset, test_dataset,
+            metrics, predictions = evaluate_baseline_survival_performance(train_dataset, test_dataset,
                                                               args.surv_time_var,
                                                                  args.surv_event_var,
                                                                  n_folds = 5,
@@ -306,7 +448,7 @@ def main():
 
     # define a tuner object, which will instantiate a DirectPred class
     # using the input dataset and the tuning configuration from the config.py
-    tuner = flexynesis.HyperparameterTuning(dataset = train_dataset,
+    tuner = HyperparameterTuning(dataset = train_dataset,
                                             model_class = model_class,
                                             target_variables = args.target_variables.strip().split(',') if args.target_variables is not None else [],
                                             batch_variables = None,
@@ -344,7 +486,7 @@ def main():
         holdout_dataset = test_dataset.subset(holdout_indices)
 
         # fine tune on the finetuning dataset; freeze the encoders
-        finetuner = flexynesis.FineTuner(model,
+        finetuner = FineTuner(model,
                                          finetune_dataset)
         finetuner.run_experiments()
 
@@ -381,13 +523,13 @@ def main():
                 df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance', explainer, 'csv'])), header=True, index=False)
 
         # print known/predicted labels
-        predicted_labels = pd.concat([flexynesis.get_predicted_labels(model.predict(train_dataset), train_dataset, 'train', args.model_class),
-                                      flexynesis.get_predicted_labels(model.predict(test_dataset), test_dataset, 'test', args.model_class)],
+        predicted_labels = pd.concat([get_predicted_labels(model.predict(train_dataset), train_dataset, 'train', args.model_class),
+                                      get_predicted_labels(model.predict(test_dataset), test_dataset, 'test', args.model_class)],   
                                     ignore_index=True)
         predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
 
         print("[INFO] Computing model evaluation metrics")
-        metrics_df = flexynesis.evaluate_wrapper(args.model_class, model.predict(test_dataset), test_dataset,
+        metrics_df = evaluate_wrapper(args.model_class, model.predict(test_dataset), test_dataset,
                                                  surv_event_var=model.surv_event_var,
                                                  surv_time_var=model.surv_time_var)
         metrics_df.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
@@ -416,7 +558,7 @@ def main():
         test = test_dataset.multiomic_dataset if args.model_class == 'GNN' else test_dataset
 
         if var != model.surv_event_var:
-            metrics, predictions = flexynesis.evaluate_baseline_performance(train, test,
+            metrics, predictions = evaluate_baseline_performance(train, test,
                                                                variable_name = var,
                                                                methods = ['RandomForest', 'SVM', 'XGBoost'],
                                                                n_folds = 5,
@@ -425,7 +567,7 @@ def main():
 
         if model.surv_event_var and model.surv_time_var:
             print("[INFO] Computing off-the-shelf method performance on survival variable:",model.surv_time_var)
-            metrics_baseline_survival = flexynesis.evaluate_baseline_survival_performance(train, test,
+            metrics_baseline_survival = evaluate_baseline_survival_performance(train, test,
                                                                                              model.surv_time_var,
                                                                                              model.surv_event_var,
                                                                                              n_folds = 5,
@@ -474,7 +616,8 @@ def main():
         peak_mem_mb = torch.cuda.max_memory_allocated() / (1024**2)
         print(f"[INFO] Peak GPU RAM allocated: {peak_mem_mb:.2f} MB")
     print(f"[INFO] CPU RAM after HPO: {hpo_system_ram / (1024**2):.2f} MB")
+    
+    print("[INFO] Finished the analysis!")
 
 if __name__ == "__main__":
     main()
-    print("[INFO] Finished the analysis!")
