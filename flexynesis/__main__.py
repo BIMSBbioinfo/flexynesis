@@ -17,7 +17,7 @@ def print_help():
     print("Flexynesis model training interface")
     print()
     print("options:")
-    print("  -h, --help            show this help message and exit")
+    print("  -h, --help            show complete help with all options")
     print("  --data_path DATA_PATH")
     print("                        (Required) Path to the folder with train/test data files")
     print("  --model_class {DirectPred,supervised_vae,MultiTripletNetwork,CrossModalPred,GNN,RandomForest,SVM,XGBoost,RandomSurvivalForest}")
@@ -29,7 +29,7 @@ def print_help():
     print()
     print_test_installation()
     print()
-    print(" For complete help with all options, run: flexynesis -h")
+    print("  See the package documentation for more details: https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/docs/getting_started.html")
     print()
 
 def print_full_help():
