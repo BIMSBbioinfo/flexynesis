@@ -47,3 +47,9 @@ jobs:
       run: |
         notebook='examples/tutorials/unsupervised_analysis_single_cell'
         papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
+
+    - name: Compile cbioportal
+      shell: bash -l {0}
+      run: |
+        notebook='examples/tutorials/cbioportal'
+        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
