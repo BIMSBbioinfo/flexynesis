@@ -593,14 +593,15 @@ def main():
             'input_dims', 'layers',
             'device_type', 'target_variables',
             'surv_event_var', 'surv_time_var',
-            'config', 'current_epoch'
+            'config', 'current_epoch', 'num_layers'
         ]
 
         for attr in common_attrs:
             if hasattr(model, attr):
                 config[attr] = getattr(model, attr)
-
-        config['num_layers'] = len(model.layers)
+        if hasattr(model, 'layers'):
+                config['num_layers'] = len(model.layers)    # add num_layers to the config
+        
         # Model-specific configurations
         if hasattr(model, 'config'):
             model_specific_config = model.config
