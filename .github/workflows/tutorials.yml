@@ -1,7 +1,7 @@
 name: Check Tutorials
 
 on:
-  workflow_dispatch: # This line enables manual triggering of the workflow
+  workflow_dispatch: # allow manual runs
   schedule:
     # Runs at 00:00 UTC every Sunday
     - cron: '0 0 * * 0'
@@ -9,47 +9,50 @@ on:
 jobs:
   check_tutorials:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.x"]
+    name: Tutorials Python ${{ matrix.python-version }}
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Install my package from source
-      shell: bash -l {0}
-      run: |
-        pip install -e .
-    
-    - name: Install Jupyter Kernel
-      shell: bash -l {0}
-      run: |
-        python -m ipykernel install --user --name my_env_kernel --display-name "my_env_kernel"
+      - name: Install my package from source
+        shell: bash -l {0}
+        run: |
+          pip install -e .
 
-    - name: Compile brca_subtypes.ipynb
-      shell: bash -l {0}
-      run: |
-        notebook='examples/tutorials/brca_subtypes'
-        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
-        
-        
-    - name: Compile survival_subtypes_LGG_GBM
-      shell: bash -l {0}
-      run: |
-        notebook='examples/tutorials/survival_subtypes_LGG_GBM'
-        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
+      - name: Install Jupyter Kernel
+        shell: bash -l {0}
+        run: |
+          python -m ipykernel install --user --name my_env_kernel --display-name "my_env_kernel"
 
-    - name: Compile unsupervised-analysis
-      shell: bash -l {0}
-      run: |
-        notebook='examples/tutorials/unsupervised_analysis_single_cell'
-        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
+      - name: Compile brca_subtypes.ipynb
+        shell: bash -l {0}
+        run: |
+          notebook='examples/tutorials/brca_subtypes'
+          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
 
-    - name: Compile cbioportal
-      shell: bash -l {0}
-      run: |
-        notebook='examples/tutorials/cbioportal'
-        papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
+      - name: Compile survival_subtypes_LGG_GBM
+        shell: bash -l {0}
+        run: |
+          notebook='examples/tutorials/survival_subtypes_LGG_GBM'
+          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
+
+      - name: Compile unsupervised-analysis
+        shell: bash -l {0}
+        run: |
+          notebook='examples/tutorials/unsupervised_analysis_single_cell'
+          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
+
+      - name: Compile cbioportal
+        shell: bash -l {0}
+        run: |
+          notebook='examples/tutorials/cbioportal'
+          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
