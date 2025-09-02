@@ -4,14 +4,16 @@
 </p>
 
 [![Downloads](https://static.pepy.tech/badge/flexynesis)](https://pepy.tech/project/flexynesis)
-![tutorials](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tutorials.yml/badge.svg)
-![Python 3.11](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.11&label=Check%20Models:%20Python%203.11)
-![Python 3.12](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.12&label=Check%20Models:%20Python%203.12)
-![Python 3.x](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.x&label=Check%20Models:%20Python%203.x%20(latest))
+![Tutorials 3.11](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.11&label=Tutorials:%20Python%203.11)
+![Tutorials 3.12](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.12&label=Tutorials:%20Python%203.12)
+![Tutorials 3.x](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.x&label=Tutorials:%20Python%203.x)
+![Python 3.11](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.11&label=Models:%20Python%203.11)
+![Python 3.12](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.12&label=Models:%20Python%203.12)
+![Python 3.x](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.x&label=Models:%20Python%203.x%20(latest))
 
-# flexynesis
+# Flexynesis
 
-Flexynesis: a flexible deep learning toolkit for interpretable multi-omics integration and clinical outcome prediction.
+Flexynesis is a flexible deep learning toolkit for interpretable multi-omics integration and clinical outcome prediction.
 
 Flexynesis is a deep learning suite for multi-omics data integration, designed for (pre-)clinical endpoint prediction. It supports diverse neural architectures — from fully connected networks and supervised variational autoencoders to graph convolutional and multi-triplet models — with flexible options for omics layer fusion, automated feature selection, and hyperparameter optimization.
 
