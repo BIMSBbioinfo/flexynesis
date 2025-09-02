@@ -72,12 +72,10 @@ mkdocs build --clean
 
 For questions, suggestions, or collaborations: Open an [issue](https://github.com/BIMSBbioinfo/flexynesis/issues) or create a [discussion](https://github.com/BIMSBbioinfo/flexynesis/discussions).  
 
-# Licence 
+# License 
 
 Flexynesis is released under a modifed MIT Licence for Academic and Non-Commercial Usage. 
 
 © 2025 Bioinformatics and Omic Data Science Platform, Max Delbrück Center for Molecular Medicine (MDC).
-
-
 
 
