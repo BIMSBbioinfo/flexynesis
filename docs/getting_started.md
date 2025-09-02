@@ -9,11 +9,10 @@ The installation process via pip/mamba (assuming you have mamba installed) shoul
 See `mamba` installation instructions [here.](https://mamba.readthedocs.io/en/latest/installation/mamba-installation.html)
 
 ```
-# create an environment with python 3.11 
-mamba create --name flexynesisenv python==3.11
+# create an environment with python >= 3.11 
+mamba create --name flexynesisenv python==3.11 
 mamba activate flexynesisenv
 # install latest version from pypi (https://pypi.org/project/flexynesis)
-# make sure to use python3.11*
 python -m pip install flexynesis --upgrade  
 ```
 
