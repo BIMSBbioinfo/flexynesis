@@ -4,8 +4,10 @@
 </p>
 
 [![Downloads](https://static.pepy.tech/badge/flexynesis)](https://pepy.tech/project/flexynesis)
-![benchmarks](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/models.yml/badge.svg)
 ![tutorials](https://github.com/BIMSBbioinfo/flexynesis/actions/workflows/tutorials.yml/badge.svg)
+![Python 3.11](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.11&label=Check%20Models:%20Python%203.11)
+![Python 3.12](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.12&label=Check%20Models:%20Python%203.12)
+![Python 3.x](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.x&label=Check%20Models:%20Python%203.x%20(latest))
 
 # flexynesis
 
