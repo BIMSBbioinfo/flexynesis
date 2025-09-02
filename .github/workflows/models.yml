@@ -1,4 +1,4 @@
-name: Check Models 
+name: Check Models
 on:
   push:
     branches:
@@ -14,79 +14,83 @@ on:
 jobs:
   run_package:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.x"]  # 👈 add latest (3.x)
+    name: Python ${{ matrix.python-version }}     # 👈 unique job name for badges
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Install my package from source
-      shell: bash -l {0}
-      run: |
-        pip install -e .
+      - name: Install my package from source
+        shell: bash -l {0}
+        run: |
+          pip install -e .
 
-    - name: Download dataset1
-      run: |
-        curl -L -o dataset1.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz 
-        tar -xzvf dataset1.tgz
+      - name: Download dataset1
+        run: |
+          curl -L -o dataset1.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz 
+          tar -xzvf dataset1.tgz
 
-    - name: Download stringdb data
-      run: |
-        wget https://stringdb-downloads.org/download/protein.links.v12.0/9606.protein.links.v12.0.txt.gz
-        gzip -cd 9606.protein.links.v12.0.txt.gz > dataset1/9606.protein.links.v12.0.txt
-        wget https://stringdb-downloads.org/download/protein.aliases.v12.0/9606.protein.aliases.v12.0.txt.gz
-        gzip -cd 9606.protein.aliases.v12.0.txt.gz > dataset1/9606.protein.aliases.v12.0.txt
+      - name: Download stringdb data
+        run: |
+          wget https://stringdb-downloads.org/download/protein.links.v12.0/9606.protein.links.v12.0.txt.gz
+          gzip -cd 9606.protein.links.v12.0.txt.gz > dataset1/9606.protein.links.v12.0.txt
+          wget https://stringdb-downloads.org/download/protein.aliases.v12.0/9606.protein.aliases.v12.0.txt.gz
+          gzip -cd 9606.protein.aliases.v12.0.txt.gz > dataset1/9606.protein.aliases.v12.0.txt
 
-    - name: Download dataset2
-      run: |
-        curl -L -o dataset2.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset2.tgz
-        tar -xzvf dataset2.tgz
+      - name: Download dataset2
+        run: |
+          curl -L -o dataset2.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset2.tgz
+          tar -xzvf dataset2.tgz
 
-    - name: Download LGG_GBM_dataset
-      run: |
-        curl -L -o lgggbm_tcga_pub_processed.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/lgggbm_tcga_pub_processed.tgz
-        tar -xzvf lgggbm_tcga_pub_processed.tgz
+      - name: Download LGG_GBM_dataset
+        run: |
+          curl -L -o lgggbm_tcga_pub_processed.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/lgggbm_tcga_pub_processed.tgz
+          tar -xzvf lgggbm_tcga_pub_processed.tgz
 
-    - name: Run DirectPred
-      shell: bash -l {0}
-      run: |
-        flexynesis --data_path dataset1 --model_class DirectPred --target_variables Erlotinib --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False
+      - name: Run DirectPred
+        shell: bash -l {0}
+        run: |
+          flexynesis --data_path dataset1 --model_class DirectPred --target_variables Erlotinib --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False
 
-    - name: Run DirectPred_TestSurvival
-      shell: bash -l {0}
-      run: |
-        flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut,cna --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --surv_event_var OS_STATUS --surv_time_var OS_MONTHS
+      - name: Run DirectPred_TestSurvival
+        shell: bash -l {0}
+        run: |
+          flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut,cna --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --surv_event_var OS_STATUS --surv_time_var OS_MONTHS
 
-    - name: Run DirectPred_TestCovariates
-      shell: bash -l {0}
-      run: |
-        flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --covariates BCR_STATUS
+      - name: Run DirectPred_TestCovariates
+        shell: bash -l {0}
+        run: |
+          flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --covariates BCR_STATUS
 
-    - name: Run DirectPred_Test_Explainers
-      shell: bash -l {0}
-      run: |
-        flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --feature_importance_method Both 
+      - name: Run DirectPred_Test_Explainers
+        shell: bash -l {0}
+        run: |
+          flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --feature_importance_method Both 
 
-    - name: Run supervised_vae
-      shell: bash -l {0}
-      run: |
-        flexynesis --data_path dataset1 --model_class supervised_vae --target_variables Erlotinib,Crizotinib --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_svae --early_stop_patience 3 --use_loss_weighting True
+      - name: Run supervised_vae
+        shell: bash -l {0}
+        run: |
+          flexynesis --data_path dataset1 --model_class supervised_vae --target_variables Erlotinib,Crizotinib --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_svae --early_stop_patience 3 --use_loss_weighting True
 
-    - name: Run CrossModalPred 
-      shell: bash -l {0}
-      run: |
-        flexynesis --data_path dataset1 --model_class CrossModalPred --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --input_layers gex --output_layers cnv --outdir . --prefix erlotinib_crossmodal --early_stop_patience 3 --use_loss_weighting True 
+      - name: Run CrossModalPred 
+        shell: bash -l {0}
+        run: |
+          flexynesis --data_path dataset1 --model_class CrossModalPred --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --input_layers gex --output_layers cnv --outdir . --prefix erlotinib_crossmodal --early_stop_patience 3 --use_loss_weighting True 
 
-    - name: Run MultiTripletNetwork
-      shell: bash -l {0}
-      run: |
-        flexynesis --data_path dataset2 --model_class MultiTripletNetwork --target_variables y --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,meth --outdir . --prefix msi_triplet --early_stop_patience 3 
+      - name: Run MultiTripletNetwork
+        shell: bash -l {0}
+        run: |
+          flexynesis --data_path dataset2 --model_class MultiTripletNetwork --target_variables y --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,meth --outdir . --prefix msi_triplet --early_stop_patience 3 
 
-    - name: Run GNN
-      shell: bash -l {0}
-      run: |
-        flexynesis --data_path dataset1 --model_class GNN --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_top_percentile 10 --log_transform False --data_types gex --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False --subsample 50
+      - name: Run GNN
+        shell: bash -l {0}
+        run: |
+          flexynesis --data_path dataset1 --model_class GNN --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_top_percentile 10 --log_transform False --data_types gex --outdir . --prefix erlotinib_direct --early_stop_patience 3 --use_loss_weighting False --subsample 50
