@@ -30,7 +30,7 @@ fi
 
 # Ensure the correct flexynesis-mps wheel is installed in the current Python environment
 PYTHON_BIN=${PYTHON_BIN:-python3}
-WHEEL_PATH="/Users/hc/Documents/flexxy/flexynesis-mps/dist/flexynesis_mps-1.0.8-py3-none-any.whl"
+WHEEL_PATH="/Users/hc/Documents/flexxy/flexynesis-mps/dist/flexynesis_mps-1.0.8-py3-none-any.whl" # Adjust wheel path
 ${PYTHON_BIN} -m pip install "$WHEEL_PATH"
 
 # Base command (use python -m flexynesis to ensure the wheel is used)

@@ -45,7 +45,7 @@ dependencies = [
     "ipykernel",
     "lifelines",
     "papermill",
-    "scikit-survival",
+    "scikit-survival>=0.22.0",
     "python-louvain",
     "xgboost",
     "pot",
