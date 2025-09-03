@@ -171,6 +171,14 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Flexynesis model training interface",
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--pretrained_model", type=str, default=None,
+                    help="Path to a saved model (.pth) to use for inference")
+    parser.add_argument("--artifacts", type=str, default=None,
+                    help="Path to artifacts .joblib saved during training")
+    parser.add_argument("--data_path_test", type=str, default=None,
+                    help="Folder with test-only dataset for inference")
+    parser.add_argument("--join_key", type=str, default="JoinKey",
+                    help="Column name in meta.csv for sample IDs")
 
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required = True)
     parser.add_argument("--model_class", help="(Required) The kind of model class to instantiate", type=str,
@@ -241,6 +249,23 @@ def main():
     import warnings
     
     args = parser.parse_args()
+# --- Inference mode (pretrained model + artifacts + test-only data) ---
+if args.pretrained_model and args.artifacts and args.data_path_test:
+    import torch
+    from flexynesis.inference import run_inference
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = torch.load(args.pretrained_model, map_location=device)
+    model.to(device).eval()
+
+    run_inference(
+        model=model,
+        artifacts_path=args.artifacts,
+        data_path_test=args.data_path_test,
+        outdir=args.outdir,
+        prefix=args.prefix,
+    )
+    return  # we're inside main(); exit after inference
 
     # Now import heavy dependencies only when actually needed
     print("[INFO] Loading Flexynesis modules...")
