@@ -1,54 +1,117 @@
-name: Test MPS on macOS for flexynesis
+name: MPS Tests on macOS
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "flexynesis/**"
+      - "tests/**"
       - "pyproject.toml"
+      - "spec-file.txt"
       - ".github/workflows/mps-test.yml"
+
   pull_request:
     paths:
       - "flexynesis/**"
+      - "tests/**"
       - "pyproject.toml"
+      - "spec-file.txt"
       - ".github/workflows/mps-test.yml"
 
 jobs:
-  # A single job to test MPS
-  test-mps-on-macos:
+  mps-tests:
     name: Test MPS on Apple Silicon
-
-    # This is the most important line: it tells GitHub to use a
-    # virtual machine with an Apple Silicon chip.
     runs-on: macos-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      # This new step will print the CPU brand.
-      - name: Check CPU Type
-        run: sysctl -n machdep.cpu.brand_string
+    - name: Check CPU Type
+      run: sysctl -n machdep.cpu.brand_string
 
-      # Set up a Python version
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
 
-      # Install package and its dependencies
-      - name: Install package from source
-        run: pip install .
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-update-conda: true
+        python-version: "3.11"
 
-      # This is the minimal test. It runs a single line of Python to
-      # confirm that the MPS device is available and that a core
-      # flexynesis class can be initialized with it.
-      - name: Run minimal MPS check
-        run: |
-          python -c "import torch; import flexynesis; import pandas as pd; \
-          print('MPS available:', torch.backends.mps.is_available()); \
-          if not torch.backends.mps.is_available(): \
-              raise SystemExit('ERROR: MPS backend not available on this runner!'); \
-          dummy_features = pd.DataFrame([[1, 2]]); \
-          dummy_labels = pd.DataFrame([0]); \
-          importer = flexynesis.data.DataImporter(data=[dummy_features], y=dummy_labels, device='mps'); \
-          print('Success: Successfully initialized DataImporter with MPS device.')"
+    - name: Cache Conda environment
+      uses: actions/cache@v4
+      with:
+        path: ~/miniconda/envs
+        key: ${{ runner.os }}-conda-${{ hashFiles('spec-file.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-conda-
+
+    - name: Create environment with dependencies
+      shell: bash -l {0}
+      run: |
+        conda create --name my_env --file spec-file.txt
+        conda activate my_env
+        pip install pytest
+
+    - name: Install my package from source
+      shell: bash -l {0}
+      run: |
+        conda activate my_env
+        pip install -e .
+        pip install pytest
+
+    - name: Check MPS Availability
+      shell: bash -l {0}
+      run: |
+        conda activate my_env
+        python -c "import torch; print('MPS available:', torch.backends.mps.is_available())"
+
+    - name: Run MPS-specific tests
+      shell: bash -l {0}
+      run: |
+        conda activate my_env
+        python -c "
+        import torch
+        import flexynesis
+        import pandas as pd
+        import numpy as np
+        
+        print('Testing MPS functionality...')
+        print('MPS available:', torch.backends.mps.is_available())
+        
+        if not torch.backends.mps.is_available():
+            raise SystemExit('ERROR: MPS backend not available on this runner!')
+        
+        # Test DataImporter with MPS device
+        dummy_features = pd.DataFrame([[1, 2, 3], [4, 5, 6]])
+        dummy_labels = pd.DataFrame([0, 1])
+        
+        print('Testing DataImporter with MPS device...')
+        importer = flexynesis.data.DataImporter(data=[dummy_features], y=dummy_labels, device='mps')
+        print('✓ DataImporter initialized successfully with MPS device')
+        
+        # Test basic tensor operations on MPS
+        print('Testing basic MPS tensor operations...')
+        x = torch.tensor([1.0, 2.0, 3.0], device='mps')
+        y = x * 2
+        result = y.cpu().numpy()
+        expected = np.array([2.0, 4.0, 6.0])
+        assert np.allclose(result, expected), f'Expected {expected}, got {result}'
+        print('Basic MPS tensor operations working correctly')
+        
+        print('All MPS tests passed successfully!')
+        "
+
+    - name: Run Unit Tests with MPS device
+      shell: bash -l {0}
+      run: |
+        conda activate my_env
+        if [ -d "tests/unit" ]; then
+          pytest -vvv --color=yes tests/unit -k "not slow"
+        else
+          echo "No unit tests directory found, skipping unit tests"
+        fi
