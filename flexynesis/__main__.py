@@ -250,14 +250,31 @@ def main():
     
     args = parser.parse_args()
     
-    # --- Inference mode (pretrained model + artifacts + test-only data) ---
+        # --- Inference mode (pretrained model + artifacts + test-only data) ---
     if args.pretrained_model and args.artifacts and args.data_path_test:
+        import os
         import torch
         from flexynesis.inference import run_inference
 
+        # Friendly checks
+        if not os.path.exists(args.pretrained_model):
+            raise FileNotFoundError(f"--pretrained_model not found: {args.pretrained_model}")
+        if not os.path.exists(args.artifacts):
+            raise FileNotFoundError(f"--artifacts not found: {args.artifacts}")
+
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = torch.load(args.pretrained_model, map_location=device)
-        model.to(device).eval()
+
+        # Robust load across PyTorch versions:
+        # - PT>=2.6 changed default to weights_only=True; force full-module unpickle.
+        # - PT<=2.5 doesn't accept 'weights_only', so fall back without it.
+        try:
+            model = torch.load(args.pretrained_model, map_location=device, weights_only=False)
+        except TypeError:
+            # Older PyTorch without 'weights_only' kwarg
+            model = torch.load(args.pretrained_model, map_location=device)
+
+        if hasattr(model, "to"):
+            model.to(device).eval()
 
         run_inference(
             model=model,
