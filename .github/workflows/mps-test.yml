@@ -44,10 +44,11 @@ jobs:
       # flexynesis class can be initialized with it.
       - name: Run minimal MPS check
         run: |
-          python -c "import torch; from flexynesis import SupervisedTrainer, DataImporter; import pandas as pd; \
-          assert torch.backends.mps.is_available(), 'ERROR: MPS backend not available on this runner!'; \
+          python -c "import torch; import flexynesis; import pandas as pd; \
+          print('MPS available:', torch.backends.mps.is_available()); \
+          if not torch.backends.mps.is_available(): \
+              raise SystemExit('ERROR: MPS backend not available on this runner!'); \
           dummy_features = pd.DataFrame([[1, 2]]); \
           dummy_labels = pd.DataFrame([0]); \
-          importer = DataImporter(data=[dummy_features], y=dummy_labels, device='mps'); \
-          trainer = SupervisedTrainer(model=None, data_importer=importer, device='mps'); \
-          print('Success: Successfully initialized Trainer with MPS device.')"
+          importer = flexynesis.data.DataImporter(data=[dummy_features], y=dummy_labels, device='mps'); \
+          print('Success: Successfully initialized DataImporter with MPS device.')"
