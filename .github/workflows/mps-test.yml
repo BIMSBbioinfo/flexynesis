@@ -1,0 +1,47 @@
+# .github/workflows/mps-test.yml
+
+name: Test MPS on macOS
+
+# This action will run on pull requests, just like your unit tests
+on:
+  pull_request:
+    paths:
+      - "flexynesis/**"
+      - "pyproject.toml"
+      - ".github/workflows/mps-test.yml"
+
+jobs:
+  # A single job to test MPS
+  test-mps-on-macos:
+    name: Test MPS on Apple Silicon
+
+    # This is the most important line: it tells GitHub to use a
+    # virtual machine with an Apple Silicon
+    runs-on: macos-15-xlarge
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Set up a Python version 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Install package and its dependencies
+      - name: Install package from source
+        run: pip install .
+
+      # This is the minimal test. It runs a single line of Python to
+      # confirm that the MPS device is available and that a core
+      # flexynesis class can be initialized with it.
+      - name: Run minimal MPS check
+        run: |
+          python -c "import torch; from flexynesis import SupervisedTrainer, DataImporter; import pandas as pd; \
+          assert torch.backends.mps.is_available(), 'ERROR: MPS backend not available on this runner!'; \
+          dummy_features = pd.DataFrame([[1, 2]]); \
+          dummy_labels = pd.DataFrame([0]); \
+          importer = DataImporter(data=[dummy_features], y=dummy_labels, device='mps'); \
+          trainer = SupervisedTrainer(model=None, data_importer=importer, device='mps'); \
+          print('Success: Successfully initialized Trainer with MPS device.')"
