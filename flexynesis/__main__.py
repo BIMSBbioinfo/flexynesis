@@ -249,27 +249,28 @@ def main():
     import warnings
     
     args = parser.parse_args()
+    
     # --- Inference mode (pretrained model + artifacts + test-only data) ---
-if args.pretrained_model and args.artifacts and args.data_path_test:
-    import torch
-    from flexynesis.inference import run_inference
+    if args.pretrained_model and args.artifacts and args.data_path_test:
+        import torch
+        from flexynesis.inference import run_inference
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.load(args.pretrained_model, map_location=device)
-    model.to(device).eval()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = torch.load(args.pretrained_model, map_location=device)
+        model.to(device).eval()
 
-    run_inference(
-        model=model,
-        artifacts_path=args.artifacts,
-        data_path_test=args.data_path_test,
-        outdir=args.outdir,
-        prefix=args.prefix,
-    )
-    return  # safe here because we're inside main()
-
+        run_inference(
+            model=model,
+            artifacts_path=args.artifacts,
+            data_path_test=args.data_path_test,
+            outdir=args.outdir,
+            prefix=args.prefix,
+        )
+        return  # we're inside main(); safe to exit here
 
     # Now import heavy dependencies only when actually needed
     print("[INFO] Loading Flexynesis modules...")
+
     from lightning import seed_everything
     import lightning as pl
     from typing import NamedTuple
