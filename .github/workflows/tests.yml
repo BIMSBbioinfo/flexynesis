@@ -55,10 +55,10 @@ jobs:
         pip install pytest
 
     - name: Install my package from source
-      shell: bash -l {0}
-      run: |
-        conda activate my_env
-        pip install -e . --no-deps
+        run: |
+          conda activate my_env
+          pip install -e .
+          pip install pytest
 
     - name: Run Unit Tests
       shell: bash -l {0}
