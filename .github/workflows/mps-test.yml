@@ -8,7 +8,6 @@ on:
       - "flexynesis/**"
       - "tests/**"
       - "pyproject.toml"
-      - "spec-file.txt"
       - ".github/workflows/mps-test.yml"
 
   pull_request:
@@ -16,7 +15,6 @@ on:
       - "flexynesis/**"
       - "tests/**"
       - "pyproject.toml"
-      - "spec-file.txt"
       - ".github/workflows/mps-test.yml"
 
 jobs:
@@ -36,44 +34,21 @@ jobs:
       with:
         python-version: "3.11"
 
-    - name: Set up Miniconda
-      uses: conda-incubator/setup-miniconda@v3
-      with:
-        auto-update-conda: true
-        python-version: "3.11"
-
-    - name: Cache Conda environment
-      uses: actions/cache@v4
-      with:
-        path: ~/miniconda/envs
-        key: ${{ runner.os }}-conda-${{ hashFiles('spec-file.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-conda-
-
-    - name: Create environment with dependencies
-      shell: bash -l {0}
+    - name: Install dependencies
       run: |
-        conda create --name my_env --file spec-file.txt
-        conda activate my_env
-        pip install pytest
+        pip install --upgrade pip
+        pip install pytest torch pandas numpy
 
-    - name: Install my package from source
-      shell: bash -l {0}
+    - name: Install my package from wheel
       run: |
-        conda activate my_env
-        pip install -e .
-        pip install pytest
+        pip install dist/flexynesis_mps-1.0.8-py3-none-any.whl
 
     - name: Check MPS Availability
-      shell: bash -l {0}
       run: |
-        conda activate my_env
         python -c "import torch; print('MPS available:', torch.backends.mps.is_available())"
 
     - name: Run MPS-specific tests
-      shell: bash -l {0}
       run: |
-        conda activate my_env
         python -c "
         import torch
         import flexynesis
@@ -101,15 +76,13 @@ jobs:
         result = y.cpu().numpy()
         expected = np.array([2.0, 4.0, 6.0])
         assert np.allclose(result, expected), f'Expected {expected}, got {result}'
-        print('Basic MPS tensor operations working correctly')
+        print('✓ Basic MPS tensor operations working correctly')
         
         print('All MPS tests passed successfully!')
         "
 
     - name: Run Unit Tests with MPS device
-      shell: bash -l {0}
       run: |
-        conda activate my_env
         if [ -d "tests/unit" ]; then
           pytest -vvv --color=yes tests/unit -k "not slow"
         else
