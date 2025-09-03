@@ -51,7 +51,11 @@ In order to refer to our work, please cite our manuscript currently available at
 
 ## Running Flexynesis on [Galaxy](https://usegalaxy.eu/)
 
-- See [Galaxy Training Network Tutorials](https://github.com/BIMSBbioinfo/flexynesis/discussions/107) 
+- See [Galaxy Training Network Tutorials](https://github.com/BIMSBbioinfo/flexynesis/discussions/107)
+
+## Docker
+
+- See how to run a [Docker image of Flexynesis](https://github.com/BIMSBbioinfo/flexynesis/discussions/110#discussion-8836611). 
 
 # Benchmarks
 
