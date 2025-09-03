@@ -1,5 +1,3 @@
-# .github/workflows/mps-test.yml
-
 name: Test MPS on macOS for flexynesis
 
 on:
@@ -20,14 +18,18 @@ jobs:
     name: Test MPS on Apple Silicon
 
     # This is the most important line: it tells GitHub to use a
-    # virtual machine with an Apple Silicon
+    # virtual machine with an Apple Silicon chip.
     runs-on: macos-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Set up a Python version 
+      # This new step will print the CPU brand.
+      - name: Check CPU Type
+        run: sysctl -n machdep.cpu.brand_string
+
+      # Set up a Python version
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
