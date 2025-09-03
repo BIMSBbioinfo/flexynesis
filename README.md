@@ -4,6 +4,7 @@
 </p>
 
 [![Downloads](https://static.pepy.tech/badge/flexynesis)](https://pepy.tech/project/flexynesis)
+[![Docker Pulls](https://img.shields.io/docker/pulls/borauyar/flexynesis?logo=docker)](https://hub.docker.com/r/borauyar/flexynesis)
 ![Tutorials 3.11](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.11&label=Tutorials:%20Python%203.11)
 ![Tutorials 3.12](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.12&label=Tutorials:%20Python%203.12)
 ![Tutorials 3.x](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.x&label=Tutorials:%20Python%203.x)
@@ -57,7 +58,11 @@ In order to refer to our work, please cite our manuscript currently available at
 
 ## Running Flexynesis on [Galaxy](https://usegalaxy.eu/)
 
-- See [Galaxy Training Network Tutorials](https://github.com/BIMSBbioinfo/flexynesis/discussions/107) 
+- See [Galaxy Training Network Tutorials](https://github.com/BIMSBbioinfo/flexynesis/discussions/107)
+
+## Docker
+
+- See how to run a [Docker image of Flexynesis](https://github.com/BIMSBbioinfo/flexynesis/discussions/110#discussion-8836611). 
 
 # Benchmarks
 
