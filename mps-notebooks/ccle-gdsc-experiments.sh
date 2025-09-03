@@ -1,12 +1,40 @@
 #!/bin/bash
 
+# Change to the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd "$SCRIPT_DIR"
+echo "Running experiments from: $(pwd)"
+
+# Create output directory if it doesn't exist
+mkdir -p output
+
+# Download and extract dataset if not already present
+DATASET_DIR="ccle_vs_gdsc"
+DATASET_ARCHIVE="ccle_vs_gdsc.tgz"
+
+if [ ! -d "$DATASET_DIR" ]; then
+    echo "Dataset directory '$DATASET_DIR' not found. Downloading and extracting..."
+    if [ ! -f "$DATASET_ARCHIVE" ]; then
+        echo "Downloading dataset archive..."
+        curl -O https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/ccle_vs_gdsc.tgz
+    else
+        echo "Dataset archive already exists, skipping download."
+    fi
+    
+    echo "Extracting dataset..."
+    tar -xzvf ccle_vs_gdsc.tgz
+    echo "Dataset extraction completed."
+else
+    echo "Dataset directory '$DATASET_DIR' already exists, skipping download and extraction."
+fi
+
 # Ensure the correct flexynesis-mps wheel is installed in the current Python environment
 PYTHON_BIN=${PYTHON_BIN:-python3}
-WHEEL_PATH="/Users/hc/Documents/uber/flexynesis-mps/dist/flexynesis_mps-1.0.0-py3-none-any.whl"
+WHEEL_PATH="/Users/hc/Documents/flexxy/flexynesis-mps/dist/flexynesis_mps-1.0.8-py3-none-any.whl"
 ${PYTHON_BIN} -m pip install "$WHEEL_PATH"
 
 # Base command (use python -m flexynesis to ensure the wheel is used)
-BASE_CMD="$PYTHON_BIN -m flexynesis --use_gpu --data_path path/to/ccle_vs_gdsc --variance_threshold 50 --features_top_percentile 20 --target_variables Erlotinib --early_stop_patience 10 --hpo_iter 20 --outdir output"
+BASE_CMD="$PYTHON_BIN -m flexynesis --use_gpu --data_path $SCRIPT_DIR/ccle_vs_gdsc --variance_threshold 50 --features_top_percentile 20 --target_variables Erlotinib --early_stop_patience 10 --hpo_iter 1 --outdir $SCRIPT_DIR/output --safetensors"
 # Define options
 MODELS=("supervised_vae" "GNN")
 DATA_TYPES=("mutation")
