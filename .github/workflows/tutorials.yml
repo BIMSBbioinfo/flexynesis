@@ -23,36 +23,30 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install papermill ipykernel
+
       - name: Install my package from source
-        shell: bash -l {0}
         run: |
           pip install -e .
 
       - name: Install Jupyter Kernel
-        shell: bash -l {0}
         run: |
           python -m ipykernel install --user --name my_env_kernel --display-name "my_env_kernel"
 
       - name: Compile brca_subtypes.ipynb
-        shell: bash -l {0}
         run: |
-          notebook='examples/tutorials/brca_subtypes'
+          notebook='mps-notebooks/brca_subtypes'
           papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
 
-      - name: Compile survival_subtypes_LGG_GBM
-        shell: bash -l {0}
+      - name: Compile lgg_gbm.ipynb
         run: |
-          notebook='examples/tutorials/survival_subtypes_LGG_GBM'
+          notebook='mps-notebooks/lgg_gbm'
           papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
 
       - name: Compile unsupervised-analysis
-        shell: bash -l {0}
         run: |
-          notebook='examples/tutorials/unsupervised_analysis_single_cell'
-          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
-
-      - name: Compile cbioportal
-        shell: bash -l {0}
-        run: |
-          notebook='examples/tutorials/cbioportal'
+          notebook='mps-notebooks/unsupervised_analysis_single_cell'
           papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel

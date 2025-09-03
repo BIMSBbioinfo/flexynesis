@@ -1,0 +1,19 @@
+name: flexynesis-test
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.9
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - scipy
+  - pyyaml
+  - tqdm
+  - rich
+  - pytorch-cpu
+  - pip
+  - pip:
+    - pytest
+    - safetensors
