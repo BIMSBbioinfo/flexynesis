@@ -265,7 +265,7 @@ if args.pretrained_model and args.artifacts and args.data_path_test:
         outdir=args.outdir,
         prefix=args.prefix,
     )
-    return  # we're inside main(); exit after inference
+    raise SystemExit(0)  # we're inside main(); exit after inference
 
     # Now import heavy dependencies only when actually needed
     print("[INFO] Loading Flexynesis modules...")
