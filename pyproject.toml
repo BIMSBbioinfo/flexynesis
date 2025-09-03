@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flexynesis-mps"
-version = "1.0.0"
+version = "1.0.8"
 license = {file = "LICENSE"}
 authors = [
     {name = "Bora Uyar", email = "bora.uyar@mdc-berlin.de"},
@@ -15,10 +15,12 @@ authors = [
 description = "A deep-learning based multi-omics bulk sequencing data integration suite with a focus on (pre-)clinical endpoint prediction."
 readme = "README.md"
 requires-python = ">=3.9"
-classifiers=[
+classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10", 
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
 ]
 dependencies = [
     "matplotlib",
@@ -47,7 +49,8 @@ dependencies = [
     "xgboost",
     "pot",
     "geomloss",
-    "plotnine"
+    "plotnine",
+    "safetensors"
 ]
 
 [project.scripts]
