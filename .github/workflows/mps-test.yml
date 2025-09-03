@@ -1,9 +1,13 @@
 # .github/workflows/mps-test.yml
 
-name: Test MPS on macOS
+name: Test MPS on macOS for flexynesis
 
-# This action will run on pull requests, just like your unit tests
 on:
+  push:
+    paths:
+      - "flexynesis/**"
+      - "pyproject.toml"
+      - ".github/workflows/mps-test.yml"
   pull_request:
     paths:
       - "flexynesis/**"
