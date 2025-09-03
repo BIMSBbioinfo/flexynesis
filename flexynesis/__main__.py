@@ -249,7 +249,7 @@ def main():
     import warnings
     
     args = parser.parse_args()
-# --- Inference mode (pretrained model + artifacts + test-only data) ---
+    # --- Inference mode (pretrained model + artifacts + test-only data) ---
 if args.pretrained_model and args.artifacts and args.data_path_test:
     import torch
     from flexynesis.inference import run_inference
@@ -265,7 +265,8 @@ if args.pretrained_model and args.artifacts and args.data_path_test:
         outdir=args.outdir,
         prefix=args.prefix,
     )
-    raise SystemExit(0)  # we're inside main(); exit after inference
+    return  # safe here because we're inside main()
+
 
     # Now import heavy dependencies only when actually needed
     print("[INFO] Loading Flexynesis modules...")
