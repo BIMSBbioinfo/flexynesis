@@ -1,4 +1,4 @@
-name: Publish Docker image (latest on main)
+name: Publish Docker Image
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
     paths:
       - pyproject.toml
       - Dockerfile
-      - .github/workflows/publish-docker.yml
+      - .github/workflows/docker.yml
   workflow_dispatch: 
 
 jobs:
