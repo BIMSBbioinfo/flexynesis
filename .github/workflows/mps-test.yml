@@ -47,40 +47,6 @@ jobs:
       run: |
         python -c "import torch; print('MPS available:', torch.backends.mps.is_available())"
 
-    - name: Run MPS-specific tests
-      run: |
-        python -c "
-        import torch
-        import flexynesis
-        import pandas as pd
-        import numpy as np
-        
-        print('Testing MPS functionality...')
-        print('MPS available:', torch.backends.mps.is_available())
-        
-        if not torch.backends.mps.is_available():
-            raise SystemExit('ERROR: MPS backend not available on this runner!')
-        
-        # Test DataImporter with MPS device
-        dummy_features = pd.DataFrame([[1, 2, 3], [4, 5, 6]])
-        dummy_labels = pd.DataFrame([0, 1])
-        
-        print('Testing DataImporter with MPS device...')
-        importer = flexynesis.data.DataImporter(data=[dummy_features], y=dummy_labels, device='mps')
-        print('✓ DataImporter initialized successfully with MPS device')
-        
-        # Test basic tensor operations on MPS
-        print('Testing basic MPS tensor operations...')
-        x = torch.tensor([1.0, 2.0, 3.0], device='mps')
-        y = x * 2
-        result = y.cpu().numpy()
-        expected = np.array([2.0, 4.0, 6.0])
-        assert np.allclose(result, expected), f'Expected {expected}, got {result}'
-        print('✓ Basic MPS tensor operations working correctly')
-        
-        print('All MPS tests passed successfully!')
-        "
-
     - name: Run Unit Tests with MPS device
       run: |
         if [ -d "tests/unit" ]; then
