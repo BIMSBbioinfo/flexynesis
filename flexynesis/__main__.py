@@ -156,25 +156,32 @@ def main():
         if not os.path.exists(args.artifacts):
             raise FileNotFoundError(f"--artifacts not found: {args.artifacts}")
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Robust load across PT versions
+    # Robust load across PyTorch versions & checkpoint types
+    try:
+        # Try full-module unpickle (works if the class is importable)
+        model = torch.load(args.pretrained_model, map_location=device, weights_only=False)
+    except Exception:
         try:
-            model = torch.load(args.pretrained_model, map_location=device, weights_only=False)  # PT>=2.6
+            # PT>=2.6: load weights only (often returns a state_dict)
+            model = torch.load(args.pretrained_model, map_location=device, weights_only=True)
         except TypeError:
-            model = torch.load(args.pretrained_model, map_location=device)  # PT<=2.5
+            # PT<=2.5: no weights_only kwarg; last fallback
+            model = torch.load(args.pretrained_model, map_location=device)
 
-        if hasattr(model, "to"):
-            model.to(device).eval()
+    # Move to device only if it's an nn.Module
+    if hasattr(model, "to"):
+        model.to(device).eval()
 
-        run_inference(
-            model=model,
-            artifacts_path=args.artifacts,
-            data_path_test=args.data_path_test,
-            outdir=args.outdir,
-            prefix=args.prefix,
-        )
-        return  # inside main(); done after inference
+    run_inference(
+        model=model,
+        artifacts_path=args.artifacts,
+        data_path_test=args.data_path_test,
+        outdir=args.outdir,
+        prefix=args.prefix,
+    )
+    return  # inside main(); done after inference
 
     # ------------- Heavy imports only when training -------------
     print("[INFO] Loading Flexynesis modules...")
