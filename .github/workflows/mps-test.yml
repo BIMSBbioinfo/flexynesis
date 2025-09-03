@@ -21,7 +21,7 @@ jobs:
 
     # This is the most important line: it tells GitHub to use a
     # virtual machine with an Apple Silicon
-    runs-on: macos-15-xlarge
+    runs-on: macos-latest-xlarge
 
     steps:
       - name: Checkout repository
