@@ -47,21 +47,22 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-conda-
 
-    - name: Create environment with dependencies
-      shell: bash -l {0}
-      run: |
-        conda create --name my_env --file spec-file.txt
-        conda activate my_env
-        pip install pytest
+      - name: Create environment with dependencies
+        shell: bash -l {0}
+        run: |
+          conda create --name my_env --file spec-file.txt
+          conda activate my_env
+          pip install pytest
 
-    - name: Install my package from source
+      - name: Install my package from source
+        shell: bash -l {0}
         run: |
           conda activate my_env
           pip install -e .
           pip install pytest
 
-    - name: Run Unit Tests
-      shell: bash -l {0}
-      run: |
-        conda activate my_env
-        pytest -vvv --color=yes tests/unit
+      - name: Run Unit Tests
+        shell: bash -l {0}
+        run: |
+          conda activate my_env
+          pytest -vvv --color=yes tests/unit
