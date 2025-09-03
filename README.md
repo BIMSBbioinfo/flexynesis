@@ -4,6 +4,7 @@
 </p>
 
 [![Downloads](https://static.pepy.tech/badge/flexynesis)](https://pepy.tech/project/flexynesis)
+[![Docker Pulls](https://img.shields.io/docker/pulls/borauyar/flexynesis?logo=docker)](https://hub.docker.com/r/borauyar/flexynesis)
 ![Tutorials 3.11](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.11&label=Tutorials:%20Python%203.11)
 ![Tutorials 3.12](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.12&label=Tutorials:%20Python%203.12)
 ![Tutorials 3.x](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.x&label=Tutorials:%20Python%203.x)
