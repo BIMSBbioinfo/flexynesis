@@ -45,6 +45,10 @@ class InferenceArtifacts:
             join_key=meta.get("join_key", "JoinKey"),
         )
 
-def run_inference(*args, **kwargs):
-    """Placeholder: full implementation will follow in this branch."""
-    raise NotImplementedError("Inference mode WIP. See PR discussion in #105.")
+def run_inference(*, model, artifacts_path, data_path_test, outdir, prefix, **kwargs):
+    """Temporary no-op so the CLI path is wired and testable."""
+    print("[flexynesis] Inference mode stub reached ✅")
+    print("  artifacts:", artifacts_path)
+    print("  data_path_test:", data_path_test)
+    print("  outdir/prefix:", outdir, "/", prefix)
+    return
