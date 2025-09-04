@@ -54,14 +54,10 @@ MPS has some limitations compared to CUDA. Flexynesis automatically handles thes
 - **Float64 to Float32**: MPS doesn't support float64, so tensors are automatically converted to float32
 - **Safe Device Transfer**: All tensor operations use safe transfer functions to ensure MPS compatibility
 
-### Memory Management
-
-MPS memory management is handled automatically. You can monitor memory usage as usual, and Flexynesis will ensure optimal memory allocation patterns for Apple Silicon devices.
-
 ## System Requirements
 
 - **macOS**: 12.3 or later
-- **Hardware**: Apple Silicon (M1, M1 Pro, M1 Max, M1 Ultra, M2, M2 Pro, M2 Max, M2 Ultra, or newer)
+- **Hardware**: Apple Silicon (M1 or newer)
 - **Python**: 3.11 or later
 - **PyTorch**: Latest version with MPS support
 
@@ -77,7 +73,5 @@ print(f"MPS built: {torch.backends.mps.is_built()}")
 
 ## Performance Notes
 
-- MPS provides significant speedup over CPU for neural network training and inference
+- MPS provides significant speedup over CPU for training and inference
 - Performance depends on model size, batch size, and available unified memory
-- For very small models or datasets, CPU might be faster due to overhead
-- Memory usage is more efficient compared to discrete GPUs as it uses unified memory architecture
