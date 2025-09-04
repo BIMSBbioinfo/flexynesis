@@ -20,13 +20,6 @@ Built with interpretability in mind, Flexynesis incorporates integrated gradient
 
 The framework is continuously benchmarked on public datasets, particularly in oncology, and has been applied to tasks such as drug response prediction in patients and preclinical models (cell lines, PDXs), cancer subtype classification, and clinically relevant outcomes in regression, classification, survival, and cross-modality settings.
 
-## What is flexynesis-mps?
-
-flexynesis-mps extends Flexynesis with native MPS (Metal Performance Shaders) support, allowing users to leverage GPU acceleration on Apple Silicon Macs. At the same time, it maintains full compatibility with CUDA, so you can run GPU-accelerated workflows on both Apple Silicon (MPS) and NVIDIA GPUs (CUDA) without changing your code.
-
-For details on MPS implementation, click [HERE](mps%20documentation/MPS_Implementation_Documentation.md).
-  
-
 <p align="center">
   <img alt="workflow" src="https://github.com/BIMSBbioinfo/flexynesis/raw/main/img/graphical_abstract.jpg">
 </p>

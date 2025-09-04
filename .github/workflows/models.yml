@@ -13,11 +13,12 @@ on:
 
 jobs:
   run_package:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.x"]  # 👈 add latest (3.x)
-    name: Python ${{ matrix.python-version }}     # 👈 unique job name for badges
+    runs-on: ${{ matrix.os }}
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}     # 👈 unique job name for badges
 
     steps:
       - name: Checkout repository

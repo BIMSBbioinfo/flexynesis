@@ -8,6 +8,7 @@ theme:
 nav:
   - Home: index.md
   - Getting Started: getting_started.md
+  - Apple Silicon (MPS) Support: mps_support.md
   - Command Line Interface: commandline.md
   - Using Flexynesis on usegalaxy.eu: running_on_galaxy.md
   - API: 
