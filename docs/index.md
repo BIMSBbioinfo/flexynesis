@@ -26,3 +26,7 @@ that can be formulated as a regression, classification, survival, or cross-modal
 
 In order to refer to our work, please cite our manuscript currently available at [BioRxiv](https://biorxiv.org/cgi/content/short/2024.07.16.603606v1). 
 
+# Documentation
+
+- [Apple Silicon (MPS) Support](mps_support.md) - GPU acceleration for Apple Silicon devices
+
