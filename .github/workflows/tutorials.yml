@@ -38,15 +38,15 @@ jobs:
 
       - name: Compile brca_subtypes.ipynb
         run: |
-          notebook='mps-notebooks/brca_subtypes'
+          notebook='examples/tutorials/brca_subtypes'
           papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
 
       - name: Compile lgg_gbm.ipynb
         run: |
-          notebook='mps-notebooks/lgg_gbm'
+          notebook='examples/tutorials/survival_subtypes_LGG_GBM'
           papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
 
       - name: Compile unsupervised-analysis
         run: |
-          notebook='mps-notebooks/unsupervised_analysis_single_cell'
+          notebook='examples/tutorials/unsupervised_analysis_single_cell'
           papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
