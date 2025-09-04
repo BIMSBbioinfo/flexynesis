@@ -14,7 +14,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 def print_test_installation():
     print("Test Installation:")
     print("  # Download and extract test dataset")
-    print("  curl -L -o dataset1.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz")
+    print("  curl - L -o dataset1.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz")
     print("  tar -xzvf dataset1.tgz")
     print()
     print("  # Test the installation (should finish within a minute on a typical CPU)")
@@ -85,7 +85,7 @@ def main():
     parser.add_argument("--data_path_test", type=str, default=None,
                         help="Folder with test-only dataset for inference")
     parser.add_argument("--join_key", type=str, default="JoinKey",
-                        help="Column name in meta.csv for sample IDs")
+        help="Column name in meta.csv for sample IDs")
 
     # Existing core flags
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required=True)
@@ -156,32 +156,35 @@ def main():
         if not os.path.exists(args.artifacts):
             raise FileNotFoundError(f"--artifacts not found: {args.artifacts}")
 
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # define device BEFORE using it
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Robust load across PyTorch versions & checkpoint types
-    try:
-        # Try full-module unpickle (works if the class is importable)
-        model = torch.load(args.pretrained_model, map_location=device, weights_only=False)
-    except Exception:
+        # Robust load across PyTorch versions & checkpoint types
         try:
-            # PT>=2.6: load weights only (often returns a state_dict)
-            model = torch.load(args.pretrained_model, map_location=device, weights_only=True)
+            # Try full-module unpickle (works if the class is importable)
+            model = torch.load(args.pretrained_model, map_location=device, weights_only=False)
         except TypeError:
-            # PT<=2.5: no weights_only kwarg; last fallback
+            # PT<=2.5: no weights_only kwarg
             model = torch.load(args.pretrained_model, map_location=device)
+        except Exception:
+            # PT>=2.6 fallback: weights-only (often returns a state_dict)
+            try:
+                model = torch.load(args.pretrained_model, map_location=device, weights_only=True)
+            except TypeError:
+                model = torch.load(args.pretrained_model, map_location=device)
 
-    # Move to device only if it's an nn.Module
-    if hasattr(model, "to"):
-        model.to(device).eval()
+        # If it's an nn.Module, move to device; if it’s a state_dict, just pass through
+        if hasattr(model, "to"):
+            model.to(device).eval()
 
-    run_inference(
-        model=model,
-        artifacts_path=args.artifacts,
-        data_path_test=args.data_path_test,
-        outdir=args.outdir,
-        prefix=args.prefix,
-    )
-    return  # inside main(); done after inference
+        run_inference(
+            model=model,
+            artifacts_path=args.artifacts,
+            data_path_test=args.data_path_test,
+            outdir=args.outdir,
+            prefix=args.prefix,
+        )
+        return  # inside main(); done after inference
 
     # ------------- Heavy imports only when training -------------
     print("[INFO] Loading Flexynesis modules...")
@@ -315,6 +318,7 @@ def main():
 
     # classical ML baselines
     if args.model_class in ["RandomForest", "SVM", "XGBoost"]:
+        from .utils import evaluate_baseline_performance  # ensure import
         if args.target_variables:
             var = args.target_variables.strip().split(',')[0]
             print(f"Training {args.model_class} on variable: {var}")
@@ -327,6 +331,8 @@ def main():
             sys.exit(0)
         else:
             raise ValueError("At least one target variable is required to run RandomForest/SVM/XGBoost models. Set --target_variables")
+
+    from .utils import evaluate_baseline_survival_performance, get_predicted_labels, evaluate_wrapper  # ensure import
 
     if args.model_class == "RandomSurvivalForest":
         if args.surv_event_var and args.surv_time_var:
@@ -355,6 +361,8 @@ def main():
     for key in feature_logs.keys():
         feature_logs[key].to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_logs', key, 'csv'])),
                                  header=True, index=False)
+
+    from .main import HyperparameterTuning, FineTuner  # ensure import
 
     # tuner
     tuner = HyperparameterTuning(
@@ -478,4 +486,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
