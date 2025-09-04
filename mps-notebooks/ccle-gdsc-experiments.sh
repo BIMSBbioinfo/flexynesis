@@ -4,6 +4,7 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$SCRIPT_DIR"
 echo "Running experiments from: $(pwd)"
+echo "Using flexynesis from mamba environment: flexynesis-test"
 
 # Create output directory if it doesn't exist
 mkdir -p output
@@ -28,13 +29,22 @@ else
     echo "Dataset directory '$DATASET_DIR' already exists, skipping download and extraction."
 fi
 
-# Ensure the correct flexynesis-mps wheel is installed in the current Python environment
-PYTHON_BIN=${PYTHON_BIN:-python3}
-WHEEL_PATH="/Users/hc/Documents/flexxy/flexynesis-mps/dist/flexynesis_mps-1.0.8-py3-none-any.whl" # Adjust wheel path
-${PYTHON_BIN} -m pip install "$WHEEL_PATH"
+# Ensure the flexynesis-test mamba environment is activated
+echo "Activating flexynesis-test mamba environment..."
+# Initialize conda/mamba for shell
+conda init bash > /dev/null 2>&1 || true
+source ~/.bashrc > /dev/null 2>&1 || true
+# Activate the environment
+conda activate flexynesis-test 2>/dev/null || mamba activate flexynesis-test
 
-# Base command (use python -m flexynesis to ensure the wheel is used)
-BASE_CMD="$PYTHON_BIN -m flexynesis --use_gpu --data_path $SCRIPT_DIR/ccle_vs_gdsc --variance_threshold 50 --features_top_percentile 20 --target_variables Erlotinib --early_stop_patience 10 --hpo_iter 1 --outdir $SCRIPT_DIR/output --safetensors"
+# Verify flexynesis is available
+if ! command -v flexynesis &> /dev/null; then
+    echo "Error: flexynesis command not found. Please ensure the environment is properly set up."
+    exit 1
+fi
+
+# Base command using flexynesis from the activated environment
+BASE_CMD="flexynesis --device auto --data_path $SCRIPT_DIR/ccle_vs_gdsc --variance_threshold 50 --features_top_percentile 20 --target_variables Erlotinib --early_stop_patience 10 --hpo_iter 1 --outdir $SCRIPT_DIR/output --safetensors"
 # Define options
 MODELS=("supervised_vae" "GNN")
 DATA_TYPES=("mutation")
