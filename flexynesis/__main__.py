@@ -383,6 +383,8 @@ def main():
     if model_info is None:
         raise ValueError(f"Unsupported model class {args.model_class}")
     model_class, config_name = model_info
+    # import assays and labels
+    # Set concatenate to True to use early fusion, otherwise it will run intermediate fusion
 
     # fusion mode
     concatenate = args.fusion_type == 'early' and args.model_class != 'GNN'
@@ -498,20 +500,26 @@ def main():
     hpo_system_ram = process.memory_info().rss
 
     # optional fine-tuning
-    if args.finetuning_samples > 0:
-        finetuneSampleN = args.finetuning_samples
-        print("[INFO] Finetuning the model on ", finetuneSampleN, "test samples")
-        all_indices = range(len(test_dataset))
-        finetune_indices = random.sample(list(all_indices), finetuneSampleN)
-        holdout_indices = list(set(all_indices) - set(finetune_indices))
-        finetune_dataset = test_dataset.subset(finetune_indices)
-        holdout_dataset = test_dataset.subset(holdout_indices)
+   if args.finetuning_samples > 0:
+      finetuneSampleN = args.finetuning_samples
+      print("[INFO] Finetuning the model on ", finetuneSampleN, "test samples")
+     # split test dataset into finetuning and holdout datasets
+      all_indices = range(len(test_dataset))
+      finetune_indices = random.sample(list(all_indices), finetuneSampleN)
+      holdout_indices = list(set(all_indices) - set(finetune_indices))
+      finetune_dataset = test_dataset.subset(finetune_indices)
+      holdout_dataset = test_dataset.subset(holdout_indices)
 
-        finetuner = FineTuner(model, finetune_dataset)
-        finetuner.run_experiments()
+      # fine tune on the finetuning dataset; freeze the encoders
+      finetuner = FineTuner(model, finetune_dataset)
+      finetuner.run_experiments()
 
-        model = finetuner.model
-        test_dataset = holdout_dataset
+      # update the model to finetuned model
+      model = finetuner.model
+      # update the test dataset to exclude finetuning samples
+      test_dataset = holdout_dataset
+
+    
 
     # embeddings
     print("[INFO] Extracting sample embeddings")
