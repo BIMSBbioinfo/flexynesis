@@ -137,6 +137,32 @@ def print_full_help():
 
 
 def main():
+    """
+    Main entry point for the Flexynesis CLI.
+
+    This sets up argument parsing and either:
+      (a) runs inference-only if a pretrained model + artifacts + test data are provided, or
+      (b) runs the normal training/evaluation pipeline otherwise.
+
+    Inference-only flags (skip training):
+        --pretrained_model (str): Path to a saved model (.pth).
+        --artifacts (str): Path to training-time artifacts (.joblib).
+        --data_path_test (str): Folder with test-only dataset for inference.
+        --join_key (str): Column name in 'clin.csv' for sample IDs (default: "JoinKey").
+
+    Other key flags (see full help for all):
+        --data_path (str): Path with train/test data files. (Required)
+        --model_class (str): {"DirectPred","GNN","supervised_vae","MultiTripletNetwork",
+                              "CrossModalPred","RandomForest","SVM","XGBoost","RandomSurvivalForest"}.
+        --data_types (str): Which omic matrices (e.g., "gex,cnv"). (Required)
+        --target_variables (str): Target variables in 'clin.csv' (comma-separated).
+        --surv_event_var / --surv_time_var (str): Survival columns in 'clin.csv'.
+        --fusion_type (str): "early" or "intermediate".
+        --hpo_iter (int): HPO iterations (default 100).
+        --features_min / --features_top_percentile: Feature selection controls.
+        --use_cv, --val_size, --threads, --num_workers, --use_gpu, etc.
+    """
+
     # Early help (no heavy imports)
     if len(sys.argv) == 1:
         print_help()
@@ -145,7 +171,8 @@ def main():
         print_full_help()
         return
 
-    """
+
+   
     Main function to parse command-line arguments and initiate the training interface for PyTorch models.
     """
 
