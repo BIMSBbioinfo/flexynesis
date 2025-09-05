@@ -190,7 +190,8 @@ def main():
     parser.add_argument("--data_path_test", type=str, default=None,
                         help="Folder with test-only dataset for inference")
     parser.add_argument("--join_key", type=str, default="JoinKey",
-        help="Column name in meta.csv for sample IDs")
+                    help="Column name in 'clin.csv' (test metadata) used to join sample IDs")
+
 
     # Existing core flags
     parser.add_argument("--data_path", help="(Required) Path to the folder with train/test data files", type=str, required=True)
