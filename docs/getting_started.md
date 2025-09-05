@@ -346,6 +346,18 @@ conda activate flexynesisenv
 flexynesis --use_gpu ...otherarguments 
 ```
 
+### Apple Silicon (MPS)
+
+If you are using a Mac with Apple Silicon (M1 or newer), you can leverage GPU acceleration using the Metal Performance Shaders (MPS) framework. Flexynesis automatically detects and uses MPS when available.
+
+```
+# Automatic device selection (will use MPS if available)
+flexynesis --data_path your_data --model_class DirectPred --target_variables your_target
+
+# Explicitly use MPS
+flexynesis --data_path your_data --model_class DirectPred --target_variables your_target --device mps
+```
+
 ## Using Guix
 
 You can also create a reproducible development environment or build a reproducible package of Flexynesis with [GNU Guix](https://guix.gnu.org).  You will need at least the Guix channels listed in `channels.scm`.  It also helps to have authorized the Inria substitute server to get binaries for CUDA-enabled packages.  See [this page](https://hpc.guix.info/channels/non-free/) for instructions on how to configure fetching binary substitutes from the build servers.

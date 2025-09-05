@@ -6,6 +6,15 @@ __pycache__/
 # C extensions
 *.so
 
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
 # Distribution / packaging
 core.*
 *.pth

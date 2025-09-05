@@ -36,4 +36,3 @@ EXPOSE 8888
 
 # Start with a bash shell by default
 CMD ["/bin/bash", "-l"]
-

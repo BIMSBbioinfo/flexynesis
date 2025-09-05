@@ -404,7 +404,8 @@ class MultiTripletNetwork(pl.LightningModule):
             pd.DataFrame: A DataFrame containing feature importances across different variables and data modalities.
         """
 
-        device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
+        from ..utils import create_device_from_string
+        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         self.to(device)
 
         print("[INFO] Computing feature importance for variable:",target_var,"on device:",device)

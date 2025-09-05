@@ -345,7 +345,8 @@ class supervised_vae(pl.LightningModule):
             pd.DataFrame: Transformed dataset as a pandas DataFrame.
         """
         self.eval()  # Set the model to evaluation mode
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        from ..utils import create_device_from_string
+        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         self.to(device)  # Move the model to the appropriate device
 
         dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
@@ -384,7 +385,8 @@ class supervised_vae(pl.LightningModule):
             dict: Predicted values mapped by target variable names.
         """
         self.eval()  # Set the model to evaluation mode
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        from ..utils import create_device_from_string
+        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         self.to(device)  # Move the model to the appropriate device
 
         dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
@@ -498,7 +500,8 @@ class supervised_vae(pl.LightningModule):
         Returns:
             pd.DataFrame: A DataFrame containing feature importances across different variables and data modalities.
         """
-        device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
+        from ..utils import create_device_from_string
+        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         self.to(device)
         
         print("[INFO] Computing feature importance for variable:",target_var,"on device:",device)

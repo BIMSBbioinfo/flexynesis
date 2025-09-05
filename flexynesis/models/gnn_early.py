@@ -76,8 +76,8 @@ class GNN(pl.LightningModule):
             self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
         self.variables = self.target_variables + self.batch_variables if self.batch_variables else self.target_variables
-        self.variable_types = dataset.multiomic_dataset.variable_types 
-        self.ann = dataset.multiomic_dataset.ann 
+        self.variable_types = getattr(dataset, 'multiomic_dataset', dataset).variable_types 
+        self.ann = getattr(dataset, 'multiomic_dataset', dataset).ann 
         self.edge_index = dataset.edge_index
         
         self.feature_importances = {}
@@ -86,7 +86,8 @@ class GNN(pl.LightningModule):
         self.device_type = device_type 
         self.gnn_conv_type = gnn_conv_type
         
-        device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
+        from ..utils import create_device_from_string
+        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         self.edge_index = self.edge_index.to(device) # edge index is re-used across samples, so we keep it in device
                 
         if self.use_loss_weighting:
@@ -294,7 +295,8 @@ class GNN(pl.LightningModule):
             dict: Predictions mapped by target variable names.
         """
         self.eval()  # Set the model to evaluation mode
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        from ..utils import create_device_from_string
+        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         self.to(device)  # Move the model to the appropriate device
 
         # Create a DataLoader with a practical batch size
@@ -332,7 +334,8 @@ class GNN(pl.LightningModule):
             pd.DataFrame: DataFrame containing the transformed data.
         """
         self.eval()  # Set the model to evaluation mode
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        from ..utils import create_device_from_string
+        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         self.to(device)  # Move the model to the appropriate device
         edge_index = dataset.edge_index.to(device)  # Move edge_index to GPU
 
@@ -392,7 +395,8 @@ class GNN(pl.LightningModule):
         """
         def bytes_to_gb(bytes):
             return bytes / 1024 ** 2
-        device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
+        from ..utils import create_device_from_string
+        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         self.to(device)
         self.dataset_edge_index = dataset.edge_index.to(device)
 
@@ -469,7 +473,7 @@ class GNN(pl.LightningModule):
 
 
         df_list = []
-        layers = list(dataset.multiomic_dataset.dat.keys())
+        layers = list(getattr(dataset, 'multiomic_dataset', dataset).dat.keys())
         for i in range(num_class):
             features = dataset.common_features
             target_class_label = dataset.label_mappings[target_var].get(i) if target_var in dataset.label_mappings else ''

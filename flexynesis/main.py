@@ -87,7 +87,9 @@ class HyperparameterTuning:
         self.target_variables = target_variables
         self.device_type = device_type
         if self.device_type is None:
-            self.device_type = "gpu" if torch.cuda.is_available() else "cpu"
+            # Use new device detection with MPS support
+            from .utils import get_optimal_device
+            _, self.device_type = get_optimal_device()
         self.surv_event_var = surv_event_var
         self.surv_time_var = surv_time_var
         self.batch_variables = batch_variables

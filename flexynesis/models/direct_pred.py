@@ -13,6 +13,7 @@ from functools import reduce
 from captum.attr import IntegratedGradients, GradientShap
 
 from ..modules import *
+from ..utils import to_device_safe
 
 class DirectPred(pl.LightningModule):
     """
@@ -269,7 +270,8 @@ class DirectPred(pl.LightningModule):
             dict: Predicted values mapped by target variable names.
         """
         self.eval()  # Set the model to evaluation mode
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        from ..utils import create_device_from_string
+        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         self.to(device)  # Move the model to the appropriate device
 
         # Create a DataLoader with a practical batch size
@@ -280,7 +282,7 @@ class DirectPred(pl.LightningModule):
         # Process each batch
         for batch in dataloader:
             dat, y_dict, samples = batch
-            x_list = [dat[x].to(device) for x in dat.keys()]  # Prepare the data batch for processing
+            x_list = [to_device_safe(dat[x], device) for x in dat.keys()]  # Prepare the data batch for processing
 
             # Perform the forward pass
             outputs = self.forward(x_list)
@@ -310,7 +312,8 @@ class DirectPred(pl.LightningModule):
             pd.DataFrame: DataFrame containing the transformed data.
         """
         self.eval()  # Set the model to evaluation mode
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        from ..utils import create_device_from_string
+        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         self.to(device)  # Move the model to the appropriate device
 
         dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
@@ -324,7 +327,7 @@ class DirectPred(pl.LightningModule):
             batch_embeddings = []
             # Process each input matrix with its corresponding Encoder
             for i, x in enumerate(dat.values()):
-                x = x.to(device)  # Move data to GPU
+                x = to_device_safe(x, device)  # Move data to GPU
                 encoded_x = self.encoders[i](x)  # Transform data using the corresponding encoder
                 batch_embeddings.append(encoded_x)
             
@@ -374,7 +377,8 @@ class DirectPred(pl.LightningModule):
         Returns:
             pd.DataFrame: A DataFrame containing feature importances across different variables and data modalities.
         """
-        device = torch.device("cuda" if self.device_type == 'gpu' and torch.cuda.is_available() else 'cpu')
+        from ..utils import create_device_from_string
+        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         self.to(device)
 
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
@@ -396,7 +400,7 @@ class DirectPred(pl.LightningModule):
         aggregated_attributions = [[] for _ in range(num_class)]
         for batch in dataloader:
             dat, _, _ = batch
-            x_list = [dat[x].to(device) for x in dat.keys()]
+            x_list = [to_device_safe(dat[x], device) for x in dat.keys()]
             input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
             
             if method == 'IntegratedGradients':

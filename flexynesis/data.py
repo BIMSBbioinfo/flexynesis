@@ -405,8 +405,9 @@ class DataImporter:
 
         ann, variable_types, label_mappings = self.encode_labels(ann)
 
-        # Convert DataFrame to tensor
-        ann = {col: torch.from_numpy(ann[col].values) for col in ann.columns}
+        # Convert DataFrame to tensor with MPS-compatible dtypes
+        ann = {col: torch.from_numpy(ann[col].values).float() if ann[col].dtype in ['float64', 'float32'] 
+               else torch.from_numpy(ann[col].values) for col in ann.columns}
         return MultiOmicDataset(dat, ann, variable_types, features, samples, label_mappings)
 
     def encode_labels(self, df):

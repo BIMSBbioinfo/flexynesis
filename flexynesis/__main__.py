@@ -1,5 +1,12 @@
 import os, sys 
 os.environ["OMP_NUM_THREADS"] = "1"
+import pandas as pd
+import flexynesis
+from flexynesis.models import *
+from lightning.pytorch.callbacks import EarlyStopping
+from .data import STRING, MultiOmicDatasetNW
+from .utils import get_optimal_device, get_device_memory_info, create_device_from_string
+import tracemalloc, psutil
 
 
 def print_test_installation():
@@ -25,7 +32,9 @@ def print_help():
     print("  --data_types DATA_TYPES")
     print("                        (Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'")
     print("  --hpo_iter HPO_ITER   Number of iterations for hyperparameter optimisation (default: 100)")
-    print("  --use_gpu             (Optional) If set, the system will attempt to use CUDA/GPU if available.")
+    print("  --device {auto,cuda,mps,cpu}")
+    print("                        Device type: 'auto' (automatic detection), 'cuda' (NVIDIA GPU), 'mps' (Apple Silicon), 'cpu' (default: auto)")
+    print("  --use_gpu             (Optional) DEPRECATED: Use --device instead. If set, attempts to use CUDA/GPU if available.")
     print()
     print_test_installation()
     print()
@@ -33,7 +42,7 @@ def print_help():
     print()
 
 def print_full_help():
-    print("usage: flexynesis [-h] --data_path DATA_PATH --model_class {DirectPred,supervised_vae,MultiTripletNetwork,CrossModalPred,GNN,RandomForest,SVM,XGBoost,RandomSurvivalForest} [--gnn_conv_type {GC,GCN,SAGE}] [--target_variables TARGET_VARIABLES] [--covariates COVARIATES] [--surv_event_var SURV_EVENT_VAR] [--surv_time_var SURV_TIME_VAR] [--config_path CONFIG_PATH] [--fusion_type {early,intermediate}] [--hpo_iter HPO_ITER] [--finetuning_samples FINETUNING_SAMPLES] [--variance_threshold VARIANCE_THRESHOLD] [--correlation_threshold CORRELATION_THRESHOLD] [--restrict_to_features RESTRICT_TO_FEATURES] [--subsample SUBSAMPLE] [--features_min FEATURES_MIN] [--features_top_percentile FEATURES_TOP_PERCENTILE] --data_types DATA_TYPES [--input_layers INPUT_LAYERS] [--output_layers OUTPUT_LAYERS] [--outdir OUTDIR] [--prefix PREFIX] [--log_transform {True,False}] [--early_stop_patience EARLY_STOP_PATIENCE] [--hpo_patience HPO_PATIENCE] [--val_size VAL_SIZE] [--use_cv] [--use_loss_weighting {True,False}] [--evaluate_baseline_performance] [--threads THREADS] [--num_workers NUM_WORKERS] [--use_gpu] [--feature_importance_method {IntegratedGradients,GradientShap,Both}] [--disable_marker_finding] [--string_organism STRING_ORGANISM] [--string_node_name {gene_name,gene_id}] [--safetensors]")
+    print("usage: flexynesis [-h] --data_path DATA_PATH --model_class {DirectPred,supervised_vae,MultiTripletNetwork,CrossModalPred,GNN,RandomForest,SVM,XGBoost,RandomSurvivalForest} [--gnn_conv_type {GC,GCN,SAGE}] [--target_variables TARGET_VARIABLES] [--covariates COVARIATES] [--surv_event_var SURV_EVENT_VAR] [--surv_time_var SURV_TIME_VAR] [--config_path CONFIG_PATH] [--fusion_type {early,intermediate}] [--hpo_iter HPO_ITER] [--finetuning_samples FINETUNING_SAMPLES] [--variance_threshold VARIANCE_THRESHOLD] [--correlation_threshold CORRELATION_THRESHOLD] [--restrict_to_features RESTRICT_TO_FEATURES] [--subsample SUBSAMPLE] [--features_min FEATURES_MIN] [--features_top_percentile FEATURES_TOP_PERCENTILE] --data_types DATA_TYPES [--input_layers INPUT_LAYERS] [--output_layers OUTPUT_LAYERS] [--outdir OUTDIR] [--prefix PREFIX] [--log_transform {True,False}] [--early_stop_patience EARLY_STOP_PATIENCE] [--hpo_patience HPO_PATIENCE] [--val_size VAL_SIZE] [--use_cv] [--use_loss_weighting {True,False}] [--evaluate_baseline_performance] [--threads THREADS] [--num_workers NUM_WORKERS] [--device {auto,cuda,mps,cpu}] [--use_gpu] [--feature_importance_method {IntegratedGradients,GradientShap,Both}] [--disable_marker_finding] [--string_organism STRING_ORGANISM] [--string_node_name {gene_name,gene_id}] [--safetensors]")
     print()
     print("Flexynesis model training interface")
     print()
@@ -98,7 +107,9 @@ def print_full_help():
     print("  --threads THREADS     (Optional) How many threads to use when using CPU (default is 4)")
     print("  --num_workers NUM_WORKERS")
     print("                        (Optional) How many workers to use for model training (default is 0)")
-    print("  --use_gpu             (Optional) If set, the system will attempt to use CUDA/GPU if available.")
+    print("  --device {auto,cuda,mps,cpu}")
+    print("                        Device type: 'auto' (automatic detection), 'cuda' (NVIDIA GPU), 'mps' (Apple Silicon), 'cpu' (default: auto)")
+    print("  --use_gpu             (Optional) DEPRECATED: Use --device instead. If set, attempts to use CUDA/GPU if available.")
     print("  --feature_importance_method {IntegratedGradients,GradientShap,Both}")
     print("                        Choose feature importance score method (default: IntegratedGradients)")
     print("  --disable_marker_finding")
@@ -111,7 +122,6 @@ def print_full_help():
     print()
     print_test_installation()
     print()
-
 
 def main():
     # Check for help early before any heavy operations
@@ -161,7 +171,9 @@ def main():
         --evaluate_baseline_performance (bool): Enables modeling also with Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset.
         --threads (int): How many threads to use when using CPU. Default is 4.
         --num_workers (int): How many workers to use for model training. Default is 0
-        --use_gpu (bool): If set, the system will attempt to use CUDA/GPU if available.
+        --use_gpu (bool): DEPRECATED - Use --device instead. If set, the system will attempt to use CUDA/GPU if available.
+        --device (str): Device to use for training. Choices are ['auto', 'cuda', 'mps', 'cpu']. Default is 'auto'. 
+                       'auto' detects best available device, 'cuda' for NVIDIA GPUs, 'mps' for Apple Silicon, 'cpu' for CPU-only.
         --feature_importance_method (str): which method(s) to use to compute feature importance scores. Options are: IntegratedGradients, GradientShap, or Both. Default: Both
         --disable_marker_finding (bool): If set, marker discovery after model training is disabled.
         --string_organism (int): STRING DB organism id. Default is 9606.
@@ -220,9 +232,12 @@ def main():
                         help="whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset")
     parser.add_argument("--threads", help="(Optional) How many threads to use when using CPU (default is 4)", type=int, default = 4)
     parser.add_argument("--num_workers", help="(Optional) How many workers to use for model training (default is 0)", type=int, default = 0)
-    parser.add_argument("--use_gpu", action="store_true",
-                        help="(Optional) If set, the system will attempt to use CUDA/GPU if available.")
-    parser.add_argument("--feature_importance_method", help="Choose feature importance score method", type=str,
+    parser.add_argument("--use_gpu", action="store_true", 
+                        help="(Optional) DEPRECATED: Use --device instead. If set, attempts to use CUDA/GPU if available.")
+    parser.add_argument("--device", type=str, 
+                        choices=["auto", "cuda", "mps", "cpu"], default="auto",
+                        help="Device type: 'auto' (automatic detection), 'cuda' (NVIDIA GPU), 'mps' (Apple Silicon), 'cpu'")
+    parser.add_argument("--feature_importance_method", help="Choose feature importance score method", type=str, 
                         choices=["IntegratedGradients", "GradientShap", "Both"], default="IntegratedGradients")
     parser.add_argument("--disable_marker_finding", action="store_true",
                         help="(Optional) If set, marker discovery after model training is disabled.")
@@ -282,21 +297,26 @@ def main():
         if args.model_class == 'CrossModalPred':
             parser.error("The 'CrossModalPred' model cannot be used with early fusion type. "
                          "Use --fusion_type intermediate instead.")
-
-
-    # 4. Check for device availability if --accelerator is set.
-    if args.use_gpu:
-        if not torch.cuda.is_available():
-            warnings.warn(''.join(["\n\n!!! WARNING: GPU REQUESTED BUT NOT AVAILABLE. FALLING BACK TO CPU.\n",
-                                   "PERFORMANCE MAY BE DEGRADED\n",
-                                   "IF USING A SLURM SCHEDULER, ENSURE YOU REQUEST A GPU WITH: ",
-                                   "`srun --gpus=1 --pty flexynesis <rest of your_command>` !!!\n\n"]))
-            time.sleep(3)  #wait a bit to capture user's attention to the warning
-            device_type = 'cpu'
-        else:
-            device_type = 'gpu'
+            
+    
+    # 4. Handle device selection with MPS support
+    # Support legacy --use_gpu flag for backward compatibility
+    if args.use_gpu and args.device == "auto":
+        warnings.warn("--use_gpu is deprecated. Use --device cuda instead.", DeprecationWarning)
+        device_preference = "cuda"
     else:
-        device_type = 'cpu'
+        device_preference = args.device
+    
+    # Get optimal device using new device detection
+    device_str, device_type = get_optimal_device(device_preference)
+    
+    # Print device information
+    print(f"[INFO] Using device: {device_str}")
+    if device_str != 'cpu':
+        memory_info = get_device_memory_info(device_str)
+        print(f"[INFO] Device name: {memory_info['device_name']}")
+        if device_str == 'cuda':
+            print(f"[INFO] Available CUDA devices: {memory_info['device_count']}")
 
     # 5. check GNN arguments
     if args.model_class == 'GNN':
@@ -554,12 +574,16 @@ def main():
 
         # in the case when GNNEarly was used, the we use the initial multiomicdataset for train/test
         # because GNNEarly requires a modified dataset structure to fit the networks (temporary solution)
-        train = train_dataset.multiomic_dataset if args.model_class == 'GNN' else train_dataset
-        test = test_dataset.multiomic_dataset if args.model_class == 'GNN' else test_dataset
-
-        if var != model.surv_event_var:
-            metrics, predictions = evaluate_baseline_performance(train, test,
-                                                               variable_name = var,
+        if args.model_class == 'GNN':
+            train = getattr(train_dataset, 'multiomic_dataset', train_dataset)
+            test = getattr(test_dataset, 'multiomic_dataset', test_dataset)
+        else:
+            train = train_dataset
+            test = test_dataset
+        
+        if var != model.surv_event_var: 
+            metrics, predictions = flexynesis.evaluate_baseline_performance(train, test, 
+                                                               variable_name = var, 
                                                                methods = ['RandomForest', 'SVM', 'XGBoost'],
                                                                n_folds = 5,
                                                                n_jobs = int(args.threads))
@@ -613,9 +637,14 @@ def main():
     print(f"[INFO] Time spent in data import: {data_import_time:.2f} sec")
     print(f"[INFO] RAM after data import: {data_import_ram / (1024**2):.2f} MB")
     print(f"[INFO] Time spent in HPO: {hpo_time:.2f} sec")
-    if torch.cuda.is_available():
-        peak_mem_mb = torch.cuda.max_memory_allocated() / (1024**2)
-        print(f"[INFO] Peak GPU RAM allocated: {peak_mem_mb:.2f} MB")
+    
+    # Enhanced device memory reporting
+    final_memory_info = get_device_memory_info(device_str)
+    if device_str == 'cuda':
+        print(f"[INFO] Peak CUDA RAM allocated: {final_memory_info['max_allocated']:.2f} MB")
+    elif device_str == 'mps':
+        print(f"[INFO] MPS device used (detailed memory tracking not available)")
+    
     print(f"[INFO] CPU RAM after HPO: {hpo_system_ram / (1024**2):.2f} MB")
     
     print("[INFO] Finished the analysis!")

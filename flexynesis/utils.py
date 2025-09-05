@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import torch
 import math
+import warnings
 import requests
 import tarfile
 import os
@@ -82,7 +83,15 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', tit
         colnames = ['PC1', 'PC2']
     elif method == 'umap':
         transformer = UMAP(n_components=2)
-        transformed_matrix = transformer.fit_transform(matrix)
+        # Convert to numpy array and handle UMAP compatibility
+        import numpy as np
+        matrix_np = np.array(matrix, dtype=np.float32)
+        try:
+            # Try with ensure_all_finite parameter (newer versions)
+            transformed_matrix = transformer.fit_transform(matrix_np, ensure_all_finite=True)
+        except TypeError:
+            # Fallback for older UMAP versions that don't support ensure_all_finite
+            transformed_matrix = transformer.fit_transform(matrix_np)
         xlab = "UMAP1"
         ylab = "UMAP2"
         colnames = ['UMAP1', 'UMAP2']
@@ -1654,3 +1663,124 @@ def compute_transport_cost(embeddings, batch_labels, blur=0.5):
     loss = loss_fn(batch1_embeddings, batch2_embeddings)
 
     return loss
+
+
+def to_device_safe(tensor, device):
+    """
+    Safely move tensor to device with MPS compatibility.
+    Converts float64 to float32 for MPS devices since MPS doesn't support float64.
+    """
+    # Handle both torch.device objects and string device names
+    if isinstance(device, str):
+        device = torch.device(device)
+    
+    if device.type == "mps" and tensor.dtype == torch.float64:
+        tensor = tensor.float()  # Convert to float32
+    elif device.type == "mps" and tensor.dtype == torch.double:
+        tensor = tensor.float()  # Convert double to float32
+    return tensor.to(device)
+
+
+def get_optimal_device(device_preference=None):
+    """
+    Automatically detect and return the optimal device for PyTorch operations.
+    
+    Args:
+        device_preference (str, optional): Preferred device type ('cuda', 'mps', 'cpu', 'auto').
+                                         If None or 'auto', automatically selects the best available device.
+    
+    Returns:
+        tuple: (device_str, device_type) where:
+            - device_str: String suitable for torch.device() and PyTorch Lightning accelerator
+            - device_type: String indicating the device type for compatibility
+    """
+    if device_preference is None:
+        device_preference = 'auto'
+    
+    # If specific device is requested, validate and return it
+    if device_preference == 'cuda':
+        if torch.cuda.is_available():
+            return 'cuda', 'gpu'
+        else:
+            warnings.warn("CUDA requested but not available. Falling back to auto-detection.")
+    elif device_preference == 'mps':
+        if torch.backends.mps.is_available():
+            return 'mps', 'mps'
+        else:
+            warnings.warn("MPS requested but not available. Falling back to auto-detection.")
+    elif device_preference == 'cpu':
+        return 'cpu', 'cpu'
+    
+    # Auto-detection logic (priority: CUDA > MPS > CPU)
+    if torch.cuda.is_available():
+        return 'cuda', 'gpu'
+    elif torch.backends.mps.is_available():
+        return 'mps', 'mps'
+    else:
+        return 'cpu', 'cpu'
+
+
+def get_device_memory_info(device_str):
+    """
+    Get memory information for the specified device.
+    
+    Args:
+        device_str (str): Device string ('cuda', 'mps', 'cpu')
+    
+    Returns:
+        dict: Memory information dictionary
+    """
+    if device_str == 'cuda' and torch.cuda.is_available():
+        return {
+            'allocated': torch.cuda.memory_allocated() / (1024**2),  # MB
+            'reserved': torch.cuda.memory_reserved() / (1024**2),    # MB
+            'max_allocated': torch.cuda.max_memory_allocated() / (1024**2),  # MB
+            'device_name': torch.cuda.get_device_name(0),
+            'device_count': torch.cuda.device_count()
+        }
+    elif device_str == 'mps' and torch.backends.mps.is_available():
+        # MPS doesn't have the same detailed memory tracking as CUDA
+        return {
+            'allocated': 'N/A (MPS)',
+            'reserved': 'N/A (MPS)', 
+            'max_allocated': 'N/A (MPS)',
+            'device_name': 'Apple Metal Performance Shaders',
+            'device_count': 1
+        }
+    else:
+        return {
+            'allocated': 'N/A (CPU)',
+            'reserved': 'N/A (CPU)',
+            'max_allocated': 'N/A (CPU)', 
+            'device_name': 'CPU',
+            'device_count': 1
+        }
+
+
+def create_device_from_string(device_str):
+    """
+    Create a torch.device object from device string, with MPS support.
+    
+    Args:
+        device_str (str): Device string ('cuda', 'mps', 'cpu', 'gpu', 'auto')
+    
+    Returns:
+        torch.device: PyTorch device object
+    """
+    if device_str in ['gpu', 'auto']:
+        optimal_device, _ = get_optimal_device()
+        return torch.device(optimal_device)
+    elif device_str == 'mps':
+        if torch.backends.mps.is_available():
+            return torch.device('mps')
+        else:
+            warnings.warn("MPS not available, falling back to CPU")
+            return torch.device('cpu')
+    elif device_str == 'cuda':
+        if torch.cuda.is_available():
+            return torch.device('cuda')
+        else:
+            warnings.warn("CUDA not available, falling back to CPU")
+            return torch.device('cpu')
+    else:
+        return torch.device('cpu')
