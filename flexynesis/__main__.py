@@ -543,11 +543,12 @@ def main():
                 df_imp['explainer'] = explainer
                 df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance', explainer, 'csv'])), header=True, index=False)
 
-        predicted_labels = pd.concat([
-            get_predicted_labels(model.predict(train_dataset), train_dataset, 'train', args.model_class),
-            get_predicted_labels(model.predict(test_dataset), test_dataset, 'test', args.model_class)
-        ], ignore_index=True)
-        predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
+      # print known/predicted labels
+      predicted_labels = pd.concat([
+         get_predicted_labels(model.predict(train_dataset), train_dataset, 'train', args.model_class),
+         get_predicted_labels(model.predict(test_dataset), test_dataset, 'test', args.model_class)
+       ], ignore_index=True)
+       predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
 
         print("[INFO] Computing model evaluation metrics")
         metrics_df = evaluate_wrapper(
