@@ -382,6 +382,18 @@ guix time-machine -C channels.scm -- \
   glibc-locales coreutils bash python
 ```
 
+### Apple Silicon (MPS)
+
+If you are using a Mac with Apple Silicon (M1 or newer), you can leverage GPU acceleration using the Metal Performance Shaders (MPS) framework. Flexynesis automatically detects and uses MPS when available.
+
+```
+# Automatic device selection (will use MPS if available)
+flexynesis --data_path your_data --model_class DirectPred --target_variables your_target
+
+# Explicitly use MPS
+flexynesis --data_path your_data --model_class DirectPred --target_variables your_target --device mps
+```
+
 ## Jupyter Notebooks
 
 ### Defining a kernel 
