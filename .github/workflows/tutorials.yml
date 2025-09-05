@@ -8,11 +8,12 @@ on:
 
 jobs:
   check_tutorials:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.x"]
-    name: Tutorials Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    name: Tutorials Python ${{ matrix.python-version }} on ${{ matrix.os }}
 
     steps:
       - name: Checkout repository
