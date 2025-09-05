@@ -6,7 +6,6 @@ on:
     paths:
       - 'flexynesis/**'
       - '.github/workflows/**'
-      - './spec-file.txt'
       - './pyproject.toml'
       - './manifest.scm'
       - './guix.scm'
