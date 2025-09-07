@@ -1,5 +1,3 @@
-# flexynesis/__main__.py — training + inference CLI with full docstring (for docs) and notebook-friendly argparse
-
 import os
 import sys
 import argparse
@@ -202,6 +200,12 @@ def main():
       --string_node_name {gene_name,gene_id}
       --safetensors
 
+    Notes
+    -----
+    • Unknown CLI arguments are accepted with a warning (useful in Jupyter/Colab).
+    • If all of (--pretrained_model, --artifacts, --data_path_test) are provided, the program
+      runs inference and exits early (training code is skipped).
+
     Examples
     --------
     # Quick smoke test on the sample dataset (CPU):
@@ -297,7 +301,7 @@ def main():
     # NOTE: use parse_known_args to avoid crashing inside Jupyter/Colab (which passes extra args like -f <kernel.json>)
     args, unknown = parser.parse_known_args()
     if unknown:
-        warnings.warn(f"Ignoring unknown CLI arguments: {unknown}")
+        print("[WARN] Ignoring unknown CLI arguments:", " ".join(unknown), file=sys.stderr)
 
     # --------- Conditional requirements & I/O prep (applies to both modes) ---------
     # Ensure outdir exists (works for training and inference)
@@ -306,7 +310,8 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
 
     # Only require core training flags if NOT doing inference
-    in_infer = bool(args.pretrained_model)
+    # Treat as inference mode ONLY when all three inference inputs are present.
+    in_infer = bool(args.pretrained_model and args.artifacts and args.data_path_test)
     if not in_infer:
         missing = [k for k in ("data_path", "model_class", "data_types") if not getattr(args, k, None)]
         if missing:
