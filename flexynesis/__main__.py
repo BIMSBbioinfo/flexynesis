@@ -1,12 +1,5 @@
 import os, sys 
 os.environ["OMP_NUM_THREADS"] = "1"
-import pandas as pd
-import flexynesis
-from flexynesis.models import *
-from lightning.pytorch.callbacks import EarlyStopping
-from .data import STRING, MultiOmicDatasetNW
-from .utils import get_optimal_device, get_device_memory_info, create_device_from_string
-import tracemalloc, psutil
 
 
 def print_test_installation():
@@ -248,8 +241,7 @@ def main():
     # safetensors args
     parser.add_argument("--safetensors", help="If set, the model will be saved in the SafeTensors format. Default is False.", action="store_true")
 
-    # Import argparse and other basic modules needed for argument parsing
-    import argparse
+    # Import basic modules needed for argument parsing
     import yaml
     import time
     import random
@@ -259,6 +251,7 @@ def main():
 
     # Now import heavy dependencies only when actually needed
     print("[INFO] Loading Flexynesis modules...")
+    import flexynesis
     from lightning import seed_everything
     import lightning as pl
     from typing import NamedTuple
@@ -276,7 +269,7 @@ def main():
     from lightning.pytorch.callbacks import EarlyStopping
     from .data import STRING, MultiOmicDatasetNW, DataImporter
     from .main import HyperparameterTuning, FineTuner
-    from .utils import evaluate_baseline_performance, evaluate_baseline_survival_performance, get_predicted_labels, evaluate_wrapper
+    from .utils import evaluate_baseline_performance, evaluate_baseline_survival_performance, get_predicted_labels, evaluate_wrapper, get_optimal_device, get_device_memory_info, create_device_from_string
     import tracemalloc, psutil
     import json
 
