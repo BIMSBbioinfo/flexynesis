@@ -141,81 +141,9 @@ def main():
     """
     Main entry point for the Flexynesis CLI.
 
-    Behavior
-    --------
-    Depending on the provided flags, this command either:
-      (A) runs **inference only** using a pretrained model and artifacts, OR
-      (B) runs the **standard training / HPO / evaluation** pipeline.
-
-    Inference-only mode (skip training)
-    -----------------------------------
-    Provide ALL of the following:
-      --pretrained_model <PATH>    : Path to a saved model (.pth).
-      --artifacts <PATH>           : Path to training-time artifacts (.joblib).
-      --data_path_test <DIR>       : Folder with test-only dataset for inference.
-      --join_key <STR>             : Column name in test 'clin.csv' for sample IDs (default: "JoinKey").
-
-    Training / evaluation mode
-    --------------------------
-    Core (conditionally required when NOT in inference mode):
-      --data_path <DIR>            : Folder with train/test data files. (Required)
-      --model_class <STR>          : One of {DirectPred, supervised_vae, MultiTripletNetwork, CrossModalPred, GNN,
-                                      RandomForest, SVM, XGBoost, RandomSurvivalForest}. (Required)
-      --data_types <CSV>           : Which omic matrices to use (e.g. "gex,cnv"). (Required)
-
-    All training / evaluation flags (mirrors argparse)
-    --------------------------------------------------
-      --gnn_conv_type {GC,GCN,SAGE}
-      --target_variables <CSV>
-      --covariates <CSV>
-      --surv_event_var <STR>
-      --surv_time_var <STR>
-      --config_path <YAML>
-      --fusion_type {early,intermediate}
-      --hpo_iter <INT>
-      --finetuning_samples <INT>
-      --variance_threshold <FLOAT PERCENTILE>
-      --correlation_threshold <FLOAT>
-      --restrict_to_features <PATH or CSV>
-      --subsample <INT>
-      --features_min <INT>
-      --features_top_percentile <FLOAT>
-      --input_layers <CSV>                 # CrossModalPred only
-      --output_layers <CSV>                # CrossModalPred only
-      --outdir <DIR>
-      --prefix <STR>
-      --log_transform {True,False}
-      --early_stop_patience <INT>
-      --hpo_patience <INT>
-      --val_size <FLOAT>
-      --use_cv
-      --use_loss_weighting {True,False}
-      --evaluate_baseline_performance
-      --threads <INT>
-      --num_workers <INT>
-      --use_gpu
-      --feature_importance_method {IntegratedGradients,GradientShap,Both}
-      --disable_marker_finding
-      --string_organism <INT>              # for GNN overlay
-      --string_node_name {gene_name,gene_id}
-      --safetensors
-
-    Notes
-    -----
-    • Unknown CLI arguments are accepted with a warning (useful in Jupyter/Colab).
-    • If all of (--pretrained_model, --artifacts, --data_path_test) are provided, the program
-      runs inference and exits early (training code is skipped).
-
-    Examples
-    --------
-    # Quick smoke test on the sample dataset (CPU):
-    flexynesis --data_path dataset1 --model_class DirectPred \
-      --target_variables Erlotinib --hpo_iter 1 --features_top_percentile 5 \
-      --data_types gex,cnv
-
-    # Inference-only with a saved model:
-    flexynesis --pretrained_model my_model.pth --artifacts train_artifacts.joblib \
-      --data_path_test dataset1/test --join_key SampleID --outdir out --prefix run1
+    This sets up argument parsing and either:
+      (a) runs inference-only if a pretrained model + artifacts + test data are provided, or
+      (b) runs the normal training/evaluation pipeline otherwise.
     """
 
     # Early help (no heavy imports)
@@ -298,10 +226,7 @@ def main():
     # safetensors args
     parser.add_argument("--safetensors", help="If set, the model will be saved in the SafeTensors format. Default is False.", action="store_true")
 
-    # NOTE: use parse_known_args to avoid crashing inside Jupyter/Colab (which passes extra args like -f <kernel.json>)
-    args, unknown = parser.parse_known_args()
-    if unknown:
-        print("[WARN] Ignoring unknown CLI arguments:", " ".join(unknown), file=sys.stderr)
+    args = parser.parse_args()
 
     # --------- Conditional requirements & I/O prep (applies to both modes) ---------
     # Ensure outdir exists (works for training and inference)
@@ -310,8 +235,7 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
 
     # Only require core training flags if NOT doing inference
-    # Treat as inference mode ONLY when all three inference inputs are present.
-    in_infer = bool(args.pretrained_model and args.artifacts and args.data_path_test)
+    in_infer = bool(args.pretrained_model)
     if not in_infer:
         missing = [k for k in ("data_path", "model_class", "data_types") if not getattr(args, k, None)]
         if missing:
