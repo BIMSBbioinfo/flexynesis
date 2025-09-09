@@ -421,6 +421,30 @@ def main():
     process = psutil.Process(os.getpid())
     t1 = time.time()
     train_dataset, test_dataset = data_importer.import_data()
+
+    # --- Baselines alongside main model (kept per reviewer request) ---------------
+    # NOTE: This is separate from the dedicated baseline-model modes.
+    if args.evaluate_baseline_performance:
+        if not args.target_variables:
+            warnings.warn("[WARN] --evaluate_baseline_performance set, but no --target_variables given; skipping baseline evaluation.")
+        else:
+            try:
+                var = args.target_variables.strip().split(",")[0]
+                print(f"[INFO] Running baseline evaluation on target '{var}' (RandomForest/SVM/XGBoost)")
+                metrics, predictions = evaluate_baseline_performance(
+                    train_dataset=train_dataset,
+                    test_dataset=test_dataset,
+                    variable_name=var,
+                    methods=["RandomForest", "SVM", "XGBoost"],
+                    n_folds=5,
+                    n_jobs=int(args.threads),
+                )
+                metrics.to_csv(os.path.join(args.outdir, f"{args.prefix}.baseline.stats.csv"), index=False)
+                predictions.to_csv(os.path.join(args.outdir, f"{args.prefix}.baseline.predicted_labels.csv"), index=False)
+                print("[INFO] Baseline evaluation finished and files saved.")
+            except Exception as e:
+                warnings.warn(f"[WARN] Baseline evaluation failed: {e}")
+
     data_import_time = time.time() - t1
     data_import_ram = process.memory_info().rss
 
@@ -605,6 +629,41 @@ def main():
 
         with open(os.path.join(args.outdir, '.'.join([args.prefix, 'final_model_config.json'])), 'w') as f:
             json.dump(config, f, indent=2, default=str)
+
+    # --- NEW: write inference artifacts joblib (auto-generated after training) ---
+    try:
+        from .inference import InferenceArtifacts
+        import joblib
+
+        # Build feature list dictionary from the processed training dataset if available
+        feature_lists = {}
+        if hasattr(train_dataset, "data"):
+            try:
+                for k, df in getattr(train_dataset, "data", {}).items():
+                    try:
+                        feature_lists[k] = list(df.columns)
+                    except Exception:
+                        feature_lists[k] = []
+            except Exception:
+                feature_lists = {dt: [] for dt in args.data_types.split(',')}
+        else:
+            feature_lists = {dt: [] for dt in args.data_types.split(',')}
+
+        art = InferenceArtifacts(
+            schema_version=1,
+            data_types=args.data_types.split(','),
+            target_variables=(args.target_variables.split(',') if args.target_variables else []),
+            feature_lists=feature_lists,
+            transforms={},          # TODO: plug in real scalers/encoders when available
+            label_encoders={},      # TODO: plug in label encoders if used
+            join_key=args.join_key, # default "JoinKey"
+        )
+        joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
+        art.save(joblib_path)
+        print(f"[INFO] Wrote inference artifacts to {joblib_path}")
+    except Exception as e:
+        print(f"[WARN] Could not write inference artifacts: {e}")
+
 
     print(f"[INFO] Time spent in data import: {data_import_time:.2f} sec")
     print(f"[INFO] RAM after data import: {data_import_ram / (1024**2):.2f} MB")
