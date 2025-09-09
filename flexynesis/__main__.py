@@ -138,13 +138,62 @@ def print_full_help():
 
 
 def main():
-    """
-    Main entry point for the Flexynesis CLI.
+"""
+    Main function to parse command-line arguments and initiate the training interface for PyTorch models.
 
-    This sets up argument parsing and either:
-      (a) runs inference-only if a pretrained model + artifacts + test data are provided, or
-      (b) runs the normal training/evaluation pipeline otherwise.
-    """
+    This function sets up argument parsing for various parameters required to train and evaluate a PyTorch model,
+    including data paths, model class, hyperparameters, and configuration options.
+
+    Args:
+        --data_path (str): Path to the folder with train/test data files. (Required)
+        --model_class (str): The kind of model class to instantiate. Choices are ["DirectPred", "GNN", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "RandomForest", "SVM", "XGBoost", "RandomSurvivalForest"]. (Required)
+        --gnn_conv_type (str): If model_class is set to GNN, choose which graph convolution type to use. Choices are ["GC", "GCN", "SAGE"].
+        --target_variables (str): Which variables in 'clin.csv' to use for predictions, comma-separated if multiple. Optional if survival variables are not set to None.
+        --surv_event_var (str): Which column in 'clin.csv' to use as event/status indicator for survival modeling.
+        --surv_time_var (str): Which column in 'clin.csv' to use as time/duration indicator for survival modeling.
+        --config_path (str): Optional path to an external hyperparameter configuration file in YAML format.
+        --fusion_type (str): How to fuse the omics layers. Choices are ["early", "intermediate"]. Default is 'intermediate'.
+        --hpo_iter (int): Number of iterations for hyperparameter optimisation. Default is 100.
+        --finetuning_samples (int): Number of samples from the test dataset to use for fine-tuning the model. Set to 0 to disable fine-tuning. Default is 0.
+        --variance_threshold (float): Variance threshold (as percentile) to drop low variance features. Default is 1; set to 0 for no variance filtering.
+        --correlation_threshold (float): Correlation threshold to drop highly redundant features. Default is 0.8; set to 1 for no redundancy filtering.
+        --restrict_to_features (str): Restrict the analysis to the list of features provided by the user. Default is None.
+        --subsample (int): Downsample training set to randomly drawn N samples for training. Disabled when set to 0. Default is 0.
+        --features_min (int): Minimum number of features to retain after feature selection. Default is 500.
+        --features_top_percentile (float): Top percentile features (among the features remaining after variance filtering and data cleanup) to retain after feature selection. Default is 20.
+        --data_types (str): Which omic data matrices to work on, comma-separated (e.g., 'gex,cnv'). (Required)
+        --input_layers (str): If model_class is set to CrossModalPred, choose which data types to use as input/encoded layers, comma-separated if multiple.
+        --output_layers (str): If model_class is set to CrossModalPred, choose which data types to use as output/decoded layers, comma-separated if multiple.
+        --outdir (str): Path to the output folder to save the model outputs. Default is the current working directory.
+        --prefix (str): Job prefix to use for output files. Default is 'job'.
+        --log_transform (str): Whether to apply log-transformation to input data matrices. Choices are ['True', 'False']. Default is 'False'.
+        --early_stop_patience (int): How many epochs to wait when no improvements in validation loss are observed. Default is 10; set to -1 to disable early stopping.
+        --hpo_patience (int): How many hyperparameter optimisation iterations to wait for when no improvements are observed. Default is 10; set to 0 to disable early stopping.
+        --use_cv (bool): If set, a 5-fold cross-validation training will be done. Otherwise, a single training on 80 percent of the dataset is done.
+        --val_size (float): Proportion of training data to be used as validation split (default: 0.2)
+        --use_loss_weighting (str): Whether to apply loss-balancing using uncertainty weights method. Choices are ['True', 'False']. Default is 'True'.
+        --evaluate_baseline_performance (bool): Enables modeling also with Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset.
+        --threads (int): How many threads to use when using CPU. Default is 4.
+        --num_workers (int): How many workers to use for model training. Default is 0
+        --use_gpu (bool): If set, the system will attempt to use CUDA/GPU if available.
+        --feature_importance_method (str): which method(s) to use to compute feature importance scores. Options are: IntegratedGradients, GradientShap, or Both. Default: Both
+        --disable_marker_finding (bool): If set, marker discovery after model training is disabled.
+        --string_organism (int): STRING DB organism id. Default is 9606.
+        --string_node_name (str): Type of node name. Choices are ["gene_name", "gene_id"]. Default is "gene_name".
+        --safetensors (bool): If set, the model will be saved in the SafeTensors format. Default is False.
+
+
+Inference mode (skip training):
+  Provide all three:
+    --pretrained_model <path/to/model.pth>
+    --artifacts <path/to/artifacts.joblib>
+    --data_path_test <folder with test-only data>
+  Optional:
+    --join_key <column in clin.csv, default: "JoinKey">
+  Behavior:
+    If the three arguments above are provided, the CLI performs inference only
+    (no training), writes outputs to --outdir/--prefix, and exits early.
+"""
 
     # Early help (no heavy imports)
     if len(sys.argv) == 1:
