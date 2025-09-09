@@ -138,7 +138,7 @@ def print_full_help():
 
 
 def main():
-"""
+    """
     Main function to parse command-line arguments and initiate the training interface for PyTorch models.
 
     This function sets up argument parsing for various parameters required to train and evaluate a PyTorch model,
