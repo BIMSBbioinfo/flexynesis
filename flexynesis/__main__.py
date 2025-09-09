@@ -5,6 +5,9 @@ import yaml
 import time
 import random
 import warnings
+import json
+import tracemalloc
+import psutil
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
@@ -138,7 +141,7 @@ def print_full_help():
 
 
 def main():
-"""
+    """
     Main function to parse command-line arguments and initiate the training interface for PyTorch models.
 
     This function sets up argument parsing for various parameters required to train and evaluate a PyTorch model,
@@ -182,18 +185,17 @@ def main():
         --string_node_name (str): Type of node name. Choices are ["gene_name", "gene_id"]. Default is "gene_name".
         --safetensors (bool): If set, the model will be saved in the SafeTensors format. Default is False.
 
-
-Inference mode (skip training):
-  Provide all three:
-    --pretrained_model <path/to/model.pth>
-    --artifacts <path/to/artifacts.joblib>
-    --data_path_test <folder with test-only data>
-  Optional:
-    --join_key <column in clin.csv, default: "JoinKey">
-  Behavior:
-    If the three arguments above are provided, the CLI performs inference only
-    (no training), writes outputs to --outdir/--prefix, and exits early.
-"""
+    Inference mode (skip training):
+      Provide all three:
+        --pretrained_model <path/to/model.pth>
+        --artifacts <path/to/artifacts.joblib>
+        --data_path_test <folder with test-only data>
+      Optional:
+        --join_key <column in clin.csv, default: \"JoinKey\">
+      Behavior:
+        If the three arguments above are provided, the CLI performs inference only
+        (no training), writes outputs to --outdir/--prefix, and exits early.
+    """
 
     # Early help (no heavy imports)
     if len(sys.argv) == 1:
@@ -220,60 +222,84 @@ Inference mode (skip training):
                         help="Column name in 'clin.csv' (test metadata) used to join sample IDs")
 
     # Existing core flags  (made not-required here; enforced conditionally below)
-    parser.add_argument("--data_path", help="Path to the folder with train/test data files", type=str, required=False)
-    parser.add_argument("--model_class", help="The kind of model class to instantiate", type=str,
-                        choices=["DirectPred", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "GNN", "RandomForest", "SVM", "XGBoost", "RandomSurvivalForest"], required=False)
-    parser.add_argument("--gnn_conv_type", help="If model_class is set to GNN, choose which graph convolution type to use", type=str,
-                        choices=["GC", "GCN", "SAGE"])
-    parser.add_argument("--target_variables",
-                        help="(Optional if survival variables are not set to None). Which variables in 'clin.csv' to use for predictions, comma-separated if multiple",
-                        type=str, default=None)
-    parser.add_argument("--covariates",
-                        help="Which variables in 'clin.csv' to be used as feature covariates, comma-separated if multiple",
-                        type=str, default=None)
-    parser.add_argument("--surv_event_var", help="Which column in 'clin.csv' to use as event/status indicator for survival modeling", type=str, default=None)
-    parser.add_argument("--surv_time_var", help="Which column in 'clin.csv' to use as time/duration indicator for survival modeling", type=str, default=None)
-    parser.add_argument('--config_path', type=str, default=None, help='Optional path to an external hyperparameter configuration file in YAML format.')
-    parser.add_argument("--fusion_type", help="How to fuse the omics layers", type=str, choices=["early", "intermediate"], default='intermediate')
-    parser.add_argument("--hpo_iter", help="Number of iterations for hyperparameter optimisation", type=int, default=100)
-    parser.add_argument("--finetuning_samples", help="Number of samples from the test dataset to use for fine-tuning the model. Set to 0 to disable fine-tuning", type=int, default=0)
-    parser.add_argument("--variance_threshold", help="Variance threshold (as percentile) to drop low variance features (default is 1; set to 0 for no variance filtering)", type=float, default=1)
-    parser.add_argument("--correlation_threshold", help="Correlation threshold to drop highly redundant features (default is 0.8; set to 1 for no redundancy filtering)", type=float, default=0.8)
-    parser.add_argument("--restrict_to_features", help="Restrict the analyis to the list of features provided by the user (default is None)", type=str, default=None)
-    parser.add_argument("--subsample", help="Downsample training set to randomly drawn N samples for training. Disabled when set to 0", type=int, default=0)
-    parser.add_argument("--features_min", help="Minimum number of features to retain after feature selection", type=int, default=500)
-    parser.add_argument("--features_top_percentile", help="Top percentile features (among the features remaining after variance filtering and data cleanup to retain after feature selection", type=float, default=20)
-    parser.add_argument("--data_types", help="Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'", type=str, required=False)
-    parser.add_argument("--input_layers",
-                        help="If model_class is set to CrossModalPred, choose which data types to use as input/encoded layers. Comma-separated if multiple",
-                        type=str, default=None)
-    parser.add_argument("--output_layers",
-                        help="If model_class is set to CrossModalPred, choose which data types to use as output/decoded layers. Comma-separated if multiple",
-                        type=str, default=None)
-    parser.add_argument("--outdir", help="Path to the output folder to save the model outputs", type=str, default=os.getcwd())
-    parser.add_argument("--prefix", help="Job prefix to use for output files", type=str, default='job')
-    parser.add_argument("--log_transform", help="whether to apply log-transformation to input data matrices", type=str, choices=['True', 'False'], default='False')
-    parser.add_argument("--early_stop_patience", help="How many epochs to wait when no improvements in validation loss is observed (default 10; set to -1 to disable early stopping)", type=int, default=10)
-    parser.add_argument("--hpo_patience", help="How many hyperparamater optimisation iterations to wait for when no improvements are observed (default is 10; set to 0 to disable early stopping)", type=int, default=20)
-    parser.add_argument("--val_size", help="Proportion of training data to be used as validation split (default: 0.2)", type=float, default=0.2)
+    parser.add_argument("--data_path", type=str, required=False,
+                        help="Path to the folder with train/test data files")
+    parser.add_argument("--model_class", type=str, required=False,
+                        choices=["DirectPred", "supervised_vae", "MultiTripletNetwork", "CrossModalPred", "GNN", "RandomForest", "SVM", "XGBoost", "RandomSurvivalForest"],
+                        help="The kind of model class to instantiate")
+    parser.add_argument("--gnn_conv_type", type=str, choices=["GC", "GCN", "SAGE"],
+                        help="If model_class is set to GNN, choose which graph convolution type to use")
+    parser.add_argument("--target_variables", type=str, default=None,
+                        help="(Optional if survival variables are not set to None). Which variables in 'clin.csv' to use for predictions, comma-separated if multiple")
+    parser.add_argument("--covariates", type=str, default=None,
+                        help="Which variables in 'clin.csv' to be used as feature covariates, comma-separated if multiple")
+    parser.add_argument("--surv_event_var", type=str, default=None,
+                        help="Which column in 'clin.csv' to use as event/status indicator for survival modeling")
+    parser.add_argument("--surv_time_var", type=str, default=None,
+                        help="Which column in 'clin.csv' to use as time/duration indicator for survival modeling")
+    parser.add_argument('--config_path', type=str, default=None,
+                        help='Optional path to an external hyperparameter configuration file in YAML format.')
+    parser.add_argument("--fusion_type", type=str, choices=["early", "intermediate"], default='intermediate',
+                        help="How to fuse the omics layers")
+    parser.add_argument("--hpo_iter", type=int, default=100,
+                        help="Number of iterations for hyperparameter optimisation")
+    parser.add_argument("--finetuning_samples", type=int, default=0,
+                        help="Number of samples from the test dataset to use for fine-tuning the model. Set to 0 to disable fine-tuning")
+    parser.add_argument("--variance_threshold", type=float, default=1,
+                        help="Variance threshold (as percentile) to drop low variance features (default is 1; set to 0 for no variance filtering)")
+    parser.add_argument("--correlation_threshold", type=float, default=0.8,
+                        help="Correlation threshold to drop highly redundant features (default is 0.8; set to 1 for no redundancy filtering)")
+    parser.add_argument("--restrict_to_features", type=str, default=None,
+                        help="Restrict the analyis to the list of features provided by the user (default is None)")
+    parser.add_argument("--subsample", type=int, default=0,
+                        help="Downsample training set to randomly drawn N samples for training. Disabled when set to 0")
+    parser.add_argument("--features_min", type=int, default=500,
+                        help="Minimum number of features to retain after feature selection")
+    parser.add_argument("--features_top_percentile", type=float, default=20,
+                        help="Top percentile features (among the features remaining after variance filtering and data cleanup) to retain after feature selection")
+    parser.add_argument("--data_types", type=str, required=False,
+                        help="Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'")
+    parser.add_argument("--input_layers", type=str, default=None,
+                        help="If model_class is set to CrossModalPred, choose which data types to use as input/encoded layers. Comma-separated if multiple")
+    parser.add_argument("--output_layers", type=str, default=None,
+                        help="If model_class is set to CrossModalPred, choose which data types to use as output/decoded layers. Comma-separated if multiple")
+    parser.add_argument("--outdir", type=str, default=os.getcwd(),
+                        help="Path to the output folder to save the model outputs")
+    parser.add_argument("--prefix", type=str, default='job',
+                        help="Job prefix to use for output files")
+    parser.add_argument("--log_transform", type=str, choices=['True', 'False'], default='False',
+                        help="whether to apply log-transformation to input data matrices")
+    parser.add_argument("--early_stop_patience", type=int, default=10,
+                        help="How many epochs to wait when no improvements in validation loss is observed (default 10; set to -1 to disable early stopping)")
+    parser.add_argument("--hpo_patience", type=int, default=20,
+                        help="How many hyperparamater optimisation iterations to wait for when no improvements are observed (default is 10; set to 0 to disable early stopping)")
+    parser.add_argument("--val_size", type=float, default=0.2,
+                        help="Proportion of training data to be used as validation split (default: 0.2)")
     parser.add_argument("--use_cv", action="store_true",
                         help="(Optional) If set, the a 5-fold cross-validation training will be done. Otherwise, a single trainig on 80 percent of the dataset is done.")
-    parser.add_argument("--use_loss_weighting", help="whether to apply loss-balancing using uncertainty weights method", type=str, choices=['True', 'False'], default='True')
+    parser.add_argument("--use_loss_weighting", type=str, choices=['True', 'False'], default='True',
+                        help="whether to apply loss-balancing using uncertainty weights method")
     parser.add_argument("--evaluate_baseline_performance", action="store_true",
                         help="whether to run Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset")
-    parser.add_argument("--threads", help="(Optional) How many threads to use when using CPU (default is 4)", type=int, default=4)
-    parser.add_argument("--num_workers", help="(Optional) How many workers to use for model training (default is 0)", type=int, default=0)
+    parser.add_argument("--threads", type=int, default=4,
+                        help="(Optional) How many threads to use when using CPU (default is 4)")
+    parser.add_argument("--num_workers", type=int, default=0,
+                        help="(Optional) How many workers to use for model training (default is 0)")
     parser.add_argument("--use_gpu", action="store_true",
                         help="(Optional) If set, the system will attempt to use CUDA/GPU if available.")
-    parser.add_argument("--feature_importance_method", help="Choose feature importance score method", type=str,
-                        choices=["IntegratedGradients", "GradientShap", "Both"], default="IntegratedGradients")
+    parser.add_argument("--feature_importance_method", type=str,
+                        choices=["IntegratedGradients", "GradientShap", "Both"], default="IntegratedGradients",
+                        help="Choose feature importance score method")
     parser.add_argument("--disable_marker_finding", action="store_true",
                         help="(Optional) If set, marker discovery after model training is disabled.")
     # GNN args.
-    parser.add_argument("--string_organism", help="STRING DB organism id.", type=int, default=9606)
-    parser.add_argument("--string_node_name", help="Type of node name.", type=str, choices=["gene_name", "gene_id"], default="gene_name")
+    parser.add_argument("--string_organism", type=int, default=9606,
+                        help="STRING DB organism id.")
+    parser.add_argument("--string_node_name", type=str, choices=["gene_name", "gene_id"], default="gene_name",
+                        help="Type of node name.")
     # safetensors args
-    parser.add_argument("--safetensors", help="If set, the model will be saved in the SafeTensors format. Default is False.", action="store_true")
+    parser.add_argument("--safetensors", action="store_true",
+                        help="If set, the model will be saved in the SafeTensors format. Default is False.")
 
     args = parser.parse_args()
 
@@ -294,7 +320,7 @@ Inference mode (skip training):
     # ---------- Inference mode: early exit path ----------
     if args.pretrained_model and args.artifacts and args.data_path_test:
         import torch
-        from flexynesis.inference import run_inference
+        from .inference import run_inference
 
         # quick existence checks
         if not os.path.exists(args.pretrained_model):
@@ -307,19 +333,15 @@ Inference mode (skip training):
 
         # Robust load across PyTorch versions & checkpoint types
         try:
-            # Try full-module unpickle (works if the class is importable)
             model = torch.load(args.pretrained_model, map_location=device, weights_only=False)
         except TypeError:
-            # PT<=2.5: no weights_only kwarg
             model = torch.load(args.pretrained_model, map_location=device)
         except Exception:
-            # PT>=2.6 fallback: weights-only (often returns a state_dict)
             try:
                 model = torch.load(args.pretrained_model, map_location=device, weights_only=True)
             except TypeError:
                 model = torch.load(args.pretrained_model, map_location=device)
 
-        # If it's an nn.Module, move to device; if it’s a state_dict, just pass through
         if hasattr(model, "to"):
             model.to(device).eval()
 
@@ -334,25 +356,21 @@ Inference mode (skip training):
 
     # ------------- Heavy imports only when training -------------
     print("[INFO] Loading Flexynesis modules...")
-    from lightning import seed_everything
-    import lightning as pl
-    from typing import NamedTuple
     import torch
-    from safetensors.torch import save_file
     import pandas as pd
+    from safetensors.torch import save_file
 
+    # models
     from .models.direct_pred import DirectPred
     from .models.supervised_vae import supervised_vae
     from .models.triplet_encoder import MultiTripletNetwork
     from .models.crossmodal_pred import CrossModalPred
     from .models.gnn_early import GNN
 
-    from lightning.pytorch.callbacks import EarlyStopping
+    # data + utils
     from .data import STRING, MultiOmicDatasetNW, DataImporter
     from .main import HyperparameterTuning, FineTuner
     from .utils import evaluate_baseline_performance, evaluate_baseline_survival_performance, get_predicted_labels, evaluate_wrapper
-    import tracemalloc, psutil
-    import json
 
     # --------- Sanity checks on args ---------
     # 1. survival variables consistency
@@ -395,7 +413,6 @@ Inference mode (skip training):
     output_layers = args.output_layers
     datatypes = args.data_types.strip().split(',')
     if args.model_class == 'CrossModalPred':
-        # check if input/output layers are matching the requested data types
         if args.input_layers:
             input_layers = input_layers.strip().split(',')
             if not all(layer in datatypes for layer in input_layers):
@@ -428,8 +445,7 @@ Inference mode (skip training):
         raise ValueError(f"Unsupported model class {args.model_class}")
     model_class, config_name = model_info
 
-    # import assays and labels
-    # Set concatenate to True to use early fusion, otherwise it will run intermediate fusion
+    # Set concatenate to True to use early fusion, otherwise intermediate
     concatenate = args.fusion_type == 'early' and args.model_class != 'GNN'
 
     # covariates
@@ -459,14 +475,12 @@ Inference mode (skip training):
     )
 
     # import data
-    import tracemalloc, psutil, json
     tracemalloc.start()
     process = psutil.Process(os.getpid())
     t1 = time.time()
     train_dataset, test_dataset = data_importer.import_data()
 
     # --- Baselines alongside main model (kept per reviewer request) ---------------
-    # NOTE: This is separate from the dedicated baseline-model modes.
     if args.evaluate_baseline_performance:
         if not args.target_variables:
             warnings.warn("[WARN] --evaluate_baseline_performance set, but no --target_variables given; skipping baseline evaluation.")
@@ -521,7 +535,7 @@ Inference mode (skip training):
 
     # GNN overlay (temporary solution)
     if args.model_class == 'GNN':
-        print("[INFO] Overlaying the dataset with network data from STRINGDB")
+        print("[INFO] Overlaying the dataset with network data from STRINGDB]")
         obj = STRING(os.path.join(args.data_path, '_'.join(['processed', args.prefix])),
                      args.string_organism, args.string_node_name)
         train_dataset = MultiOmicDatasetNW(train_dataset, obj.graph_df)
@@ -568,7 +582,8 @@ Inference mode (skip training):
         print("[INFO] Finetuning the model on ", finetuneSampleN, "test samples")
         # split test dataset into finetuning and holdout datasets
         all_indices = range(len(test_dataset))
-        finetune_indices = random.sample(list(all_indices), finetuneSampleN)
+        import random as _random
+        finetune_indices = _random.sample(list(all_indices), finetuneSampleN)
         holdout_indices = list(set(all_indices) - set(finetune_indices))
         finetune_dataset = test_dataset.subset(finetune_indices)
         holdout_dataset = test_dataset.subset(holdout_indices)
@@ -603,13 +618,11 @@ Inference mode (skip training):
                 for var in model.target_variables:
                     model.compute_feature_importance(train_dataset, var, steps_or_samples=25, method=explainer)
                 import pandas as pd
-                df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables],
-                                   ignore_index=True)
+                df_imp = pd.concat([model.feature_importances[x] for x in model.target_variables], ignore_index=True)
                 df_imp['explainer'] = explainer
                 df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance', explainer, 'csv'])), header=True, index=False)
 
         # print known/predicted labels
-        import pandas as pd
         predicted_labels = pd.concat([
             get_predicted_labels(model.predict(train_dataset), train_dataset, 'train', args.model_class),
             get_predicted_labels(model.predict(test_dataset), test_dataset, 'test', args.model_class)
@@ -650,7 +663,6 @@ Inference mode (skip training):
             "model_class": model.__class__.__name__,
             "model_module": model.__class__.__module__,
         }
-
         # Common attributes to save
         common_attrs = [
             'input_dims', 'layers',
@@ -658,14 +670,12 @@ Inference mode (skip training):
             'surv_event_var', 'surv_time_var',
             'config', 'current_epoch', 'num_layers'
         ]
-
         for attr in common_attrs:
             if hasattr(model, attr):
                 config[attr] = getattr(model, attr)
         if hasattr(model, 'layers'):
-            config['num_layers'] = len(model.layers)    # add num_layers to the config
+            config['num_layers'] = len(model.layers)
 
-        # Model-specific configurations
         if hasattr(model, 'config'):
             model_specific_config = model.config
             config.update(model_specific_config)
@@ -673,10 +683,10 @@ Inference mode (skip training):
         with open(os.path.join(args.outdir, '.'.join([args.prefix, 'final_model_config.json'])), 'w') as f:
             json.dump(config, f, indent=2, default=str)
 
-    # --- NEW: write inference artifacts joblib (auto-generated after training) ---
+    # --- write inference artifacts joblib (auto-generated after training) ---
     try:
         from .inference import InferenceArtifacts
-        import joblib
+        import joblib  # noqa: F401  (ensures joblib is present if InferenceArtifacts uses it)
 
         # Build feature list dictionary from the processed training dataset if available
         feature_lists = {}
@@ -706,7 +716,6 @@ Inference mode (skip training):
         print(f"[INFO] Wrote inference artifacts to {joblib_path}")
     except Exception as e:
         print(f"[WARN] Could not write inference artifacts: {e}")
-
 
     print(f"[INFO] Time spent in data import: {data_import_time:.2f} sec")
     print(f"[INFO] RAM after data import: {data_import_ram / (1024**2):.2f} MB")
