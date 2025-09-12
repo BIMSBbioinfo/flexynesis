@@ -716,7 +716,7 @@ def main():
             test = test_dataset
         
         if var != model.surv_event_var: 
-            metrics, predictions = flexynesis.evaluate_baseline_performance(train, test, 
+            metrics, predictions = evaluate_baseline_performance(train, test, 
                                                                variable_name = var, 
                                                                methods = ['RandomForest', 'SVM', 'XGBoost'],
                                                                n_folds = 5,
