@@ -35,7 +35,7 @@ pip install flexynesis
 
 # Citing our work
 
-In order to refer to our work, please cite our manuscript currently available at [BioRxiv](https://biorxiv.org/cgi/content/short/2024.07.16.603606v1). 
+In order to refer to our work, please cite our manuscript published at [Nature Communications](https://www.nature.com/articles/s41467-025-63688-5). 
 
 # Getting started with Flexynesis
 
