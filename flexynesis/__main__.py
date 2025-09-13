@@ -36,7 +36,9 @@ def print_help():
     print("  --data_types DATA_TYPES")
     print("                        (Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'")
     print("  --hpo_iter HPO_ITER   Number of iterations for hyperparameter optimisation (default: 100)")
-    print("  --use_gpu             (Optional) If set, the system will attempt to use CUDA/GPU if available.")
+    print("  --device {auto,cuda,mps,cpu}")
+    print("                        Device type: 'auto' (automatic detection), 'cuda' (NVIDIA GPU), 'mps' (Apple Silicon), 'cpu' (default: auto)")
+    print("  --use_gpu             (Optional) DEPRECATED: Use --device instead. If set, attempts to use CUDA/GPU if available.")
     print()
     print_test_installation()
     print()
@@ -51,7 +53,7 @@ def print_full_help():
           "[--subsample SUBSAMPLE] [--features_min FEATURES_MIN] [--features_top_percentile FEATURES_TOP_PERCENTILE] --data_types DATA_TYPES "
           "[--input_layers INPUT_LAYERS] [--output_layers OUTPUT_LAYERS] [--outdir OUTDIR] [--prefix PREFIX] [--log_transform {True,False}] "
           "[--early_stop_patience EARLY_STOP_PATIENCE] [--hpo_patience HPO_PATIENCE] [--val_size VAL_SIZE] [--use_cv] [--use_loss_weighting {True,False}] "
-          "[--evaluate_baseline_performance] [--threads THREADS] [--num_workers NUM_WORKERS] [--use_gpu] [--feature_importance_method {IntegratedGradients,GradientShap,Both}] "
+          "[--evaluate_baseline_performance] [--threads THREADS] [--num_workers NUM_WORKERS] [--device {auto,cuda,mps,cpu}] [--use_gpu] [--feature_importance_method {IntegratedGradients,GradientShap,Both}] "
           "[--disable_marker_finding] [--string_organism STRING_ORGANISM] [--string_node_name {gene_name,gene_id}] [--safetensors]")
     print()
     print("Flexynesis model training interface")
@@ -125,7 +127,9 @@ def print_full_help():
     print("  --threads THREADS     (Optional) How many threads to use when using CPU (default is 4)")
     print("  --num_workers NUM_WORKERS")
     print("                        (Optional) How many workers to use for model training (default is 0)")
-    print("  --use_gpu             (Optional) If set, the system will attempt to use CUDA/GPU if available.")
+    print("  --device {auto,cuda,mps,cpu}")
+    print("                        Device type: 'auto' (automatic detection), 'cuda' (NVIDIA GPU), 'mps' (Apple Silicon), 'cpu' (default: auto)")
+    print("  --use_gpu             (Optional) DEPRECATED: Use --device instead. If set, attempts to use CUDA/GPU if available.")
     print("  --feature_importance_method {IntegratedGradients,GradientShap,Both}")
     print("                        Choose feature importance score method (default: IntegratedGradients)")
     print("  --disable_marker_finding")
@@ -138,7 +142,6 @@ def print_full_help():
     print()
     print_test_installation()
     print()
-
 
 def main():
     """
@@ -178,7 +181,9 @@ def main():
         --evaluate_baseline_performance (bool): Enables modeling also with Random Forest + SVMs to see the performance of off-the-shelf tools on the same dataset.
         --threads (int): How many threads to use when using CPU. Default is 4.
         --num_workers (int): How many workers to use for model training. Default is 0
-        --use_gpu (bool): If set, the system will attempt to use CUDA/GPU if available.
+        --use_gpu (bool): DEPRECATED - Use --device instead. If set, the system will attempt to use CUDA/GPU if available.
+        --device (str): Device to use for training. Choices are ['auto', 'cuda', 'mps', 'cpu']. Default is 'auto'. 
+                       'auto' detects best available device, 'cuda' for NVIDIA GPUs, 'mps' for Apple Silicon, 'cpu' for CPU-only.
         --feature_importance_method (str): which method(s) to use to compute feature importance scores. Options are: IntegratedGradients, GradientShap, or Both. Default: Both
         --disable_marker_finding (bool): If set, marker discovery after model training is disabled.
         --string_organism (int): STRING DB organism id. Default is 9606.
@@ -285,8 +290,11 @@ def main():
                         help="(Optional) How many threads to use when using CPU (default is 4)")
     parser.add_argument("--num_workers", type=int, default=0,
                         help="(Optional) How many workers to use for model training (default is 0)")
-    parser.add_argument("--use_gpu", action="store_true",
-                        help="(Optional) If set, the system will attempt to use CUDA/GPU if available.")
+    parser.add_argument("--use_gpu", action="store_true", 
+                        help="(Optional) DEPRECATED: Use --device instead. If set, attempts to use CUDA/GPU if available.")
+    parser.add_argument("--device", type=str, 
+                        choices=["auto", "cuda", "mps", "cpu"], default="auto",
+                        help="Device type: 'auto' (automatic detection), 'cuda' (NVIDIA GPU), 'mps' (Apple Silicon), 'cpu'")
     parser.add_argument("--feature_importance_method", type=str,
                         choices=["IntegratedGradients", "GradientShap", "Both"], default="IntegratedGradients",
                         help="Choose feature importance score method")
@@ -321,6 +329,7 @@ def main():
     if args.pretrained_model and args.artifacts and args.data_path_test:
         import torch
         from .inference import run_inference
+        from .utils import get_optimal_device, create_device_from_string
 
         # quick existence checks
         if not os.path.exists(args.pretrained_model):
@@ -328,8 +337,22 @@ def main():
         if not os.path.exists(args.artifacts):
             raise FileNotFoundError(f"--artifacts not found: {args.artifacts}")
 
-        # define device BEFORE using it
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Handle device selection for inference (same logic as training)
+        if args.use_gpu:
+            warnings.warn("--use_gpu is deprecated. Use --device instead.", DeprecationWarning)
+            if args.device != "auto":
+                device_preference = args.device
+                print(f"[WARN] Both --use_gpu and --device {args.device} specified. Using --device {args.device}.")
+            else:
+                # Let auto-detection find the best GPU device (CUDA or MPS)
+                device_preference = "auto"
+        else:
+            device_preference = args.device
+        
+        # Get optimal device for inference
+        device_str, device_type = get_optimal_device(device_preference)
+        device = create_device_from_string(device_str)
+        print(f"[INFO] Using device for inference: {device_str}")
 
         # Robust load across PyTorch versions & checkpoint types
         try:
@@ -356,6 +379,10 @@ def main():
 
     # ------------- Heavy imports only when training -------------
     print("[INFO] Loading Flexynesis modules...")
+    import flexynesis
+    from lightning import seed_everything
+    import lightning as pl
+    from typing import NamedTuple
     import torch
     import pandas as pd
     from safetensors.torch import save_file
@@ -370,7 +397,9 @@ def main():
     # data + utils
     from .data import STRING, MultiOmicDatasetNW, DataImporter
     from .main import HyperparameterTuning, FineTuner
-    from .utils import evaluate_baseline_performance, evaluate_baseline_survival_performance, get_predicted_labels, evaluate_wrapper
+    from .utils import evaluate_baseline_performance, evaluate_baseline_survival_performance, get_predicted_labels, evaluate_wrapper, get_optimal_device, get_device_memory_info, create_device_from_string
+    import tracemalloc, psutil
+    import json
 
     # --------- Sanity checks on args ---------
     # 1. survival variables consistency
@@ -382,20 +411,38 @@ def main():
         if not any([args.target_variables, args.surv_event_var]):
             parser.error("When selecting a model other than 'supervised_vae' or 'CrossModalPred', you must provide at least one of --target_variables, or survival variables (--surv_event_var and --surv_time_var)")
 
-    # 3. fusion type compatibility
-    if args.fusion_type == "early" and args.model_class == 'CrossModalPred':
-        parser.error("The 'CrossModalPred' model cannot be used with early fusion type. Use --fusion_type intermediate instead.")
-
-    # device selection
+    # 3. Check for compatibility of fusion_type with CrossModalPred
+    if args.fusion_type == "early":
+        if args.model_class == 'CrossModalPred':
+            parser.error("The 'CrossModalPred' model cannot be used with early fusion type. "
+                         "Use --fusion_type intermediate instead.")
+            
+    
+    # 4. Handle device selection with MPS support
+    # Support legacy --use_gpu flag for backward compatibility
     if args.use_gpu:
-        if not torch.cuda.is_available():
-            warnings.warn("\n\n!!! WARNING: GPU REQUESTED BUT NOT AVAILABLE. FALLING BACK TO CPU.\nPERFORMANCE MAY BE DEGRADED\nIF USING A SLURM SCHEDULER, REQUEST A GPU (e.g. `srun --gpus=1 ...`) !!!\n")
-            time.sleep(3)
-            device_type = 'cpu'
+        warnings.warn("--use_gpu is deprecated. Use --device instead.", DeprecationWarning)
+        # If --device is not explicitly set (still at default auto), let auto-detection handle it
+        if args.device != "auto":
+            # If both --use_gpu and explicit --device are provided, respect --device but warn
+            device_preference = args.device
+            print(f"[WARN] Both --use_gpu and --device {args.device} specified. Using --device {args.device}.")
         else:
-            device_type = 'gpu'
+            # Let auto-detection find the best GPU device (CUDA or MPS)
+            device_preference = "auto"
     else:
-        device_type = 'cpu'
+        device_preference = args.device
+    
+    # Get optimal device using new device detection
+    device_str, device_type = get_optimal_device(device_preference)
+    
+    # Print device information
+    print(f"[INFO] Using device: {device_str}")
+    if device_str != 'cpu':
+        memory_info = get_device_memory_info(device_str)
+        print(f"[INFO] Device name: {memory_info['device_name']}")
+        if device_str == 'cuda':
+            print(f"[INFO] Available CUDA devices: {memory_info['device_count']}")
 
     # gnn
     if args.model_class == 'GNN':
@@ -653,6 +700,41 @@ def main():
                 header=True
             )
 
+    # evaluate off-the-shelf methods on the main target variable
+    if args.evaluate_baseline_performance:
+        print("[INFO] Computing off-the-shelf method performance on first target variable:",model.target_variables[0])
+        var = model.target_variables[0]
+        metrics = pd.DataFrame()
+
+        # in the case when GNNEarly was used, the we use the initial multiomicdataset for train/test
+        # because GNNEarly requires a modified dataset structure to fit the networks (temporary solution)
+        if args.model_class == 'GNN':
+            train = getattr(train_dataset, 'multiomic_dataset', train_dataset)
+            test = getattr(test_dataset, 'multiomic_dataset', test_dataset)
+        else:
+            train = train_dataset
+            test = test_dataset
+        
+        if var != model.surv_event_var: 
+            metrics, predictions = evaluate_baseline_performance(train, test, 
+                                                               variable_name = var, 
+                                                               methods = ['RandomForest', 'SVM', 'XGBoost'],
+                                                               n_folds = 5,
+                                                               n_jobs = int(args.threads))
+            predictions.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'baseline.predicted_labels.csv'])), header=True, index=False)
+
+        if model.surv_event_var and model.surv_time_var:
+            print("[INFO] Computing off-the-shelf method performance on survival variable:",model.surv_time_var)
+            metrics_baseline_survival = evaluate_baseline_survival_performance(train, test,
+                                                                                             model.surv_time_var,
+                                                                                             model.surv_event_var,
+                                                                                             n_folds = 5,
+                                                                                             n_jobs = int(args.threads))
+            metrics = pd.concat([metrics, metrics_baseline_survival], axis = 0, ignore_index = True)
+
+        if not metrics.empty:
+            metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'baseline.stats.csv'])), header=True, index=False)
+
     # save the trained model in file
     if not args.safetensors:
         torch.save(model, os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.pth'])))
@@ -720,9 +802,14 @@ def main():
     print(f"[INFO] Time spent in data import: {data_import_time:.2f} sec")
     print(f"[INFO] RAM after data import: {data_import_ram / (1024**2):.2f} MB")
     print(f"[INFO] Time spent in HPO: {hpo_time:.2f} sec")
-    if torch.cuda.is_available():
-        peak_mem_mb = torch.cuda.max_memory_allocated() / (1024**2)
-        print(f"[INFO] Peak GPU RAM allocated: {peak_mem_mb:.2f} MB")
+    
+    # Enhanced device memory reporting
+    final_memory_info = get_device_memory_info(device_str)
+    if device_str == 'cuda':
+        print(f"[INFO] Peak CUDA RAM allocated: {final_memory_info['max_allocated']:.2f} MB")
+    elif device_str == 'mps':
+        print(f"[INFO] MPS device used (detailed memory tracking not available)")
+    
     print(f"[INFO] CPU RAM after HPO: {hpo_system_ram / (1024**2):.2f} MB")
     print("[INFO] Finished the analysis!")
 
