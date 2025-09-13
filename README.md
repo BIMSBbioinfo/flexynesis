@@ -3,14 +3,50 @@
   <img alt="logo" src="https://github.com/BIMSBbioinfo/flexynesis/raw/main/img/logo.png" width="40%">
 </p>
 
-[![Downloads](https://static.pepy.tech/badge/flexynesis)](https://pepy.tech/project/flexynesis)
-[![Docker Pulls](https://img.shields.io/docker/pulls/borauyar/flexynesis?logo=docker)](https://hub.docker.com/r/borauyar/flexynesis)
-![Tutorials 3.11](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.11&label=Tutorials:%20Python%203.11)
-![Tutorials 3.12](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.12&label=Tutorials:%20Python%203.12)
-![Tutorials 3.x](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.x&label=Tutorials:%20Python%203.x)
-![Python 3.11](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.11&label=Models:%20Python%203.11)
-![Python 3.12](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.12&label=Models:%20Python%203.12)
-![Python 3.x](https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.x&label=Models:%20Python%203.x%20(latest))
+<table align="center">
+  <tr>
+    <th align="center">Packages (downloads)</th>
+    <th align="center" colspan="2">Tutorials</th>
+    <th align="center" colspan="2">Models</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="https://img.shields.io/pepy/dt/flexynesis?label=PyPI" alt="PyPI Downloads"/><br>
+      <img src="https://img.shields.io/conda/dn/bioconda/flexynesis?label=Bioconda" alt="Bioconda Downloads"/><br>
+      <img src="https://img.shields.io/docker/pulls/borauyar/flexynesis?label=Docker" alt="Docker Pulls"/>
+    </td>
+    <!-- Tutorials Ubuntu -->
+    <td align="center">
+      <b>Ubuntu</b><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.11%20on%20ubuntu-latest&label=Py3.11"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.12%20on%20ubuntu-latest&label=Py3.12"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.x%20on%20ubuntu-latest&label=Latest"/>
+    </td>
+    <!-- Tutorials macOS -->
+    <td align="center">
+      <b>macOS</b><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.11%20on%20macos-latest&label=Py3.11"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.12%20on%20macos-latest&label=Py3.12"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.x%20on%20macos-latest&label=Latest"/>
+    </td>
+    <!-- Models Ubuntu -->
+    <td align="center">
+      <b>Ubuntu</b><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.11%20on%20ubuntu-latest&label=Py3.11"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.12%20on%20ubuntu-latest&label=Py3.12"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.x%20on%20ubuntu-latest&label=Latest"/>
+    </td>
+    <!-- Models macOS -->
+    <td align="center">
+      <b>macOS</b><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.11%20on%20macos-latest&label=Py3.11"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.12%20on%20macos-latest&label=Py3.12"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.x%20on%20macos-latest&label=Latest"/>
+    </td>
+  </tr>
+</table>
+
+
 
 # Flexynesis: deep learning toolkit for interpretable multi-omics integration and clinical outcome prediction
 
