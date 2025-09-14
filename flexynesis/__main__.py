@@ -42,7 +42,7 @@ def print_help():
     print()
     print_test_installation()
     print()
-    print("  See the documentation for more details.")
+    print("  See the documentation for more details at https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/site/getting_started/.")
 
 
 def print_full_help():
@@ -142,6 +142,8 @@ def print_full_help():
     print()
     print_test_installation()
     print()
+    print("  See the documentation for more details at https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/site/getting_started/.")
+
 
 def main():
     """
