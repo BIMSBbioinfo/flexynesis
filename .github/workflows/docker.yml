@@ -1,12 +1,6 @@
 name: Publish Docker Image
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - pyproject.toml
-      - Dockerfile
-      - .github/workflows/docker.yml
   workflow_dispatch: 
 
 jobs:
