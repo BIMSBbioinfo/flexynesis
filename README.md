@@ -11,9 +11,15 @@
   </tr>
   <tr>
     <td align="center">
-      <img src="https://img.shields.io/pepy/dt/flexynesis?label=PyPI" alt="PyPI Downloads"/><br>
-      <img src="https://img.shields.io/conda/dn/bioconda/flexynesis?label=Bioconda" alt="Bioconda Downloads"/><br>
-      <img src="https://img.shields.io/docker/pulls/borauyar/flexynesis?label=Docker" alt="Docker Pulls"/>
+      <a href="https://pypi.org/project/flexynesis/">
+        <img src="https://img.shields.io/pepy/dt/flexynesis?label=PyPI" alt="PyPI Downloads"/>
+      </a><br>
+      <a href="https://anaconda.org/bioconda/flexynesis">
+        <img src="https://img.shields.io/conda/dn/bioconda/flexynesis?label=Bioconda" alt="Bioconda Downloads"/>
+      </a><br>
+      <a href="https://hub.docker.com/repository/docker/borauyar/flexynesis/">
+        <img src="https://img.shields.io/docker/pulls/borauyar/flexynesis?label=Docker" alt="Docker Pulls"/>
+      </a>
     </td>
     <!-- Tutorials Ubuntu -->
     <td align="center">
