@@ -121,8 +121,7 @@ For questions, suggestions, or collaborations: Open an [issue](https://github.co
 
 # License 
 
-Flexynesis is released under a modifed MIT Licence for Academic and Non-Commercial Usage. 
-
+Flexynesis is released under a PolyForm Noncommercial License 1.0.0. 
+Please contact us for permission to use it for commercial purposes. 
 © 2025 Bioinformatics and Omic Data Science Platform, Max Delbrück Center for Molecular Medicine (MDC).
-
 
