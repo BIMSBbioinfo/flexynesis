@@ -1,3 +1,4 @@
+
 from lightning import seed_everything
 seed_everything(42, workers=True)
 
@@ -68,14 +69,12 @@ def main():
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         run_inference(
-            pretrained_model_path=args.pretrained_model,
-            artifacts_path=args.artifacts,
-            test_data_path=args.data_path_test,
-            join_key=args.join_key,
-            outdir=args.outdir,
-            prefix=args.prefix,
-            device=device,
-        )
+        model={"checkpoint_path": args.pretrained_model, "device": device},
+        artifacts_path=args.artifacts,
+        data_path_test=args.data_path_test,
+        outdir=args.outdir,
+        prefix=args.prefix,
+    )
         return
 
     # Training fallback (disabled in this branch)
@@ -504,3 +503,7 @@ class LiveLossPlot(Callback):
         plt.legend()
         plt.tight_layout()
         plt.show()
+
+
+if __name__ == "__main__":
+    main()
