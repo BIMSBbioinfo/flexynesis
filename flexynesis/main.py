@@ -1,27 +1,33 @@
 from lightning import seed_everything
 seed_everything(42, workers=True)
 
+import os
+import yaml
+import copy
+import logging
+import random
+
+import numpy as np
 import torch
 from torch.utils.data import DataLoader, random_split
 from sklearn.model_selection import KFold
-import numpy as np
 
 import lightning as pl
-from lightning.pytorch.callbacks import RichProgressBar
+from lightning.pytorch.callbacks import (
+    RichProgressBar,
+    EarlyStopping,
+)
 from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBarTheme
-from lightning.pytorch.callbacks import EarlyStopping, Callback
+from lightning.pytorch.callbacks import Callback
 
 from tqdm import tqdm
-
 from skopt import Optimizer
-from skopt.utils import use_named_args
 from skopt.space import Integer, Categorical, Real
 
 from .config import search_spaces
 from .data import TripletMultiOmicDataset
 from .inference import run_inference
 
-import os, yaml, copy, logging, random
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 
@@ -31,7 +37,7 @@ torch.set_float32_matmul_precision("medium")
 def main():
     """
     Main entry point for flexynesis.
-    Handles both training and inference-only modes.
+    Handles both inference-only mode and (disabled) training fallback.
     """
     import argparse
 
@@ -43,7 +49,7 @@ def main():
     parser.add_argument("--outdir", type=str, default="results", help="Output directory")
     parser.add_argument("--prefix", type=str, default="infer", help="Output file prefix")
 
-    args, unknown = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     # Inference-only mode
     inference_args = [args.pretrained_model, args.artifacts, args.data_path_test]
@@ -72,15 +78,15 @@ def main():
         )
         return
 
-    # Training mode (fallback)
-    print("[INFO] No inference arguments provided — running in training mode.")
-    # TODO: call your original training entrypoint here
-    # e.g., from .train import run_training; run_training(args, unknown)
+    # Training fallback (disabled in this branch)
+    print("[INFO] No inference arguments provided — training mode is disabled in feat/inference-artifacts.")
+    return
 
 
 class HyperparameterTuning:
     """
-    A class dedicated to performing hyperparameter tuning using Bayesian optimization for various types of models.
+    Hyperparameter tuning via Bayesian optimization.
+    Supports CV or single validation split, early stopping, and optional live loss plots.
     """
 
     def __init__(self, dataset, model_class, config_name, target_variables,
@@ -106,10 +112,7 @@ class HyperparameterTuning:
         self.n_splits = cv_splits
         self.progress_bar = RichProgressBar(
             theme=RichProgressBarTheme(
-                progress_bar="green1",
-                metrics="yellow",
-                time="gray",
-                progress_bar_finished="red",
+                progress_bar="green1", metrics="yellow", time="gray", progress_bar_finished="red"
             )
         )
         self.early_stop_patience = early_stop_patience
@@ -124,6 +127,7 @@ class HyperparameterTuning:
         if self.model_class.__name__ == "MultiTripletNetwork":
             self.loader_dataset = TripletMultiOmicDataset(self.dataset, self.target_variables[0])
 
+        # Config / search space
         if config_path:
             external_config = self.load_and_convert_config(config_path)
             if self.config_name in external_config:
@@ -143,7 +147,7 @@ class HyperparameterTuning:
         end = int(np.log2(max_size))
         if m < end:
             end = m
-        return Categorical([np.power(2, x) for x in range(st, end + 1)], name="batch_size")
+        return Categorical([int(np.power(2, x)) for x in range(st, end + 1)], name="batch_size")
 
     def setup_trainer(self, params, current_step, total_steps, full_train=False):
         mycallbacks = []
@@ -170,6 +174,15 @@ class HyperparameterTuning:
             accelerator=self.device_type,
         )
         return trainer, early_stop_callback
+
+    def _single_split_indices(self):
+        """Generate one train/val split and return their index lists."""
+        num_val = int(len(self.loader_dataset) * self.val_size)
+        num_train = len(self.loader_dataset) - num_val
+        train_subset, val_subset = random_split(self.loader_dataset, [num_train, num_val])
+        train_idx = list(train_subset.indices)
+        val_idx = list(val_subset.indices)
+        return train_idx, val_idx
 
     def objective(self, params, current_step, total_steps, full_train=False):
         model_args = {
@@ -202,20 +215,12 @@ class HyperparameterTuning:
             return model
 
         validation_losses, epochs = [], []
-        split_iterator = (
-            KFold(n_splits=self.n_splits, shuffle=True).split(self.loader_dataset)
-            if self.use_cv
-            else [
-                (
-                    list(torch.utils.data.random_split(self.loader_dataset,
-                         [len(self.loader_dataset) - int(len(self.loader_dataset) * self.val_size),
-                          int(len(self.loader_dataset) * self.val_size)])[0].indices),
-                    list(torch.utils.data.random_split(self.loader_dataset,
-                         [len(self.loader_dataset) - int(len(self.loader_dataset) * self.val_size),
-                          int(len(self.loader_dataset) * self.val_size)])[1].indices),
-                )
-            ]
-        )
+
+        if self.use_cv:
+            split_iterator = KFold(n_splits=self.n_splits, shuffle=True).split(self.loader_dataset)
+        else:
+            train_idx, val_idx = self._single_split_indices()
+            split_iterator = [(train_idx, val_idx)]
 
         model = None
         for i, (train_index, val_index) in enumerate(split_iterator, start=1):
@@ -248,33 +253,44 @@ class HyperparameterTuning:
             print(f"[INFO] hpo config:{params}")
             trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
-            stopped = getattr(early_stop_callback, "stopped_epoch", None)
-            epochs.append(int(stopped) if stopped is not None else int(params["epochs"]))
-            val_loss = trainer.validate(model, dataloaders=val_loader)[0]["val_loss"]
+            stopped_epoch = getattr(early_stop_callback, "stopped_epoch", None) if early_stop_callback else None
+            epochs.append(int(stopped_epoch) if stopped_epoch is not None else int(params["epochs"]))
+
+            validation_result = trainer.validate(model, dataloaders=val_loader)
+            val_loss = validation_result[0]["val_loss"]
             validation_losses.append(val_loss)
 
-        avg_val_loss = np.mean(validation_losses)
+        avg_val_loss = float(np.mean(validation_losses))
         avg_epochs = int(np.mean(epochs))
         return avg_val_loss, avg_epochs, model
 
     def perform_tuning(self, hpo_patience=0):
         opt = Optimizer(dimensions=self.space, n_initial_points=10, acq_func="gp_hedge", acq_optimizer="auto")
 
-        best_loss, best_params, best_epochs, best_model = np.inf, None, 0, None
+        best_loss = np.inf
+        best_params = None
+        best_epochs = 0
+        best_model = None
+
         no_improvement_count = 0
 
         with tqdm(total=self.n_iter, desc="Tuning Progress") as pbar:
             for i in range(self.n_iter):
-                np.int = int
+                np.int = int  # legacy compatibility for some downstream libs
                 suggested_params_list = opt.ask()
                 suggested_params_dict = {param.name: value for param, value in zip(self.space, suggested_params_list)}
-                loss, avg_epochs, model = self.objective(suggested_params_dict, current_step=i + 1, total_steps=self.n_iter)
+                loss, avg_epochs, model = self.objective(
+                    suggested_params_dict, current_step=i + 1, total_steps=self.n_iter
+                )
                 if self.use_cv:
-                    print(f"[INFO] average {self.n_splits}-fold CV loss {loss} for params: {suggested_params_dict}")
+                    print(f"[INFO] average {self.n_splits}-fold cross-validation loss {loss} for params: {suggested_params_dict}")
                 opt.tell(suggested_params_list, loss)
 
                 if loss < best_loss:
-                    best_loss, best_params, best_epochs, best_model = loss, suggested_params_list, avg_epochs, model
+                    best_loss = loss
+                    best_params = suggested_params_list
+                    best_epochs = avg_epochs
+                    best_model = model
                     no_improvement_count = 0
                 else:
                     no_improvement_count += 1
@@ -283,7 +299,7 @@ class HyperparameterTuning:
                 pbar.update(1)
 
                 if hpo_patience > 0 and no_improvement_count >= hpo_patience:
-                    print(f"No improvement in best loss for {hpo_patience} iterations, stopping early.")
+                    print(f"No improvement in best loss for {hpo_patience} iterations, stopping hyperparameter optimisation early.")
                     break
 
                 best_params_dict = {param.name: value for param, value in zip(self.space, best_params)} if best_params else None
@@ -304,8 +320,10 @@ class HyperparameterTuning:
     def load_and_convert_config(self, config_path):
         if not os.path.isfile(config_path):
             raise ValueError(f"Config file '{config_path}' doesn't exist.")
+
         if not (config_path.endswith(".yaml") or config_path.endswith(".yml")):
             raise ValueError("Unsupported file format. Use .yaml or .yml")
+
         with open(config_path, "r") as file:
             loaded_config = yaml.safe_load(file)
 
@@ -326,7 +344,123 @@ class HyperparameterTuning:
         return search_space_user
 
 
+class FineTuner(pl.LightningModule):
+    """
+    FineTuner class for fine-tuning trained flexynesis models with flexible control over learning rates
+    and component freezing, using cross-validation to select the best setup.
+    """
+
+    def __init__(self, model, dataset, n_splits=5, batch_size=32, learning_rates=None, max_epoch=50, freeze_configs=None):
+        super().__init__()
+        logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
+        self.original_model = model
+        self.dataset = dataset
+        self.n_splits = n_splits
+        self.batch_size = batch_size
+        self.kfold = KFold(n_splits=self.n_splits, shuffle=True)
+        self.learning_rates = learning_rates if learning_rates else [
+            model.config["lr"], model.config["lr"] / 10, model.config["lr"] / 100
+        ]
+        self.folds_data = list(self.kfold.split(np.arange(len(self.dataset))))
+        self.max_epoch = max_epoch
+        self.freeze_configs = freeze_configs if freeze_configs else [
+            {"encoders": True, "supervisors": False},
+            {"encoders": False, "supervisors": True},
+            {"encoders": False, "supervisors": False},
+        ]
+
+        if model.__class__.__name__ == "MultiTripletNetwork":
+            self.dataset = TripletMultiOmicDataset(dataset, model.main_var)
+
+    def apply_freeze_config(self, config):
+        # Freeze/unfreeze encoders
+        for encoder in self.model.encoders:
+            for param in encoder.parameters():
+                param.requires_grad = not config["encoders"]
+        # Freeze/unfreeze supervisors
+        for mlp in self.model.MLPs.values():
+            for param in mlp.parameters():
+                param.requires_grad = not config["supervisors"]
+
+    def train_dataloader(self):
+        train_idx, _ = self.folds_data[self.current_fold]
+        train_subset = torch.utils.data.Subset(self.dataset, train_idx)
+        return DataLoader(train_subset, batch_size=self.batch_size, shuffle=True)
+
+    def val_dataloader(self):
+        _, val_idx = self.folds_data[self.current_fold]
+        val_subset = torch.utils.data.Subset(self.dataset, val_idx)
+        return DataLoader(val_subset, batch_size=self.batch_size)
+
+    def training_step(self, batch, batch_idx):
+        return self.model.training_step(batch, batch_idx, log=False)
+
+    def validation_step(self, batch, batch_idx):
+        val_loss = self.model.validation_step(batch, batch_idx, log=False)
+        self.log("val_loss", val_loss, on_epoch=True, prog_bar=True)
+        return val_loss
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=self.learning_rate)
+
+    def run_experiments(self):
+        val_loss_results = []
+        for lr in self.learning_rates:
+            for config in self.freeze_configs:
+                fold_losses = []
+                epochs = []
+                for fold in range(self.n_splits):
+                    model_copy = copy.deepcopy(self.original_model)
+                    self.model = model_copy
+                    self.apply_freeze_config(config)
+                    self.current_fold = fold
+                    self.learning_rate = lr
+                    early_stopping = EarlyStopping(monitor="val_loss", patience=3, verbose=False, mode="min")
+                    trainer = pl.Trainer(
+                        max_epochs=self.max_epoch,
+                        devices=1,
+                        accelerator="auto",
+                        logger=False,
+                        enable_checkpointing=False,
+                        enable_progress_bar=False,
+                        enable_model_summary=False,
+                        callbacks=[early_stopping],
+                    )
+                    trainer.fit(self, train_dataloaders=self.train_dataloader(), val_dataloaders=self.val_dataloader())
+                    stopped_epoch = getattr(early_stopping, "stopped_epoch", None)
+                    val_loss = trainer.validate(self, dataloaders=self.val_dataloader(), verbose=False)
+                    fold_losses.append(val_loss[0]["val_loss"])
+                    epochs.append(int(stopped_epoch) if stopped_epoch is not None else self.max_epoch)
+                avg_val_loss = float(np.mean(fold_losses))
+                avg_epochs = int(np.mean(epochs))
+                print(f"[INFO] average {self.n_splits}-fold cross-validation loss {avg_val_loss} "
+                      f"for learning rate: {lr} freeze {config}, average epochs {avg_epochs}")
+                val_loss_results.append(
+                    {"learning_rate": lr, "average_val_loss": avg_val_loss, "freeze": config, "epochs": avg_epochs}
+                )
+
+        best_config = min(val_loss_results, key=lambda x: x["average_val_loss"])
+        print(
+            f"Best learning rate: {best_config['learning_rate']} and freeze {best_config['freeze']} "
+            f"with average validation loss: {best_config['average_val_loss']} and average epochs: {best_config['epochs']}"
+        )
+
+        final_model = copy.deepcopy(self.model)
+        self.model = final_model
+        self.learning_rate = best_config["learning_rate"]
+        self.apply_freeze_config(best_config["freeze"])
+        dl = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True)
+        final_trainer = pl.Trainer(
+            max_epochs=best_config["epochs"], devices=1, accelerator="auto", logger=False, enable_checkpointing=False
+        )
+        final_trainer.fit(self, train_dataloaders=dl)
+
+
 class LiveLossPlot(Callback):
+    """
+    A callback for visualizing training loss in real-time during hyperparameter optimization.
+    """
+
     def __init__(self, hyperparams, current_step, total_steps, figsize=(8, 6)):
         super().__init__()
         self.hyperparams = hyperparams
@@ -344,7 +478,10 @@ class LiveLossPlot(Callback):
         for key, value in trainer.callback_metrics.items():
             if key not in self.losses:
                 self.losses[key] = []
-            self.losses[key].append(value.item())
+            try:
+                self.losses[key].append(float(value))
+            except Exception:
+                self.losses[key].append(value.item())
         self.plot_losses()
 
     def plot_losses(self):
@@ -352,12 +489,14 @@ class LiveLossPlot(Callback):
         clear_output(wait=True)
         plt.figure(figsize=self.figsize)
         epochs_to_show = 25
+
         for key, losses in self.losses.items():
             losses_to_plot = losses[-epochs_to_show:]
-            epochs_range = range(len(losses) - len(losses_to_plot), len(losses))
+            start = len(losses) - len(losses_to_plot)
+            epochs_range = range(start, start + len(losses_to_plot))
             plt.plot(epochs_range, losses_to_plot, label=key)
 
-        hyperparams_str = ", ".join(f"{k}={v}" for k, v in self.hyperparams.items())
+        hyperparams_str = ", ".join(f"{key}={value}" for key, value in self.hyperparams.items())
         title = f"HPO Step={self.current_step} out of {self.total_steps}\n({hyperparams_str})"
         plt.title(title)
         plt.xlabel(f"Last {epochs_to_show} Epochs")
