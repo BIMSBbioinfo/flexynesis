@@ -84,7 +84,6 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', tit
     elif method == 'umap':
         transformer = UMAP(n_components=2)
         # Convert to numpy array and handle UMAP compatibility
-        import numpy as np
         matrix_np = np.array(matrix, dtype=np.float32)
         try:
             # Try with ensure_all_finite parameter (newer versions)
@@ -116,15 +115,12 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', tit
         # Create a diverse color palette for many categories
         if n_categories <= 10:
             # Use Set1 for small number of categories
-            import matplotlib.pyplot as plt
             colors = plt.cm.Set1(np.linspace(0, 1, max(n_categories, 3)))
         elif n_categories <= 20:
             # Use tab20 for medium number of categories
-            import matplotlib.pyplot as plt
             colors = plt.cm.tab20(np.linspace(0, 1, n_categories))
         else:
             # For many categories, combine multiple palettes
-            import matplotlib.pyplot as plt
             colors1 = plt.cm.tab20(np.linspace(0, 1, 20))
             colors2 = plt.cm.Set3(np.linspace(0, 1, n_categories - 20))
             colors = np.vstack([colors1, colors2])
