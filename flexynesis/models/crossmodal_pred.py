@@ -13,6 +13,7 @@ from scipy import stats
 from captum.attr import IntegratedGradients, GradientShap
 
 from ..modules import *
+from ..utils import to_device_safe, mps_safe_context
 
 
 class CrossModalPred(pl.LightningModule):
@@ -524,7 +525,7 @@ class CrossModalPred(pl.LightningModule):
         
         for batch in dataloader:
             dat, _, _ = batch
-            x_list = [dat[x].to(device) for x in self.input_layers]
+            x_list = [to_device_safe(dat[x], device) for x in self.input_layers]
             input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
             
             if method == 'IntegratedGradients':
@@ -537,27 +538,31 @@ class CrossModalPred(pl.LightningModule):
 
             if num_class == 1:
                 if method == 'IntegratedGradients':
-                    attributions = explainer.attribute(input_data, baseline, 
-                                                 additional_forward_args=(target_var, steps_or_samples), 
-                                                 n_steps=steps_or_samples)
+                    with mps_safe_context(device):
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                     additional_forward_args=(target_var, steps_or_samples), 
+                                                     n_steps=steps_or_samples)
                 elif method == 'GradientShap':
-                    attributions = explainer.attribute(input_data, baseline, 
-                                                 additional_forward_args=(target_var, steps_or_samples), 
-                                                 n_samples=steps_or_samples)
+                    with mps_safe_context(device):
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                     additional_forward_args=(target_var, steps_or_samples), 
+                                                     n_samples=steps_or_samples)
                 aggregated_attributions[0].append(attributions)
             else:
                 for target_class in range(num_class):
                     # returns a tuple of tensors (one per data modality)
                     if method == 'IntegratedGradients':
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                           additional_forward_args=(target_var, steps_or_samples), 
-                                                           target=target_class,
-                                                           n_steps=steps_or_samples)
+                        with mps_safe_context(device):
+                            attributions = explainer.attribute(input_data, baseline, 
+                                                               additional_forward_args=(target_var, steps_or_samples), 
+                                                               target=target_class,
+                                                               n_steps=steps_or_samples)
                     elif method == 'GradientShap':
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                           additional_forward_args=(target_var, steps_or_samples), 
-                                                           target=target_class,
-                                                           n_samples=steps_or_samples)
+                        with mps_safe_context(device):
+                            attributions = explainer.attribute(input_data, baseline, 
+                                                               additional_forward_args=(target_var, steps_or_samples), 
+                                                               target=target_class,
+                                                               n_samples=steps_or_samples)
                     aggregated_attributions[target_class].append(attributions)
 
         # For each target class and for each data modality/layer, concatenate attributions accross batches 

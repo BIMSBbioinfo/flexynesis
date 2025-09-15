@@ -11,6 +11,7 @@ import numpy as np
 
 import lightning as pl
 
+from ..utils import to_device_safe, mps_safe_context
 from ..modules import *
 from ..data import TripletMultiOmicDataset
 
@@ -432,10 +433,10 @@ class MultiTripletNetwork(pl.LightningModule):
             # see training_step to see how elements are accessed in batches 
             anchor, positive, negative, y_dict = batch[0], batch[1], batch[2], batch[3]        
 
-            # Move tensors to the specified device
-            anchor = {k: v.to(device) for k, v in anchor.items()}
-            positive = {k: v.to(device) for k, v in positive.items()}
-            negative = {k: v.to(device) for k, v in negative.items()}
+            # Move tensors to the specified device using MPS-safe method
+            anchor = {k: to_device_safe(v, device) for k, v in anchor.items()}
+            positive = {k: to_device_safe(v, device) for k, v in positive.items()}
+            negative = {k: to_device_safe(v, device) for k, v in negative.items()}
             
             anchor = [data.requires_grad_() for data in list(anchor.values())]
             positive = [data.requires_grad_() for data in list(positive.values())]
@@ -459,28 +460,32 @@ class MultiTripletNetwork(pl.LightningModule):
             if num_class == 1:
                 
                 if method == 'IntegratedGradients':
-                    attributions = explainer.attribute(input_data, baseline, 
-                                                 additional_forward_args=(layer_sizes, target_var, steps_or_samples), 
-                                                 n_steps=steps_or_samples)
-                    attributions = attributions.split(layer_sizes, dim = 3)
+                    with mps_safe_context(device):
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                     additional_forward_args=(layer_sizes, target_var, steps_or_samples), 
+                                                     n_steps=steps_or_samples)
+                        attributions = attributions.split(layer_sizes, dim = 3)
                 elif method == 'GradientShape':
-                    attributions = explainer.attribute(input_data, baseline, 
-                                                 additional_forward_args=(layer_sizes, target_var, steps_or_samples), 
-                                                 n_samples=steps_or_samples)
+                    with mps_safe_context(device):
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                     additional_forward_args=(layer_sizes, target_var, steps_or_samples), 
+                                                     n_samples=steps_or_samples)
                     attributions = attributions.split(layer_sizes, dim = 3)
                 aggregated_attributions[0].append(attributions)
             else:
                 for target_class in range(num_class):
                     if method == 'IntegratedGradients':
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                     additional_forward_args=(layer_sizes, target_var, steps_or_samples), 
-                                                     target=target_class, n_steps=steps_or_samples)
-                        attributions = attributions.split(layer_sizes, dim = 3)
+                        with mps_safe_context(device):
+                            attributions = explainer.attribute(input_data, baseline, 
+                                                         additional_forward_args=(layer_sizes, target_var, steps_or_samples), 
+                                                         target=target_class, n_steps=steps_or_samples)
+                            attributions = attributions.split(layer_sizes, dim = 3)
                     elif method == 'GradientShap':
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                     additional_forward_args=(layer_sizes, target_var, steps_or_samples), 
-                                                     target=target_class, n_samples=steps_or_samples)
-                        attributions = attributions.split(layer_sizes, dim = 3)
+                        with mps_safe_context(device):
+                            attributions = explainer.attribute(input_data, baseline, 
+                                                         additional_forward_args=(layer_sizes, target_var, steps_or_samples), 
+                                                         target=target_class, n_samples=steps_or_samples)
+                            attributions = attributions.split(layer_sizes, dim = 3)
                     aggregated_attributions[target_class].append(attributions)
 
         # For each target class and for each data modality/layer, concatenate attributions accross batches 
