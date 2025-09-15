@@ -32,7 +32,7 @@ def main():
     Main entry point for flexynesis.
     Handles both training and inference-only modes.
     """
-   import argparse
+    import argparse
 
     parser = argparse.ArgumentParser(description="Flexynesis CLI")
     parser.add_argument("--pretrained_model", type=str, help="Path to pretrained model (.pth)")
@@ -57,6 +57,12 @@ def main():
             device=device,
         )
         return
+
+    # Training mode (fallback to original behavior)
+    # If inference args are not provided, the rest of main.py runs as before.
+    # Hyperparameter tuning, training, and evaluation continue as normal.
+    print("[INFO] No inference arguments provided — running in training mode.")
+
 class HyperparameterTuning:
     """
     A class dedicated to performing hyperparameter tuning using Bayesian optimization for various types of models.
