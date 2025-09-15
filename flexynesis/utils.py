@@ -108,9 +108,37 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', tit
     # Plot
     if color_type == 'categorical':
         df["Label"] = df["Label"].astype(str)
+        
+        # Generate distinct colors for many categories
+        unique_labels = df["Label"].unique()
+        n_categories = len(unique_labels)
+        
+        # Create a diverse color palette for many categories
+        if n_categories <= 10:
+            # Use Set1 for small number of categories
+            import matplotlib.pyplot as plt
+            colors = plt.cm.Set1(np.linspace(0, 1, max(n_categories, 3)))
+        elif n_categories <= 20:
+            # Use tab20 for medium number of categories
+            import matplotlib.pyplot as plt
+            colors = plt.cm.tab20(np.linspace(0, 1, n_categories))
+        else:
+            # For many categories, combine multiple palettes
+            import matplotlib.pyplot as plt
+            colors1 = plt.cm.tab20(np.linspace(0, 1, 20))
+            colors2 = plt.cm.Set3(np.linspace(0, 1, n_categories - 20))
+            colors = np.vstack([colors1, colors2])
+        
+        # Convert colors to hex format
+        color_hex = ['#%02x%02x%02x' % (int(c[0]*255), int(c[1]*255), int(c[2]*255)) for c in colors]
+        
+        # Create color mapping dictionary
+        color_mapping = dict(zip(unique_labels, color_hex[:n_categories]))
+        
         plot = (
             ggplot(df, aes(x=colnames[0], y=colnames[1], color='Label')) +
             geom_point() +
+            scale_color_manual(values=color_mapping) +
             labs(title=plot_title, x=xlab, y=ylab, color="Labels") +
             theme_minimal()
         )
