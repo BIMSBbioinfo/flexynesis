@@ -22,9 +22,41 @@ import numpy as np
 import os, yaml
 from skopt.space import Integer, Categorical, Real
 from .data import STRING
+from .inference import run_inference, InferenceArtifacts
+import joblib
 
 torch.set_float32_matmul_precision("medium")
-            
+
+def main():
+    """
+    Main entry point for flexynesis.
+    Handles both training and inference-only modes.
+    """
+   import argparse
+
+    parser = argparse.ArgumentParser(description="Flexynesis CLI")
+    parser.add_argument("--pretrained_model", type=str, help="Path to pretrained model (.pth)")
+    parser.add_argument("--artifacts", type=str, help="Path to preprocessing artifacts (.joblib)")
+    parser.add_argument("--data_path_test", type=str, help="Path to test dataset")
+    parser.add_argument("--join_key", type=str, help="Join key column in clin.csv")
+    parser.add_argument("--outdir", type=str, default="results", help="Output directory")
+    parser.add_argument("--prefix", type=str, default="infer", help="Output file prefix")
+
+    args, unknown = parser.parse_known_args()
+
+    # Inference-only mode
+    if args.pretrained_model and args.artifacts and args.data_path_test:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        run_inference(
+            pretrained_model_path=args.pretrained_model,
+            artifacts_path=args.artifacts,
+            test_data_path=args.data_path_test,
+            join_key=args.join_key,
+            outdir=args.outdir,
+            prefix=args.prefix,
+            device=device,
+        )
+        return
 class HyperparameterTuning:
     """
     A class dedicated to performing hyperparameter tuning using Bayesian optimization for various types of models.
