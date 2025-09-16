@@ -1,6 +1,5 @@
 from lightning import seed_everything
 import pandas as pd
-import numpy as np
 import torch
 import math
 import warnings
@@ -115,15 +114,22 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', tit
         # Create a diverse color palette for many categories
         if n_categories <= 10:
             # Use Set1 for small number of categories
-            colors = plt.cm.Set1(np.linspace(0, 1, max(n_categories, 3)))
+            n_colors = max(n_categories, 3)
+            cmap = plt.get_cmap('Set1', n_colors)
+            colors = [cmap(i) for i in range(n_colors)]
         elif n_categories <= 20:
             # Use tab20 for medium number of categories
-            colors = plt.cm.tab20(np.linspace(0, 1, n_categories))
+            n_colors = n_categories
+            cmap = plt.get_cmap('tab20', n_colors)
+            colors = [cmap(i) for i in range(n_colors)]
         else:
             # For many categories, combine multiple palettes
-            colors1 = plt.cm.tab20(np.linspace(0, 1, 20))
-            colors2 = plt.cm.Set3(np.linspace(0, 1, n_categories - 20))
-            colors = np.vstack([colors1, colors2])
+            cmap1 = plt.get_cmap('tab20', 20)
+            colors1 = [cmap1(i) for i in range(20)]
+            remaining = n_categories - 20
+            cmap2 = plt.get_cmap('Set3', max(remaining, 1))
+            colors2 = [cmap2(i) for i in range(remaining)]
+            colors = colors1 + colors2
         
         # Convert colors to hex format
         color_hex = ['#%02x%02x%02x' % (int(c[0]*255), int(c[1]*255), int(c[2]*255)) for c in colors]
