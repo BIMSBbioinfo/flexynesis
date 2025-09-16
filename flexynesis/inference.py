@@ -28,24 +28,18 @@ class InferenceArtifacts:
     join_key: str = "JoinKey"
 
     def to_dict(self) -> dict:
-        """
-        Return a JSON-serializable dictionary representation of the artifacts.
-        """
+        """Return a JSON-serializable dictionary representation of the artifacts."""
         d = asdict(self)
         return d
 
     def save(self, path: str) -> None:
-        """
-        Serialize and save the artifacts to ``path`` using joblib.
-        """
+        """Serialize and save the artifacts to ``path`` using joblib."""
         os.makedirs(os.path.dirname(path), exist_ok=True)
         joblib.dump(self.to_dict(), path)
 
     @staticmethod
     def load(path: str) -> "InferenceArtifacts":
-        """
-        Load artifacts from ``path`` using joblib and return an instance.
-        """
+        """Load artifacts from ``path`` using joblib and return an instance."""
         d = joblib.load(path)
         return InferenceArtifacts(**d)
 
