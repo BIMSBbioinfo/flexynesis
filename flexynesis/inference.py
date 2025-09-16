@@ -14,18 +14,11 @@ import torch
 @dataclass
 class InferenceArtifacts:
     """
-    Portable description of what a trained Flexynesis run expects at inference time.
-    This should be saved after training and shipped alongside the trained model.
+    Container describing what a trained Flexynesis run expects at inference time.
 
-    Fields:
-      - schema_version: integer to allow future extensions
-      - data_types: list of omics layers used during training (e.g. ["gex","cnv"])
-      - target_variables: list of target variables used during training (may be empty for unsupervised)
-      - feature_lists: dict[layer] -> list[str] of features observed during training after preprocessing
-      - transforms: reserved for fitted scalers/encoders per layer (optional)
-      - label_encoders: reserved for categorical encoders for clinical vars (optional)
-      - join_key: column in clin.csv that identifies samples (default: "JoinKey")
+    Attributes include schema version, layers, targets, per-layer feature lists, fitted transforms/encoders, and the clinical join key.
     """
+
     schema_version: int = 1
     data_types: List[str] = field(default_factory=list)
     target_variables: List[str] = field(default_factory=list)
@@ -35,15 +28,24 @@ class InferenceArtifacts:
     join_key: str = "JoinKey"
 
     def to_dict(self) -> dict:
+        """
+        Return a JSON-serializable dictionary representation of the artifacts.
+        """
         d = asdict(self)
         return d
 
     def save(self, path: str) -> None:
+        """
+        Serialize and save the artifacts to ``path`` using joblib.
+        """
         os.makedirs(os.path.dirname(path), exist_ok=True)
         joblib.dump(self.to_dict(), path)
 
     @staticmethod
     def load(path: str) -> "InferenceArtifacts":
+        """
+        Load artifacts from ``path`` using joblib and return an instance.
+        """
         d = joblib.load(path)
         return InferenceArtifacts(**d)
 
