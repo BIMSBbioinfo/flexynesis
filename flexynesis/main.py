@@ -1,3 +1,4 @@
+"""CLI entry point and HPO/finetuning helpers for Flexynesis."""
 
 from lightning import seed_everything
 seed_everything(42, workers=True)

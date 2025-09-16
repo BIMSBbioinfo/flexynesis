@@ -1,3 +1,4 @@
+"""Inference utilities and artifacts schema for Flexynesis."""
 # flexynesis/inference.py
 from __future__ import annotations
 
