@@ -9,6 +9,15 @@ on:
       - './pyproject.toml'
       - './manifest.scm'
       - './guix.scm'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'flexynesis/**'
+      - '.github/workflows/models.yml'
+      - 'pyproject.toml'
+      - 'manifest.scm'
+      - 'guix.scm'
 
 jobs:
   run_package:

@@ -5,6 +5,15 @@ on:
   schedule:
     # Runs at 00:00 UTC every Sunday
     - cron: '0 0 * * 0'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'flexynesis/**'
+      - '.github/workflows/models.yml'
+      - 'pyproject.toml'
+      - 'manifest.scm'
+      - 'guix.scm'
 
 jobs:
   check_tutorials:
