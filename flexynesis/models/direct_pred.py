@@ -13,7 +13,7 @@ from functools import reduce
 from captum.attr import IntegratedGradients, GradientShap
 
 from ..modules import *
-from ..utils import to_device_safe
+from ..utils import to_device_safe, mps_safe_context
 
 class DirectPred(pl.LightningModule):
     """
@@ -413,27 +413,31 @@ class DirectPred(pl.LightningModule):
             if num_class == 1:
                 # returns a tuple of tensors (one per data modality)
                 if method == 'IntegratedGradients':
-                    attributions = explainer.attribute(input_data, baseline, 
-                                                 additional_forward_args=(target_var, steps_or_samples), 
-                                                 n_steps=steps_or_samples)
+                    with mps_safe_context(device):
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                     additional_forward_args=(target_var, steps_or_samples), 
+                                                     n_steps=steps_or_samples)
                 elif method == 'GradientShap':
-                    attributions = explainer.attribute(input_data, baseline, 
-                                                 additional_forward_args=(target_var, steps_or_samples), 
-                                                 n_samples=steps_or_samples)
+                    with mps_safe_context(device):
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                     additional_forward_args=(target_var, steps_or_samples), 
+                                                     n_samples=steps_or_samples)
                 aggregated_attributions[0].append(attributions)
             else:
                 for target_class in range(num_class):
                     # returns a tuple of tensors (one per data modality)
                     if method == 'IntegratedGradients':
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                           additional_forward_args=(target_var, steps_or_samples), 
-                                                           target=target_class,
-                                                           n_steps=steps_or_samples)
+                        with mps_safe_context(device):
+                            attributions = explainer.attribute(input_data, baseline, 
+                                                               additional_forward_args=(target_var, steps_or_samples), 
+                                                               target=target_class,
+                                                               n_steps=steps_or_samples)
                     elif method == 'GradientShap':
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                           additional_forward_args=(target_var, steps_or_samples), 
-                                                           target=target_class,
-                                                           n_samples=steps_or_samples)
+                        with mps_safe_context(device):
+                            attributions = explainer.attribute(input_data, baseline, 
+                                                               additional_forward_args=(target_var, steps_or_samples), 
+                                                               target=target_class,
+                                                               n_samples=steps_or_samples)
                     aggregated_attributions[target_class].append(attributions)
         # Post-process attributions
         layers = list(dataset.dat.keys())

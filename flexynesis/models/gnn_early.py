@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 
 from captum.attr import IntegratedGradients, GradientShap
 
+from ..utils import to_device_safe, mps_safe_context
 from ..modules import MLP, cox_ph_loss, flexGCN
 
 
@@ -88,7 +89,7 @@ class GNN(pl.LightningModule):
         
         from ..utils import create_device_from_string
         device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
-        self.edge_index = self.edge_index.to(device) # edge index is re-used across samples, so we keep it in device
+        self.edge_index = to_device_safe(self.edge_index, device) # edge index is re-used across samples, so we keep it in device
                 
         if self.use_loss_weighting:
             # Initialize log variance parameters for uncertainty weighting
@@ -432,26 +433,30 @@ class GNN(pl.LightningModule):
             if num_class == 1:
                 # returns a tuple of tensors (one per data modality)
                 if method == 'IntegratedGradients':
-                    attributions = explainer.attribute(input_data, baseline, 
-                                                 additional_forward_args=(target_var, steps_or_samples), 
-                                                 n_steps=steps_or_samples)
+                    with mps_safe_context(device):
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                     additional_forward_args=(target_var, steps_or_samples), 
+                                                     n_steps=steps_or_samples)
                 elif method == 'GradientShap':
-                    attributions = explainer.attribute(input_data, baseline, 
-                                                 additional_forward_args=(target_var, steps_or_samples), 
-                                                 n_samples=steps_or_samples)
+                    with mps_safe_context(device):
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                     additional_forward_args=(target_var, steps_or_samples), 
+                                                     n_samples=steps_or_samples)
                 aggregated_attributions[0].append(attributions)
             else:
                 for target_class in range(num_class):
                     if method == 'IntegratedGradients':
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                           additional_forward_args=(target_var, steps_or_samples), 
-                                                           target=target_class,
-                                                           n_steps=steps_or_samples)
+                        with mps_safe_context(device):
+                            attributions = explainer.attribute(input_data, baseline, 
+                                                               additional_forward_args=(target_var, steps_or_samples), 
+                                                               target=target_class,
+                                                               n_steps=steps_or_samples)
                     elif method == 'GradientShap':
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                           additional_forward_args=(target_var, steps_or_samples), 
-                                                           target=target_class,
-                                                           n_samples=steps_or_samples)
+                        with mps_safe_context(device):
+                            attributions = explainer.attribute(input_data, baseline, 
+                                                               additional_forward_args=(target_var, steps_or_samples), 
+                                                               target=target_class,
+                                                               n_samples=steps_or_samples)
                     aggregated_attributions[target_class].append(attributions)
         # For each target class concatenate node attributions accross batches 
         processed_attributions = [] 

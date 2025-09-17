@@ -84,7 +84,6 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', tit
     elif method == 'umap':
         transformer = UMAP(n_components=2)
         # Convert to numpy array and handle UMAP compatibility
-        import numpy as np
         matrix_np = np.array(matrix, dtype=np.float32)
         try:
             # Try with ensure_all_finite parameter (newer versions)
@@ -108,9 +107,41 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', tit
     # Plot
     if color_type == 'categorical':
         df["Label"] = df["Label"].astype(str)
+        
+        # Generate distinct colors for many categories
+        unique_labels = df["Label"].unique()
+        n_categories = len(unique_labels)
+        
+        # Create a diverse color palette for many categories
+        if n_categories <= 10:
+            # Use Set1 for small number of categories
+            n_colors = max(n_categories, 3)
+            cmap = plt.get_cmap('Set1', n_colors)
+            colors = [cmap(i) for i in range(n_colors)]
+        elif n_categories <= 20:
+            # Use tab20 for medium number of categories
+            n_colors = n_categories
+            cmap = plt.get_cmap('tab20', n_colors)
+            colors = [cmap(i) for i in range(n_colors)]
+        else:
+            # For many categories, combine multiple palettes
+            cmap1 = plt.get_cmap('tab20', 20)
+            colors1 = [cmap1(i) for i in range(20)]
+            remaining = n_categories - 20
+            cmap2 = plt.get_cmap('Set3', max(remaining, 1))
+            colors2 = [cmap2(i) for i in range(remaining)]
+            colors = colors1 + colors2
+        
+        # Convert colors to hex format
+        color_hex = ['#%02x%02x%02x' % (int(c[0]*255), int(c[1]*255), int(c[2]*255)) for c in colors]
+        
+        # Create color mapping dictionary
+        color_mapping = dict(zip(unique_labels, color_hex[:n_categories]))
+        
         plot = (
             ggplot(df, aes(x=colnames[0], y=colnames[1], color='Label')) +
             geom_point() +
+            scale_color_manual(values=color_mapping) +
             labs(title=plot_title, x=xlab, y=ylab, color="Labels") +
             theme_minimal()
         )
@@ -1784,3 +1815,34 @@ def create_device_from_string(device_str):
             return torch.device('cpu')
     else:
         return torch.device('cpu')
+
+
+class mps_safe_context:
+    """
+    Context manager to ensure MPS compatibility by temporarily setting
+    default tensor dtype to float32 when using MPS device.
+    
+    This fixes issues with external libraries like captum that might create
+    float64 tensors internally, which MPS doesn't support.
+    """
+    def __init__(self, device):
+        self.device = device
+        self.original_dtype = None
+        self.should_change_dtype = False
+        
+    def __enter__(self):
+        if hasattr(self.device, 'type'):
+            device_type = self.device.type
+        else:
+            device_type = str(self.device)
+            
+        if device_type == 'mps':
+            self.original_dtype = torch.get_default_dtype()
+            if self.original_dtype != torch.float32:
+                torch.set_default_dtype(torch.float32)
+                self.should_change_dtype = True
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.should_change_dtype and self.original_dtype is not None:
+            torch.set_default_dtype(self.original_dtype)
