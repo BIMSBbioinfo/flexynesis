@@ -2,6 +2,11 @@
 <p align="center">
   <img alt="logo" src="https://github.com/BIMSBbioinfo/flexynesis/raw/main/img/logo.png" width="40%">
 </p>
+<p align="center">
+  <a href="https://doi.org/10.1038/s41467-025-63688-5">
+    <img src="https://img.shields.io/badge/DOI-10.1038%2Fs41467--025--63688--5-blue" alt="DOI">
+  </a>
+</p>
 
 <table align="center">
   <tr>
