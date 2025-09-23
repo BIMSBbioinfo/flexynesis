@@ -59,107 +59,184 @@ from sklearn.preprocessing import StandardScaler
 import ot 
 
 
+# imports
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from plotnine import (
+    ggplot, aes, geom_point, geom_step, labs, ggtitle, annotate,
+    theme_minimal, theme, element_text, scale_color_manual, scale_color_gradient
+)
+from sklearn.decomposition import PCA
+from umap import UMAP
+from lifelines import KaplanMeierFitter
+from lifelines.statistics import logrank_test, multivariate_logrank_test
+
+
+def _labels_to_1d(labels):
+    """Coerce labels (list/array/Series/Index/DataFrame[1-col]) to a 1-D numpy array (no index alignment)."""
+    if isinstance(labels, pd.Series) or isinstance(labels, pd.Index):
+        arr = labels.to_numpy()
+    elif isinstance(labels, pd.DataFrame):
+        if labels.shape[1] != 1:
+            raise ValueError("labels DataFrame must have exactly one column.")
+        arr = labels.iloc[:, 0].to_numpy()
+    else:
+        arr = np.asarray(labels)
+    return np.ravel(arr)
+
+def get_color_mapping(labels):
+    """
+    Map categorical labels to colors using ALPHABETICAL order (deterministic).
+    Uses high-contrast palettes: tab10, tab20, Dark2, Accent.
+    """
+    lbls = pd.Series(_labels_to_1d(labels), dtype="object").astype(str)
+    unique_labels = sorted(pd.unique(lbls))
+    n = len(unique_labels)
+
+    if n <= 10:
+        cmap = plt.get_cmap('tab10', n)
+        colors = [cmap(i) for i in range(n)]
+    elif n <= 20:
+        cmap = plt.get_cmap('tab20', n)
+        colors = [cmap(i) for i in range(n)]
+    else:
+        # stack multiple palettes to cover many categories
+        palettes = [
+            plt.get_cmap('tab20', 20),
+            plt.get_cmap('Dark2', 8),
+            plt.get_cmap('Accent', 8),
+        ]
+        colors = []
+        for pal in palettes:
+            colors.extend([pal(i) for i in range(pal.N)])
+        # repeat if still not enough
+        while len(colors) < n:
+            colors.extend(colors)
+        colors = colors[:n]
+
+    to_hex = lambda c: '#%02x%02x%02x' % (int(c[0]*255), int(c[1]*255), int(c[2]*255))
+    color_hex = [to_hex(c) for c in colors]
+    return dict(zip(unique_labels, color_hex))
+
+
 def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', title=None):
     """
-    Plots the first two dimensions of the transformed input matrix using plotnine,
-    with PCA or UMAP, and includes explained variance for PCA.
-
-    Args:
-        matrix (np.array): Input data matrix (n_samples, n_features).
-        labels (list or array): Labels for coloring.
-        method (str): 'pca' or 'umap'.
-        color_type (str): 'categorical' or 'numerical'.
-        title (str or None): Optional title for the plot.
+    Plot first two dims (PCA/UMAP). Uses alphabetical label ordering + shared palette.
     """
     method = method.lower()
 
-    # Fit transformation
     if method == 'pca':
         transformer = PCA(n_components=2)
-        transformed_matrix = transformer.fit_transform(matrix)
+        transformed = transformer.fit_transform(matrix)
         var_exp = transformer.explained_variance_ratio_ * 100
         xlab = f"PC1 ({var_exp[0]:.1f}%)"
         ylab = f"PC2 ({var_exp[1]:.1f}%)"
-        colnames = ['PC1', 'PC2']
+        xcol, ycol = 'PC1', 'PC2'
     elif method == 'umap':
         transformer = UMAP(n_components=2)
-        # Convert to numpy array and handle UMAP compatibility
-        matrix_np = np.array(matrix, dtype=np.float32)
+        m = np.array(matrix, dtype=np.float32)
         try:
-            # Try with ensure_all_finite parameter (newer versions)
-            transformed_matrix = transformer.fit_transform(matrix_np, ensure_all_finite=True)
+            transformed = transformer.fit_transform(m, ensure_all_finite=True)
         except TypeError:
-            # Fallback for older UMAP versions that don't support ensure_all_finite
-            transformed_matrix = transformer.fit_transform(matrix_np)
-        xlab = "UMAP1"
-        ylab = "UMAP2"
-        colnames = ['UMAP1', 'UMAP2']
+            transformed = transformer.fit_transform(m)
+        xlab, ylab = "UMAP1", "UMAP2"
+        xcol, ycol = 'UMAP1', 'UMAP2'
     else:
         raise ValueError("Invalid method. Expected 'pca' or 'umap'.")
 
-    # Create DataFrame
-    df = pd.DataFrame(transformed_matrix, columns=colnames)
-    df["Label"] = list(labels)
+    df = pd.DataFrame(transformed, columns=[xcol, ycol])
 
-    # Title
+    # label handling (no index alignment) + alphabetical order + fixed legend order
+    lbls = pd.Series(_labels_to_1d(labels), dtype="object").astype(str)
+    color_mapping = get_color_mapping(lbls)
+    order = list(color_mapping.keys())  # alphabetical order
+    df["Label"] = pd.Categorical(lbls, categories=order, ordered=True)
+
     plot_title = title if title else f"{method.upper()} Scatter Plot"
 
-    # Plot
     if color_type == 'categorical':
-        df["Label"] = df["Label"].astype(str)
-        
-        # Generate distinct colors for many categories
-        unique_labels = df["Label"].unique()
-        n_categories = len(unique_labels)
-        
-        # Create a diverse color palette for many categories
-        if n_categories <= 10:
-            # Use Set1 for small number of categories
-            n_colors = max(n_categories, 3)
-            cmap = plt.get_cmap('Set1', n_colors)
-            colors = [cmap(i) for i in range(n_colors)]
-        elif n_categories <= 20:
-            # Use tab20 for medium number of categories
-            n_colors = n_categories
-            cmap = plt.get_cmap('tab20', n_colors)
-            colors = [cmap(i) for i in range(n_colors)]
-        else:
-            # For many categories, combine multiple palettes
-            cmap1 = plt.get_cmap('tab20', 20)
-            colors1 = [cmap1(i) for i in range(20)]
-            remaining = n_categories - 20
-            cmap2 = plt.get_cmap('Set3', max(remaining, 1))
-            colors2 = [cmap2(i) for i in range(remaining)]
-            colors = colors1 + colors2
-        
-        # Convert colors to hex format
-        color_hex = ['#%02x%02x%02x' % (int(c[0]*255), int(c[1]*255), int(c[2]*255)) for c in colors]
-        
-        # Create color mapping dictionary
-        color_mapping = dict(zip(unique_labels, color_hex[:n_categories]))
-        
-        plot = (
-            ggplot(df, aes(x=colnames[0], y=colnames[1], color='Label')) +
-            geom_point() +
-            scale_color_manual(values=color_mapping) +
-            labs(title=plot_title, x=xlab, y=ylab, color="Labels") +
-            theme_minimal()
+        p = (
+            ggplot(df, aes(x=xcol, y=ycol, color='Label'))
+            + geom_point()
+            + scale_color_manual(values=color_mapping)
+            + labs(title=plot_title, x=xlab, y=ylab, color="Labels")
+            + theme_minimal()
         )
     elif color_type == 'numerical':
-        df["Label"] = pd.to_numeric(df["Label"], errors='coerce')
-        plot = (
-            ggplot(df, aes(x=colnames[0], y=colnames[1], color='Label')) +
-            geom_point() +
-            scale_color_gradient(low="blue", high="red") +
-            labs(title=plot_title, x=xlab, y=ylab, color="Label") +
-            theme_minimal()
+        # numerical coloring ignores the categorical palette
+        df_num = df.copy()
+        df_num["Label"] = pd.to_numeric(lbls, errors='coerce')
+        p = (
+            ggplot(df_num, aes(x=xcol, y=ycol, color='Label'))
+            + geom_point()
+            + scale_color_gradient(low="blue", high="red")
+            + labs(title=plot_title, x=xlab, y=ylab, color="Label")
+            + theme_minimal()
         )
     else:
         raise ValueError("Invalid color_type. Choose 'categorical' or 'numerical'.")
 
-    return plot
+    return p
 
 
+def plot_kaplan_meier_curves(durations, events, categorical_variable):
+    """
+    Kaplan–Meier curves with alphabetical label ordering + shared palette.
+    """
+    data = pd.DataFrame({
+        'Duration': _labels_to_1d(durations),
+        'Event': _labels_to_1d(events),
+        'Group': pd.Series(_labels_to_1d(categorical_variable), dtype="object").astype(str)
+    })
+
+    # shared palette + fixed legend order
+    color_mapping = get_color_mapping(data["Group"])
+    order = list(color_mapping.keys())  # alphabetical order
+
+    # compute KM per group
+    kmf = KaplanMeierFitter()
+    survival_curves = []
+    for g in order:  # iterate in the same alphabetical order
+        gd = data[data['Group'] == g]
+        if len(gd) == 0:
+            continue
+        kmf.fit(gd['Duration'], gd['Event'], label=g)
+        surv_df = kmf.survival_function_.reset_index()
+        surv_df.columns = ['Time', 'Survival']
+        surv_df['Group'] = g
+        survival_curves.append(surv_df)
+
+    plot_data = pd.concat(survival_curves, ignore_index=True)
+    plot_data["Group"] = pd.Categorical(plot_data["Group"], categories=order, ordered=True)
+
+    # log-rank text
+    categories = pd.unique(data['Group'])
+    if len(categories) == 2:
+        g1, g2 = categories[0], categories[1]
+        grp1 = data[data['Group'] == g1]
+        grp2 = data[data['Group'] == g2]
+        result = logrank_test(grp1['Duration'], grp2['Duration'],
+                              event_observed_A=grp1['Event'],
+                              event_observed_B=grp2['Event'])
+        p_text = f"Log-rank p = {result.p_value:.2e}"
+    elif len(categories) > 2:
+        result = multivariate_logrank_test(data['Duration'], data['Group'], data['Event'])
+        p_text = f"Multivariate log-rank p = {result.p_value:.2e}"
+    else:
+        p_text = "Only one group — log-rank test not applicable"
+
+    p = (
+        ggplot(plot_data, aes(x='Time', y='Survival', color='Group'))
+        + geom_step()
+        + labs(x='Time', y='Survival Probability', color='Group')
+        + ggtitle('Kaplan-Meier Survival Curves by Group')
+        + annotate("text", x=0.1, y=0.1, label=p_text, size=10, ha='left')
+        + theme_minimal()
+        + theme(legend_title=element_text(size=10, weight='bold'))
+        + scale_color_manual(values=color_mapping)
+    )
+    return p
 
 def plot_scatter(true_values, predicted_values):
     """
@@ -914,63 +991,8 @@ def print_summary_stats(dataset):
             mean_val = np.nanmean(tensor)
             print(f"Numerical Variable Summary: Median = {median_val}, Mean = {mean_val}")
         print("------")
-        
 
-def plot_kaplan_meier_curves(durations, events, categorical_variable):
-    """
-    Plots Kaplan-Meier survival curves using plotnine and annotates log-rank test p-values.
-    """
-    # Prepare DataFrame
-    data = pd.DataFrame({
-        'Duration': durations,
-        'Event': events,
-        'Group': categorical_variable
-    })
 
-    kmf = KaplanMeierFitter()
-    survival_curves = []
-
-    # Fit Kaplan-Meier for each group and collect survival data
-    for group in data['Group'].unique():
-        group_data = data[data['Group'] == group]
-        kmf.fit(group_data['Duration'], group_data['Event'], label=str(group))
-        surv_df = kmf.survival_function_.reset_index()
-        surv_df.columns = ['Time', 'Survival']
-        surv_df['Group'] = str(group)
-        survival_curves.append(surv_df)
-
-    # Combine all curves
-    plot_data = pd.concat(survival_curves)
-
-    # Compute log-rank p-value
-    categories = data['Group'].unique()
-    p_text = ""
-    if len(categories) == 2:
-        group1 = data[data['Group'] == categories[0]]
-        group2 = data[data['Group'] == categories[1]]
-        result = logrank_test(group1['Duration'], group2['Duration'],
-                              event_observed_A=group1['Event'],
-                              event_observed_B=group2['Event'])
-        p_text = f"Log-rank p = {result.p_value:.2e}"
-    elif len(categories) > 2:
-        result = multivariate_logrank_test(data['Duration'], data['Group'], data['Event'])
-        p_text = f"Multivariate log-rank p = {result.p_value:.2e}"
-    else:
-        p_text = "Only one group — log-rank test not applicable"
-
-    # Create plot
-    p = (
-        ggplot(plot_data, aes(x='Time', y='Survival', color='Group'))
-        + geom_step()
-        + labs(x='Time', y='Survival Probability', color='Group')
-        + ggtitle('Kaplan-Meier Survival Curves by Group')
-        + annotate("text", x=0.1, y=0.1, label=p_text, size=10, ha='left')
-        + theme_minimal()
-        + theme(legend_title=element_text(size=10, weight='bold'))
-        + scale_color_brewer(type='qual', palette='Set1')
-    )
-
-    return p
     
 def find_optimal_cutoff(expression, time, event, min_percent=0.1, max_percent=0.9, step=0.01):
     """
