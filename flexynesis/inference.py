@@ -1,3 +1,9 @@
+"""Minimal inference utilities for Flexynesis.
+
+Loads artifacts and a pretrained model, enforces exact feature equality/order,
+writes predictions.csv, and updates an inference receipt.
+No logic changes.
+"""
 # flexynesis/inference.py
 # NOTE: Drop-in file. Adds minimal inference on top of the existing receipt stub.
 from __future__ import annotations
@@ -37,6 +43,7 @@ class InferenceArtifacts:
     join_key : str
         Column in clin.csv used to join tables.
     """
+
     schema_version: int = 1
     data_types: List[str] = field(default_factory=list)
     target_variables: List[str] = field(default_factory=list)
