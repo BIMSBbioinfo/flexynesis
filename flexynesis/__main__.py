@@ -8,6 +8,7 @@ import warnings
 import json
 import tracemalloc
 import psutil
+from . import __version__
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
@@ -325,16 +326,7 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
-    # NEW: inference flags
-    parser.add_argument("--pretrained_model", type=str, default=None,
-                        help="Path to a saved model (.pth) to use for inference")
-    parser.add_argument("--artifacts", type=str, default=None,
-                        help="Path to artifacts .joblib saved during training")
-    parser.add_argument("--data_path_test", type=str, default=None,
-                        help="Folder with test-only dataset for inference")
-    parser.add_argument("--join_key", type=str, default="JoinKey",
-                        help="Column name in 'clin.csv' (test metadata) used to join sample IDs")
-
+    parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {__version__}")
     # Existing core flags  (made not-required here; enforced conditionally below)
     parser.add_argument("--data_path", type=str, required=False,
                         help="Path to the folder with train/test data files")
@@ -417,6 +409,15 @@ def main():
     # safetensors args
     parser.add_argument("--safetensors", action="store_true",
                         help="If set, the model will be saved in the SafeTensors format. Default is False.")
+    # NEW: inference flags
+    parser.add_argument("--pretrained_model", type=str, default=None,
+                        help="Path to a saved model (.pth) to use for inference")
+    parser.add_argument("--artifacts", type=str, default=None,
+                        help="Path to artifacts .joblib saved during training")
+    parser.add_argument("--data_path_test", type=str, default=None,
+                        help="Folder with test-only dataset for inference")
+    parser.add_argument("--join_key", type=str, default="JoinKey",
+                        help="Column name in 'clin.csv' (test metadata) used to join sample IDs")
 
     args = parser.parse_args()
 

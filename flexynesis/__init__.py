@@ -3,7 +3,17 @@
 
 # Import core modules without heavy dependencies
 from .config import search_spaces
+from importlib.metadata import PackageNotFoundError, version
 
+# Use the distribution name as published on PyPI (may differ from import name in some projects)
+_DISTRIBUTION_NAME = "flexynesis"
+
+try:
+    __version__ = version(_DISTRIBUTION_NAME)
+except PackageNotFoundError:
+    # Happens in some dev scenarios before the package is installed
+    __version__ = "0+unknown"
+    
 class LazyModule:
     """Lazy module that only imports when accessed."""
     
