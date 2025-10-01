@@ -636,28 +636,6 @@ def main():
     t1 = time.time()
     train_dataset, test_dataset = data_importer.import_data()
 
-    # --- Baselines alongside main model (kept per reviewer request) ---------------
-    if args.evaluate_baseline_performance:
-        if not args.target_variables:
-            warnings.warn("[WARN] --evaluate_baseline_performance set, but no --target_variables given; skipping baseline evaluation.")
-        else:
-            try:
-                var = args.target_variables.strip().split(",")[0]
-                print(f"[INFO] Running baseline evaluation on target '{var}' (RandomForest/SVM/XGBoost)")
-                metrics, predictions = evaluate_baseline_performance(
-                    train_dataset=train_dataset,
-                    test_dataset=test_dataset,
-                    variable_name=var,
-                    methods=["RandomForest", "SVM", "XGBoost"],
-                    n_folds=5,
-                    n_jobs=int(args.threads),
-                )
-                metrics.to_csv(os.path.join(args.outdir, f"{args.prefix}.baseline.stats.csv"), index=False)
-                predictions.to_csv(os.path.join(args.outdir, f"{args.prefix}.baseline.predicted_labels.csv"), index=False)
-                print("[INFO] Baseline evaluation finished and files saved.")
-            except Exception as e:
-                warnings.warn(f"[WARN] Baseline evaluation failed: {e}")
-
     data_import_time = time.time() - t1
     data_import_ram = process.memory_info().rss
 
