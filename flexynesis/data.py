@@ -122,6 +122,11 @@ class DataImporter:
         # record if the feature is dropped due to these metrics or due to high correlation to a 
         # higher ranking feature
         self.feature_logs = {} 
+        
+        # NEW: Storage for inference mode artifacts
+        self.train_features = {}      # Stores final feature names per modality after selection
+        self.label_encoders = {}      # Stores fitted label encoders for categorical variables
+        # Note: self.scalers already exists, so we'll use that! 
     
     def get_user_features(self):
         """
@@ -361,6 +366,8 @@ class DataImporter:
             X_filt, log_df = filter_by_laplacian(X = dat[layer].T, layer = layer, 
                                                       topN=counts[layer], correlation_threshold = self.correlation_threshold)
             dat_filtered[layer] = X_filt.T # transpose after laplacian filtering again
+            # NEW: Store selected features for inference mode
+            self.train_features[layer] = dat_filtered[layer].index.tolist()
             feature_logs[layer] = log_df
         # update main feature logs with events from this function
         self.feature_logs['select_features'] = feature_logs
@@ -423,6 +430,8 @@ class DataImporter:
             if series.name not in self.encoders:
                 self.encoders[series.name] = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
                 encoded_series = self.encoders[series.name].fit_transform(series.to_frame())
+                # NEW: Store encoder for inference mode
+                self.label_encoders[series.name] = self.encoders[series.name]
             else:
                 encoded_series = self.encoders[series.name].transform(series.to_frame())
             
@@ -501,6 +510,117 @@ class DataImporter:
         if not warnings and not errors:
             print("[INFO] Data structure is valid with no errors or warnings.")       
             
+
+
+"""
+DataImporterInference class for flexynesis inference mode.
+Add this to flexynesis/data.py
+"""
+
+import os
+import pandas as pd
+import numpy as np
+import joblib
+
+
+
+class DataImporterInference:
+    """
+    Data importer for inference mode.
+    Returns MultiOmicDataset object compatible with model.predict()
+    """
+    
+    def __init__(self, test_data_path, artifacts_path, verbose=True):
+        self.test_data_path = test_data_path
+        self.verbose = verbose
+        self.artifacts = joblib.load(artifacts_path)
+        
+        # Map artifact keys to expected names (compatibility layer)
+        self.feature_names = self.artifacts.get("feature_lists", self.artifacts.get("feature_names", {}))
+        self.scalers = self.artifacts.get("transforms", self.artifacts.get("scalers", {}))
+        self.label_encoders = self.artifacts.get("label_encoders", {})
+        self.modalities = self.artifacts.get("data_types", self.artifacts.get("modalities", []))
+        self.target_variables = self.artifacts.get("target_variables", [])
+        
+        if self.verbose:
+            print(f"[INFO] Loaded artifacts for modalities: {self.modalities}")
+    
+    def import_data(self):
+        """Returns MultiOmicDataset object"""
+        test_data = {}
+        samples = None
+        labels_df = None
+        
+        # Load clinical data
+        clin_path = os.path.join(self.test_data_path, 'clin.csv')
+        if os.path.exists(clin_path):
+            labels_df = pd.read_csv(clin_path, index_col=0)
+        
+        # Load each modality
+        for modality in self.modalities:
+            file_path = os.path.join(self.test_data_path, f'{modality}.csv')
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"[ERROR] Required file not found: {file_path}")
+            
+            df = pd.read_csv(file_path, index_col=0)
+            if df.columns[0].startswith('TCGA-'):
+                df = df.T
+            
+            # Filter features
+            expected_features = self.feature_names[modality]
+            missing = set(expected_features) - set(df.columns)
+            if missing:
+                raise ValueError(f"[ERROR] {modality}: Missing {len(missing)} features")
+            
+            df = df[expected_features]
+            
+            # Apply scaling
+            scaler = self.scalers[modality]
+            df_scaled = pd.DataFrame(scaler.transform(df.values), index=df.index, columns=df.columns)
+            
+            if samples is None:
+                samples = df_scaled.index.tolist()
+            
+            # Convert to torch tensor
+            test_data[modality] = torch.from_numpy(df_scaled.values).float()
+        
+        # Process labels
+        ann_dict = {}
+        variable_types = {}
+        label_mappings = {}
+        
+        if labels_df is not None:
+            common_samples = list(set(samples) & set(labels_df.index))
+            labels_df = labels_df.loc[common_samples]
+            samples = common_samples
+            
+            for col in labels_df.columns:
+                if col in self.label_encoders:
+                    encoder = self.label_encoders[col]
+                    valid_mask = ~labels_df[col].isna()
+                    encoded = np.full(len(labels_df), -1, dtype=np.int64)
+                    if valid_mask.sum() > 0:
+                        encoded[valid_mask] = encoder.transform(labels_df[col][valid_mask].values.reshape(-1, 1)).ravel()
+                    ann_dict[col] = torch.from_numpy(encoded)
+                    variable_types[col] = 'categorical'
+                    label_mappings[col] = {int(c): l for c, l in enumerate(encoder.categories_[0])}
+                else:
+                    ann_dict[col] = torch.from_numpy(labels_df[col].values).float()
+                    variable_types[col] = 'numerical'
+        
+        # Create features dict
+        features = {modality: self.feature_names[modality] for modality in self.modalities}
+        
+        # Return MultiOmicDataset object
+        return MultiOmicDataset(
+            dat=test_data,
+            ann=ann_dict,
+            variable_types=variable_types,
+            features=features,
+            samples=samples,
+            label_mappings=label_mappings
+        )
+
 
 class MultiOmicDataset(Dataset):
     """A PyTorch dataset for multiomic data.

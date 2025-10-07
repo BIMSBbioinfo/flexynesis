@@ -882,17 +882,10 @@ def main():
         from .inference import InferenceArtifacts
         import joblib  # noqa: F401  (ensures joblib is present if InferenceArtifacts uses it)
 
-        # Build feature list dictionary from the processed training dataset if available
+        # Build feature list dictionary from data_importer
         feature_lists = {}
-        if hasattr(train_dataset, "data"):
-            try:
-                for k, df in getattr(train_dataset, "data", {}).items():
-                    try:
-                        feature_lists[k] = list(df.columns)
-                    except Exception:
-                        feature_lists[k] = []
-            except Exception:
-                feature_lists = {dt: [] for dt in args.data_types.split(',')}
+        if hasattr(data_importer, "train_features"):
+            feature_lists = data_importer.train_features
         else:
             feature_lists = {dt: [] for dt in args.data_types.split(',')}
 
@@ -901,8 +894,8 @@ def main():
             data_types=args.data_types.split(','),
             target_variables=(args.target_variables.split(',') if args.target_variables else []),
             feature_lists=feature_lists,
-            transforms={},          # TODO: plug in real scalers/encoders when available
-            label_encoders={},      # TODO: plug in label encoders if used
+            transforms=data_importer.scalers if hasattr(data_importer, "scalers") else {},
+            label_encoders=data_importer.label_encoders if hasattr(data_importer, "label_encoders") else {},
             join_key=args.join_key, # default "JoinKey"
         )
         joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
