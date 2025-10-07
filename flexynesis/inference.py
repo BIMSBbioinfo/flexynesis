@@ -60,7 +60,31 @@ def run_inference(
     print("[INFO] Running predictions...")
     model.eval()
     with torch.no_grad():
-        predictions = model.predict(test_dataset)
+        import numpy as np
+        
+        # Get class predictions (argmax of probabilities)
+        raw_preds = model.predict(test_dataset)
+        
+        if isinstance(raw_preds, dict):
+            predictions = {}
+            for task, probs in raw_preds.items():
+                # Convert to numpy if tensor
+                if hasattr(probs, 'cpu'):
+                    probs = probs.cpu().numpy()
+                # For classification: get argmax (predicted class)
+                if len(probs.shape) > 1 and probs.shape[1] > 1:
+                    predictions[task] = np.argmax(probs, axis=1)
+                else:
+                    predictions[task] = probs
+        else:
+            # Convert to numpy if tensor
+            if hasattr(raw_preds, 'cpu'):
+                raw_preds = raw_preds.cpu().numpy()
+            # For classification: get argmax
+            if len(raw_preds.shape) > 1 and raw_preds.shape[1] > 1:
+                predictions = np.argmax(raw_preds, axis=1)
+            else:
+                predictions = raw_preds
     
     # Save predictions
     os.makedirs(outdir, exist_ok=True)
@@ -69,16 +93,24 @@ def run_inference(
     if isinstance(predictions, dict):
         for task, preds in predictions.items():
             task_file = os.path.join(outdir, f"{prefix}_{task}_predictions.csv")
+            preds_array = preds.cpu().numpy() if hasattr(preds, 'cpu') else preds
+            # Flatten if multi-dimensional
+            if len(preds_array.shape) > 1:
+                preds_array = preds_array.ravel()
             df = pd.DataFrame({
                 'sample': test_dataset.samples,
-                'prediction': preds.cpu().numpy() if hasattr(preds, 'cpu') else preds
+                'prediction': preds_array
             })
             df.to_csv(task_file, index=False)
             print(f"[INFO] Saved {task} predictions to {task_file}")
     else:
+        preds_array = predictions.cpu().numpy() if hasattr(predictions, 'cpu') else predictions
+        # Flatten if multi-dimensional
+        if len(preds_array.shape) > 1:
+            preds_array = preds_array.ravel()
         df = pd.DataFrame({
             'sample': test_dataset.samples,
-            'prediction': predictions.cpu().numpy() if hasattr(predictions, 'cpu') else predictions
+            'prediction': preds_array
         })
         df.to_csv(output_file, index=False)
         print(f"[INFO] Saved predictions to {output_file}")
