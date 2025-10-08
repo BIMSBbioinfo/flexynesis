@@ -604,6 +604,7 @@ class DataImporterInference:
                     ann_dict[col] = torch.from_numpy(encoded)
                     variable_types[col] = 'categorical'
                     label_mappings[col] = {int(c): l for c, l in enumerate(encoder.categories_[0])}
+                    label_mappings[col][-1] = 'Unknown'  # For missing values
                 else:
                     ann_dict[col] = torch.from_numpy(labels_df[col].values).float()
                     variable_types[col] = 'numerical'
