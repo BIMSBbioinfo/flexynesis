@@ -451,7 +451,6 @@ def main():
     # ---------- Inference mode: early exit path ----------
     if args.pretrained_model and args.artifacts and args.data_path_test:
         import torch
-        from .inference import run_inference
         from .utils import get_optimal_device, create_device_from_string
 
         # quick existence checks
