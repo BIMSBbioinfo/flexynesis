@@ -885,3 +885,20 @@ def main():
             json.dump(config, f, indent=2, default=str)
 
     # --- write inference artifacts joblib (auto-generated after training) ---
+    if train_dataset is not None:  # Only save artifacts in training mode
+        try:
+            import joblib
+            artifacts = {
+                'schema_version': 1,
+                'data_types': args.data_types.split(','),
+                'target_variables': args.target_variables.split(',') if args.target_variables else [],
+                'feature_lists': data_importer.train_features if hasattr(data_importer, 'train_features') else {},
+                'transforms': data_importer.scalers if hasattr(data_importer, 'scalers') else {},
+                'label_encoders': data_importer.label_encoders if hasattr(data_importer, 'label_encoders') else {},
+                'join_key': args.join_key,
+            }
+            joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
+            joblib.dump(artifacts, joblib_path)
+            print(f'[INFO] Wrote inference artifacts to {joblib_path}')
+        except Exception as e:
+            print(f'[WARN] Could not write inference artifacts: {e}')
