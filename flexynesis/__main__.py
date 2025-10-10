@@ -890,7 +890,7 @@ def main():
             import joblib
             artifacts = {
                 'schema_version': 1,
-                'data_types': args.data_types.split(','),
+                'data_types': list(data_importer.train_features.keys()),
                 'target_variables': args.target_variables.split(',') if args.target_variables else [],
                 'feature_lists': data_importer.train_features if hasattr(data_importer, 'train_features') else {},
                 'transforms': data_importer.scalers if hasattr(data_importer, 'scalers') else {},
