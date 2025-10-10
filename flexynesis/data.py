@@ -203,11 +203,11 @@ class DataImporter:
             training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in training_dataset.dat.keys()], dim = 1)}
             training_dataset.features = {'all': list(chain(*training_dataset.features.values()))}
         
+            testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in testing_dataset.dat.keys()], dim = 1)}
+            testing_dataset.features = {'all': list(chain(*testing_dataset.features.values()))}
         # Save final feature lists AFTER concatenation (for inference mode)
         self.train_features = training_dataset.features.copy()
 
-            testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in testing_dataset.dat.keys()], dim = 1)}
-            testing_dataset.features = {'all': list(chain(*testing_dataset.features.values()))}
         
         print("[INFO] Training Data Stats: ", training_dataset.get_dataset_stats())
         print("[INFO] Test Data Stats: ", testing_dataset.get_dataset_stats())
