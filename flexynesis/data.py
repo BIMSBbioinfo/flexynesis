@@ -558,8 +558,13 @@ class DataImporterInference:
         if os.path.exists(clin_path):
             labels_df = pd.read_csv(clin_path, index_col=0)
         
+        # Handle early fusion: if data_types=['all'], load original modalities
+        modalities_to_load = self.modalities
+        if self.modalities == ['all']:
+            modalities_to_load = self.artifacts.get('original_modalities', ['mut', 'cna'])
+        
         # Load each modality
-        for modality in self.modalities:
+        for modality in modalities_to_load:
             file_path = os.path.join(self.test_data_path, f'{modality}.csv')
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"[ERROR] Required file not found: {file_path}")
@@ -614,8 +619,8 @@ class DataImporterInference:
         # Create features dict
         features = {modality: self.feature_names[modality] for modality in self.modalities}
         
-        # Return MultiOmicDataset object
-        return MultiOmicDataset(
+        # Create MultiOmicDataset object
+        dataset = MultiOmicDataset(
             dat=test_data,
             ann=ann_dict,
             variable_types=variable_types,
@@ -623,6 +628,14 @@ class DataImporterInference:
             samples=samples,
             label_mappings=label_mappings
         )
+        
+        # Concatenate for early fusion if needed
+        if self.modalities == ['all']:
+            from itertools import chain
+            dataset.dat = {'all': torch.cat([dataset.dat[x] for x in dataset.dat.keys()], dim=1)}
+            dataset.features = {'all': list(chain(*dataset.features.values()))}
+        
+        return dataset
 
 
 class MultiOmicDataset(Dataset):
