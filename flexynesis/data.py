@@ -544,6 +544,17 @@ class DataImporterInference:
         self.modalities = self.artifacts.get("data_types", self.artifacts.get("modalities", []))
         self.target_variables = self.artifacts.get("target_variables", [])
         
+        # For early fusion, we need feature lists for original modalities
+        # but artifacts only have 'all'. We need to reconstruct from transforms.
+        if self.modalities == ['all']:
+            original_modalities = self.artifacts.get('original_modalities', [])
+            # Feature lists for original modalities can be inferred from transforms
+            # since transforms are keyed by original modality names
+            if original_modalities:
+                # We'll populate feature_names per modality when we load the data
+                # For now, just note that we need to handle this
+                self.original_modalities = original_modalities
+        
         if self.verbose:
             print(f"[INFO] Loaded artifacts for modalities: {self.modalities}")
     
@@ -574,7 +585,12 @@ class DataImporterInference:
                 df = df.T
             
             # Filter features
-            expected_features = self.feature_names[modality]
+            # For early fusion, all features are in 'all' key
+            if self.modalities == ['all']:
+                # Use all features from this modality (will filter after concatenation)
+                expected_features = list(df.columns)
+            else:
+                expected_features = self.feature_names[modality]
             missing = set(expected_features) - set(df.columns)
             if missing:
                 raise ValueError(f"[ERROR] {modality}: Missing {len(missing)} features")
@@ -632,8 +648,16 @@ class DataImporterInference:
         # Concatenate for early fusion if needed
         if self.modalities == ['all']:
             from itertools import chain
+            # Concatenate all modalities
             dataset.dat = {'all': torch.cat([dataset.dat[x] for x in dataset.dat.keys()], dim=1)}
-            dataset.features = {'all': list(chain(*dataset.features.values()))}
+            all_features = list(chain(*dataset.features.values()))
+            dataset.features = {'all': all_features}
+            
+            # Filter to expected features from artifacts
+            expected_all_features = self.feature_names['all']
+            feature_indices = [i for i, f in enumerate(all_features) if f in expected_all_features]
+            dataset.dat['all'] = dataset.dat['all'][:, feature_indices]
+            dataset.features['all'] = [all_features[i] for i in feature_indices]
         
         return dataset
 
