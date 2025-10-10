@@ -202,6 +202,9 @@ class DataImporter:
         if self.concatenate:
             training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in training_dataset.dat.keys()], dim = 1)}
             training_dataset.features = {'all': list(chain(*training_dataset.features.values()))}
+        
+        # Save final feature lists AFTER concatenation (for inference mode)
+        self.train_features = training_dataset.features.copy()
 
             testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in testing_dataset.dat.keys()], dim = 1)}
             testing_dataset.features = {'all': list(chain(*testing_dataset.features.values()))}
@@ -366,8 +369,7 @@ class DataImporter:
             X_filt, log_df = filter_by_laplacian(X = dat[layer].T, layer = layer, 
                                                       topN=counts[layer], correlation_threshold = self.correlation_threshold)
             dat_filtered[layer] = X_filt.T # transpose after laplacian filtering again
-            # NEW: Store selected features for inference mode
-            self.train_features[layer] = dat_filtered[layer].index.tolist()
+            # Features will be stored after concatenation
             feature_logs[layer] = log_df
         # update main feature logs with events from this function
         self.feature_logs['select_features'] = feature_logs
