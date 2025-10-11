@@ -585,10 +585,10 @@ class DataImporterInference:
                 df = df.T
             
             # Filter features
-            # For early fusion, all features are in 'all' key
+            # For early fusion, get features from the scaler
             if self.modalities == ['all']:
-                # Use all features from this modality (will filter after concatenation)
-                expected_features = list(df.columns)
+                # Get expected features from scaler for this modality
+                expected_features = list(self.scalers[modality].feature_names_in_)
             else:
                 expected_features = self.feature_names[modality]
             missing = set(expected_features) - set(df.columns)
