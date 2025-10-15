@@ -572,7 +572,9 @@ class DataImporterInference:
         # Handle early fusion: if data_types=['all'], load original modalities
         modalities_to_load = self.modalities
         if self.modalities == ['all']:
-            modalities_to_load = self.artifacts.get('original_modalities', ['mut', 'cna'])
+            modalities_to_load = self.artifacts.get('original_modalities', [])
+            if not modalities_to_load:
+                raise ValueError('[ERROR] Early fusion mode but original_modalities not found in artifacts')
         
         # Load each modality
         for modality in modalities_to_load:
@@ -660,6 +662,42 @@ class DataImporterInference:
             dataset.features['all'] = [all_features[i] for i in feature_indices]
         
         return dataset
+    
+    def convert_to_gnn_dataset(self, dataset, feature_ann_path):
+        '''Convert MultiOmicDataset to MultiOmicDatasetNW for GNN models'''
+        from .data import MultiOmicDatasetNW
+        import pandas as pd
+        
+        # Load feature annotations if provided
+        feature_ann = None
+        if feature_ann_path and os.path.exists(feature_ann_path):
+            feature_ann = pd.read_csv(feature_ann_path, index_col=0)
+        
+        return MultiOmicDatasetNW(dataset, feature_ann)
+    
+    def convert_to_gnn_dataset(self, dataset, feature_ann_path):
+        '''Convert MultiOmicDataset to MultiOmicDatasetNW for GNN models'''
+        from .data import MultiOmicDatasetNW
+        import pandas as pd
+        
+        # Load feature annotations if provided
+        feature_ann = None
+        if feature_ann_path and os.path.exists(feature_ann_path):
+            feature_ann = pd.read_csv(feature_ann_path, index_col=0)
+        
+        return MultiOmicDatasetNW(dataset, feature_ann)
+    
+    def convert_to_gnn_dataset(self, dataset, feature_ann_path):
+        '''Convert MultiOmicDataset to MultiOmicDatasetNW for GNN models'''
+        from .data import MultiOmicDatasetNW
+        import pandas as pd
+        
+        # Load feature annotations if provided
+        feature_ann = None
+        if feature_ann_path and os.path.exists(feature_ann_path):
+            feature_ann = pd.read_csv(feature_ann_path, index_col=0)
+        
+        return MultiOmicDatasetNW(dataset, feature_ann)
 
 
 class MultiOmicDataset(Dataset):

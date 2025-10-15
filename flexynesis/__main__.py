@@ -499,7 +499,23 @@ def main():
             verbose=True
         )
         test_dataset = importer.import_data()
+        
+        # Convert to GNN dataset if needed
+        if args.model_class == 'GNN':
+            feature_ann_path = os.path.join(args.data_path_test, 'features_annotation.csv')
+            test_dataset = importer.convert_to_gnn_dataset(test_dataset, feature_ann_path)
         train_dataset = None  # No training data in inference mode
+        
+        # Move dataset to same device as model
+        if hasattr(test_dataset, 'to_device'):
+            test_dataset.to_device(device)
+        else:
+            # Manually move tensors to device
+            for key in test_dataset.dat.keys():
+                test_dataset.dat[key] = test_dataset.dat[key].to(device)
+            for key in test_dataset.ann.keys():
+                if isinstance(test_dataset.ann[key], torch.Tensor):
+                    test_dataset.ann[key] = test_dataset.ann[key].to(device)
         print(f'[INFO] Test dataset loaded: {len(test_dataset.samples)} samples')
         # Continue to evaluation section (skip training)
 
