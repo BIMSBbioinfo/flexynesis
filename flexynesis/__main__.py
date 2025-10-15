@@ -487,6 +487,8 @@ def main():
             except TypeError:
                 model = torch.load(args.pretrained_model, map_location=device)
 
+        # Extract model class name for metrics
+        args.model_class = model.__class__.__name__
         if hasattr(model, "to"):
             model.to(device).eval()
 
