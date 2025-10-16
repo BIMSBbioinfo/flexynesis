@@ -594,10 +594,10 @@ class DataImporterInference:
                 raise ValueError(f"[ERROR] {modality}: Missing {len(missing)} features")
             
             df = df[expected_features]
-            print(f"[DEBUG] {modality}: df.shape={df.shape}, first 3 cols={list(df.columns[:3])}, first sample first 3 values={df.iloc[0].values[:3]}")
             
             # Apply scaling
             scaler = self.scalers[modality]
+            df_scaled = pd.DataFrame(scaler.transform(df.values), index=df.index, columns=df.columns)
             
             if samples is None:
                 samples = df_scaled.index.tolist()
