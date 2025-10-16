@@ -587,21 +587,17 @@ class DataImporterInference:
                 df = df.T
             
             # Filter features
-            # For early fusion, get features from the scaler
-            if self.modalities == ['all']:
-                # Get expected features from scaler for this modality
-                expected_features = list(self.scalers[modality].feature_names_in_)
-            else:
-                expected_features = self.feature_names[modality]
+            # ALWAYS use scaler's feature_names_in_ to ensure correct order
+            expected_features = list(self.scalers[modality].feature_names_in_)
             missing = set(expected_features) - set(df.columns)
             if missing:
                 raise ValueError(f"[ERROR] {modality}: Missing {len(missing)} features")
             
             df = df[expected_features]
+            print(f"[DEBUG] {modality}: df.shape={df.shape}, first 3 cols={list(df.columns[:3])}, first sample first 3 values={df.iloc[0].values[:3]}")
             
             # Apply scaling
             scaler = self.scalers[modality]
-            df_scaled = pd.DataFrame(scaler.transform(df.values), index=df.index, columns=df.columns)
             
             if samples is None:
                 samples = df_scaled.index.tolist()
@@ -617,6 +613,19 @@ class DataImporterInference:
         if labels_df is not None:
             common_samples = list(set(samples) & set(labels_df.index))
             labels_df = labels_df.loc[common_samples]
+            
+            # Reorder test_data to match labels_df order
+            for modality in test_data.keys():
+                # test_data currently has samples in original CSV order
+                # We need to reorder to match common_samples (labels_df) order
+                # Create mapping from old sample order to new order
+                old_samples = samples  # Original order from data CSV
+                df_reordered = pd.DataFrame(
+                    test_data[modality].numpy(),
+                    index=old_samples
+                ).loc[common_samples]
+                test_data[modality] = torch.from_numpy(df_reordered.values).float()
+            
             samples = common_samples
             
             for col in labels_df.columns:
