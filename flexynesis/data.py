@@ -644,7 +644,13 @@ class DataImporterInference:
                     variable_types[col] = 'numerical'
         
         # Create features dict
-        features = {modality: self.feature_names[modality] for modality in self.modalities}
+        # For early fusion, get features from scalers since feature_lists only has 'all'
+        if self.modalities == ['all']:
+            modalities_for_features = self.artifacts.get('original_modalities', [])
+            # Get features from scalers for each modality
+            features = {modality: list(self.scalers[modality].feature_names_in_) for modality in modalities_for_features}
+        else:
+            features = {modality: self.feature_names[modality] for modality in self.modalities}
         
         # Create MultiOmicDataset object
         dataset = MultiOmicDataset(
@@ -662,9 +668,11 @@ class DataImporterInference:
             # Concatenate all modalities in the SAME ORDER as training
             # Use original_modalities to ensure correct order
             modality_order = self.artifacts.get('original_modalities', list(dataset.dat.keys()))
+            # Store original features before overwriting
+            original_features = {x: dataset.features[x] for x in modality_order}
             dataset.dat = {'all': torch.cat([dataset.dat[x] for x in modality_order], dim=1)}
             # Chain features in the same order
-            all_features = list(chain(*[dataset.features[x] for x in modality_order]))
+            all_features = list(chain(*[original_features[x] for x in modality_order]))
             dataset.features = {'all': all_features}
             
             # Filter to expected features from artifacts
