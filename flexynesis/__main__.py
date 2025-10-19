@@ -472,9 +472,8 @@ def main():
             device_preference = args.device
         
         # Get optimal device for inference
-        device_str, device_type = get_optimal_device(device_preference)
-        device = create_device_from_string(device_str)
-        print(f"[INFO] Using device for inference: {device_str}")
+        device = torch.device("cpu")  # Force CPU in inference mode
+        print("[INFO] Inference mode: forcing device to CPU")
 
         # Robust load across PyTorch versions & checkpoint types
         try:
@@ -504,8 +503,19 @@ def main():
         
         # Convert to GNN dataset if needed
         if args.model_class == 'GNN':
-            feature_ann_path = os.path.join(args.data_path_test, 'features_annotation.csv')
-            test_dataset = importer.convert_to_gnn_dataset(test_dataset, feature_ann_path)
+            print("[INFO] Overlaying the dataset with network data from STRINGDB")
+            from .main import STRING
+            from .data import MultiOmicDatasetNW
+            # Get STRING organism from artifacts
+            string_organism = importer.artifacts.get('string_organism', 9606)  # default human
+            string_node_name = importer.artifacts.get('string_node_name', 'HGNC')
+            # Load STRING network
+            obj = STRING(
+                os.path.join(args.data_path_test, '_'.join(['processed', args.prefix])),
+                string_organism,
+                string_node_name
+            )
+            test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df)
         train_dataset = None  # No training data in inference mode
         
         # Move dataset to same device as model
@@ -824,13 +834,15 @@ def main():
     # for architectures with decoders; print decoded output layers
     if args.model_class == 'CrossModalPred':
         print("[INFO] Printing decoded output layers")
-        output_layers_train = model.decode(train_dataset)
+        # In inference mode, only decode test dataset
+        if train_dataset is not None:
+            output_layers_train = model.decode(train_dataset)
+            for layer in output_layers_train.keys():
+                output_layers_train[layer].to_csv(
+                    os.path.join(args.outdir, '.'.join([args.prefix, 'train_decoded', layer, 'csv'])),
+                    header=True
+                )
         output_layers_test = model.decode(test_dataset)
-        for layer in output_layers_train.keys():
-            output_layers_train[layer].to_csv(
-                os.path.join(args.outdir, '.'.join([args.prefix, 'train_decoded', layer, 'csv'])),
-                header=True
-            )
         for layer in output_layers_test.keys():
             output_layers_test[layer].to_csv(
                 os.path.join(args.outdir, '.'.join([args.prefix, 'test_decoded', layer, 'csv'])),
@@ -915,6 +927,8 @@ def main():
                 'transforms': data_importer.scalers if hasattr(data_importer, 'scalers') else {},
                 'label_encoders': data_importer.label_encoders if hasattr(data_importer, 'label_encoders') else {},
                 'join_key': args.join_key,
+                'string_organism': args.string_organism,
+                'string_node_name': args.string_node_name,
             }
             joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
             joblib.dump(artifacts, joblib_path)

@@ -659,9 +659,12 @@ class DataImporterInference:
         # Concatenate for early fusion if needed
         if self.modalities == ['all']:
             from itertools import chain
-            # Concatenate all modalities
-            dataset.dat = {'all': torch.cat([dataset.dat[x] for x in dataset.dat.keys()], dim=1)}
-            all_features = list(chain(*dataset.features.values()))
+            # Concatenate all modalities in the SAME ORDER as training
+            # Use original_modalities to ensure correct order
+            modality_order = self.artifacts.get('original_modalities', list(dataset.dat.keys()))
+            dataset.dat = {'all': torch.cat([dataset.dat[x] for x in modality_order], dim=1)}
+            # Chain features in the same order
+            all_features = list(chain(*[dataset.features[x] for x in modality_order]))
             dataset.features = {'all': all_features}
             
             # Filter to expected features from artifacts
@@ -672,42 +675,6 @@ class DataImporterInference:
         
         return dataset
     
-    def convert_to_gnn_dataset(self, dataset, feature_ann_path):
-        '''Convert MultiOmicDataset to MultiOmicDatasetNW for GNN models'''
-        from .data import MultiOmicDatasetNW
-        import pandas as pd
-        
-        # Load feature annotations if provided
-        feature_ann = None
-        if feature_ann_path and os.path.exists(feature_ann_path):
-            feature_ann = pd.read_csv(feature_ann_path, index_col=0)
-        
-        return MultiOmicDatasetNW(dataset, feature_ann)
-    
-    def convert_to_gnn_dataset(self, dataset, feature_ann_path):
-        '''Convert MultiOmicDataset to MultiOmicDatasetNW for GNN models'''
-        from .data import MultiOmicDatasetNW
-        import pandas as pd
-        
-        # Load feature annotations if provided
-        feature_ann = None
-        if feature_ann_path and os.path.exists(feature_ann_path):
-            feature_ann = pd.read_csv(feature_ann_path, index_col=0)
-        
-        return MultiOmicDatasetNW(dataset, feature_ann)
-    
-    def convert_to_gnn_dataset(self, dataset, feature_ann_path):
-        '''Convert MultiOmicDataset to MultiOmicDatasetNW for GNN models'''
-        from .data import MultiOmicDatasetNW
-        import pandas as pd
-        
-        # Load feature annotations if provided
-        feature_ann = None
-        if feature_ann_path and os.path.exists(feature_ann_path):
-            feature_ann = pd.read_csv(feature_ann_path, index_col=0)
-        
-        return MultiOmicDatasetNW(dataset, feature_ann)
-
 
 class MultiOmicDataset(Dataset):
     """A PyTorch dataset for multiomic data.
