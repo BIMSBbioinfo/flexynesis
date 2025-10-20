@@ -865,7 +865,9 @@ class MultiOmicDatasetNW(Dataset):
         num_data_types = len(self.multiomic_dataset.dat)
         all_features = torch.full((num_samples, num_nodes, num_data_types), float('nan'), dtype=torch.float)
 
-        for i, data_type in enumerate(self.multiomic_dataset.dat):
+        # CRITICAL: Use sorted keys to ensure consistent order across training/inference
+        data_types_ordered = sorted(self.multiomic_dataset.dat.keys())
+        for i, data_type in enumerate(data_types_ordered):
             data_matrix = self.multiomic_dataset.dat[data_type]
             feature_indices = {
                 gene: self.multiomic_dataset.features[data_type].get_loc(gene)
