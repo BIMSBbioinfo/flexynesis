@@ -583,7 +583,11 @@ class DataImporterInference:
                 raise FileNotFoundError(f"[ERROR] Required file not found: {file_path}")
             
             df = pd.read_csv(file_path, index_col=0)
-            # Assume data is in correct format: samples as rows, features as columns
+            # Auto-detect if transpose is needed: if first column looks like a sample ID, transpose
+            # Check if index (rows) looks like features and columns look like samples
+            if len(df.index) > len(df.columns):
+                # More rows than columns - likely features as rows, samples as columns
+                df = df.T
             
             # Filter features
             # ALWAYS use scaler's feature_names_in_ to ensure correct order
