@@ -516,18 +516,14 @@ def main():
                 string_node_name
             )
             test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df)
+            print(f"[DEBUG] GNN dataset created: {len(test_dataset.samples)} samples")
+            if hasattr(test_dataset, "multiomic_dataset"):
+                print(f"[DEBUG] Has multiomic_dataset wrapper")
         train_dataset = None  # No training data in inference mode
         
         # Move dataset to same device as model
         if hasattr(test_dataset, 'to_device'):
             test_dataset.to_device(device)
-        else:
-            # Manually move tensors to device
-            for key in test_dataset.dat.keys():
-                test_dataset.dat[key] = test_dataset.dat[key].to(device)
-            for key in test_dataset.ann.keys():
-                if isinstance(test_dataset.ann[key], torch.Tensor):
-                    test_dataset.ann[key] = test_dataset.ann[key].to(device)
         print(f'[INFO] Test dataset loaded: {len(test_dataset.samples)} samples')
         # Continue to evaluation section (skip training)
 

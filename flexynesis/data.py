@@ -583,8 +583,7 @@ class DataImporterInference:
                 raise FileNotFoundError(f"[ERROR] Required file not found: {file_path}")
             
             df = pd.read_csv(file_path, index_col=0)
-            if df.columns[0].startswith('TCGA-'):
-                df = df.T
+            # Assume data is in correct format: samples as rows, features as columns
             
             # Filter features
             # ALWAYS use scaler's feature_names_in_ to ensure correct order
