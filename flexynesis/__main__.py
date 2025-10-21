@@ -502,10 +502,10 @@ def main():
                 string_organism,
                 string_node_name
             )
-            test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df)
-            print(f"[DEBUG] GNN dataset created: {len(test_dataset.samples)} samples")
+            # Get modality order from artifacts for consistent feature stacking
+            modality_order = importer.artifacts.get("original_modalities", importer.artifacts.get("data_types"))
+            test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df, modality_order=modality_order)
             if hasattr(test_dataset, "multiomic_dataset"):
-                print(f"[DEBUG] Has multiomic_dataset wrapper")
         train_dataset = None  # No training data in inference mode
         
         # Move dataset to same device as model
@@ -700,9 +700,12 @@ def main():
             print("[INFO] Overlaying the dataset with network data from STRINGDB]")
             obj = STRING(os.path.join(args.data_path, '_'.join(['processed', args.prefix])),
                          args.string_organism, args.string_node_name)
-            train_dataset = MultiOmicDatasetNW(train_dataset, obj.graph_df)
+            # Use data_types order from args for consistent modality ordering
+            modality_order = args.data_types.split(',')
+            train_dataset = MultiOmicDatasetNW(train_dataset, obj.graph_df, modality_order=modality_order)
             train_dataset.print_stats()
-            test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df)
+            # Use same order for test dataset
+            test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df, modality_order=modality_order)
 
         # feature logs
         feature_logs = data_importer.feature_logs
@@ -892,7 +895,7 @@ def main():
             import joblib
             artifacts = {
                 'schema_version': 1,
-                'data_types': list(data_importer.train_features.keys()),
+                'data_types': args.data_types.split(','),  # Use CLI order
                 'original_modalities': args.data_types.split(','),  # Original modalities from CLI before concatenation
                 'target_variables': args.target_variables.split(',') if args.target_variables else [],
                 'feature_lists': data_importer.train_features if hasattr(data_importer, 'train_features') else {},
