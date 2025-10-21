@@ -827,9 +827,10 @@ class TripletMultiOmicDataset(Dataset):
 
     
 class MultiOmicDatasetNW(Dataset):
-    def __init__(self, multiomic_dataset, interaction_df):
+    def __init__(self, multiomic_dataset, interaction_df, modality_order=None):
         self.multiomic_dataset = multiomic_dataset
         self.interaction_df = interaction_df
+        self.modality_order = modality_order if modality_order else sorted(multiomic_dataset.dat.keys())
         
         # Compute union of features in the data matrices that also appear in the network
         self.common_features = self.find_union_features()

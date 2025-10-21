@@ -515,10 +515,10 @@ def main():
                 string_organism,
                 string_node_name
             )
-            test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df)
-            print(f"[DEBUG] GNN dataset created: {len(test_dataset.samples)} samples")
+            # Get modality order from artifacts for consistent feature stacking
+            modality_order = importer.artifacts.get("original_modalities", importer.artifacts.get("data_types"))
+            test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df, modality_order=modality_order)
             if hasattr(test_dataset, "multiomic_dataset"):
-                print(f"[DEBUG] Has multiomic_dataset wrapper")
         train_dataset = None  # No training data in inference mode
         
         # Move dataset to same device as model
@@ -707,9 +707,8 @@ def main():
                 sys.exit(0)
             else:
                 raise ValueError("Missing survival variables. Set --surv_event_var --surv_time_var")
-
-    # GNN overlay (temporary solution)
-    if args.model_class == 'GNN':
+    # GNN overlay (training mode only - inference mode already handled this)
+    if args.model_class == 'GNN' and train_dataset is not None:
         # Check if user provided a custom graph
         if args.user_graph is not None:
             print(f"[INFO] Using user-provided network from: {args.user_graph}")
@@ -723,11 +722,15 @@ def main():
                          args.string_organism, args.string_node_name)
             graph_df = obj.graph_df
         
+        # Use data_types order from args for consistent modality ordering
+        modality_order = args.data_types.split(',')
         # Overlay the graph onto datasets
-        train_dataset = MultiOmicDatasetNW(train_dataset, graph_df)
+        train_dataset = MultiOmicDatasetNW(train_dataset, graph_df, modality_order=modality_order)
         train_dataset.print_stats()
-        test_dataset = MultiOmicDatasetNW(test_dataset, graph_df)
+        test_dataset = MultiOmicDatasetNW(test_dataset, graph_df, modality_order=modality_order)
 
+    # Training only happens when train_dataset exists (not in inference mode)
+    if train_dataset is not None:
         # feature logs
         feature_logs = data_importer.feature_logs
         for key in feature_logs.keys():
@@ -916,7 +919,7 @@ def main():
             import joblib
             artifacts = {
                 'schema_version': 1,
-                'data_types': list(data_importer.train_features.keys()),
+                'data_types': args.data_types.split(','),  # Use CLI order
                 'original_modalities': args.data_types.split(','),  # Original modalities from CLI before concatenation
                 'target_variables': args.target_variables.split(',') if args.target_variables else [],
                 'feature_lists': data_importer.train_features if hasattr(data_importer, 'train_features') else {},
