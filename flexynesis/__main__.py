@@ -670,7 +670,7 @@ def main():
 
     # GNN overlay (temporary solution)
     if args.model_class == 'GNN':
-        print("[INFO] Overlaying the dataset with network data from STRINGDB]")
+        print("[INFO] Overlaying the dataset with network data from STRINGDB")
         obj = STRING(os.path.join(args.data_path, '_'.join(['processed', args.prefix])),
                      args.string_organism, args.string_node_name)
         train_dataset = MultiOmicDatasetNW(train_dataset, obj.graph_df)
