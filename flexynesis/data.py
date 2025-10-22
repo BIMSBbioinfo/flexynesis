@@ -9,6 +9,10 @@ import torch
 import os
 import shutil
 
+from pathlib import Path
+from filelock import FileLock
+from platformdirs import user_cache_dir
+
 from tqdm import tqdm
 
 
@@ -746,7 +750,32 @@ class MultiOmicDatasetNW(Dataset):
         print(f"Median number of edges per node (excluding singletons): {median_edges_per_node}")
         print(f"Max number of edges per node: {max_edges}")
         
+def get_flexynesis_cache_dir() -> Path:
+    """Resolve a writable cache directory for Flexynesis."""
+    env_cache = os.getenv("FLEXYNESIS_CACHE")
+    if env_cache:
+        p = Path(env_cache)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    try:
+        p = Path(user_cache_dir("flexynesis"))
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    except (PermissionError, OSError):
+        p = Path(tempfile.gettempdir()) / "flexynesis_cache"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+
 class STRING(PYGDataset):
+    """
+    Cached STRING-DB dataset loader.
+
+    - Central per-user cache under:
+        ${FLEXYNESIS_CACHE or ~/.cache/flexynesis}/STRING/v{version}/{organism}/
+    - Downloads once, processes once per (version, organism, node_name).
+    - Safe for concurrent jobs via a file lock.
+    """
     base_folder = "STRING"
     version = "12.0"
     files = ("links", "aliases")
@@ -754,16 +783,37 @@ class STRING(PYGDataset):
            "protein.{data}.v{version}/"
            "{organism}.protein.{data}.v{version}.txt.gz")
 
-    def __init__(self, root: str, organism: int = 9606, node_name: str = "gene_name") -> None:
+    def __init__(self, root: str | None = None, organism: int = 9606, node_name: str = "gene_name") -> None:
         self.organism = organism
         self.node_name = node_name
-        super().__init__(os.path.join(root, self.base_folder))
-        
-        if not os.path.exists(self.processed_paths[0]):
-            self.download()
-            self.process()
+
+        # ---------- resolve central cache ----------
+        cache_root = get_flexynesis_cache_dir() / self.base_folder / f"v{self.version}" / str(self.organism)
+
+        # layout
+        self._cache_root = cache_root
+        self._cache_raw_dir = cache_root / "raw"
+        self._cache_processed_dir = cache_root / "processed"
+        self._processed_basename = f"graph_{self.node_name}.csv"
+        self._cache_processed_path = self._cache_processed_dir / self._processed_basename
+
+        self._cache_raw_dir.mkdir(parents=True, exist_ok=True)
+        self._cache_processed_dir.mkdir(parents=True, exist_ok=True)
+
+        # avoid races
+        lock = FileLock(str(cache_root / ".lock"))
+        with lock:
+            if not self._cache_processed_path.exists():
+                self._ensure_raw_in_cache()
+                self._process_into_cache()
+
+        # Point PyG root to cache
+        super().__init__(str(self._cache_root))
+
+        # Load processed data
         self.graph_df = pd.read_csv(self.processed_paths[0], sep=",", header=0, index_col=0)
 
+    # -------------------- PyG stubs --------------------
     def len(self) -> int:
         return 0
 
@@ -776,22 +826,31 @@ class STRING(PYGDataset):
 
     @property
     def processed_file_names(self) -> str:
-        return "graph.csv"
+        return self._processed_basename
 
-    def download(self) -> None:
-        folder = os.path.join(self.root, str(self.organism))
+    # -------------------- internals --------------------
+    def _ensure_raw_in_cache(self) -> None:
+        """Download STRING raw data into cache if missing."""
         for d in self.files:
+            fname = f"{self.organism}.protein.{d}.v{self.version}.txt"
+            dest = self._cache_raw_dir / fname
+            if dest.exists():
+                continue
             url = self.url.format(organism=self.organism, data=d, version=self.version)
-            path = download_url(url, folder)
-            extract_gz(path, folder)
-            os.unlink(path)
-        shutil.rmtree(self.raw_dir)
-        os.rename(folder, self.raw_dir)
+            gz_path = download_url(url, str(self._cache_raw_dir))
+            extract_gz(gz_path, str(self._cache_raw_dir))
+            os.unlink(gz_path)
 
-    def process(self) -> None:
-        graph_df = read_stringdb_graph(self.node_name, self.raw_paths[0], self.raw_paths[1])
-        graph_df.dropna().to_csv(self.processed_paths[0])
-        self.graph_df = graph_df  # Storing the DataFrame in the instance
+    def _process_into_cache(self) -> None:
+        """Process raw STRING files into a single cached CSV."""
+        raw_paths = [str(self._cache_raw_dir / f) for f in self.raw_file_names]
+        graph_df = read_stringdb_graph(self.node_name, *raw_paths).dropna()
+        graph_df.to_csv(self._cache_processed_path)
+
+    @property
+    def cache_dir(self) -> Path:
+        """Path to the central STRING cache directory."""
+        return self._cache_root
 
 
 def read_user_graph(fpath, sep=" ", header=None, **pd_read_csv_kw):
