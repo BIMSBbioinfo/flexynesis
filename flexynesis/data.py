@@ -853,7 +853,7 @@ class MultiOmicDatasetNW(Dataset):
         # Find the union of proteins involved in interactions
         interaction_genes = set(self.interaction_df['protein1']).union(set(self.interaction_df['protein2']))
         # Return the intersection of omic features and interaction genes
-        return list(all_omic_features.intersection(interaction_genes))
+        return sorted(list(all_omic_features.intersection(interaction_genes)))
 
     def create_edge_index(self):
         # Create edges only if both proteins are within the available features

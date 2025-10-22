@@ -518,7 +518,6 @@ def main():
             # Get modality order from artifacts for consistent feature stacking
             modality_order = importer.artifacts.get("original_modalities", importer.artifacts.get("data_types"))
             test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df, modality_order=modality_order)
-            if hasattr(test_dataset, "multiomic_dataset"):
         train_dataset = None  # No training data in inference mode
         
         # Move dataset to same device as model
