@@ -200,11 +200,13 @@ class DataImporter:
 
         # for early fusion, concatenate all data matrices and feature lists
         if self.concatenate:
-            training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in training_dataset.dat.keys()], dim = 1)}
-            training_dataset.features = {'all': list(chain(*training_dataset.features.values()))}
+            # Use data_types order for consistent concatenation
+            modality_order = self.data_types
+            training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in modality_order], dim = 1)}
+            training_dataset.features = {'all': list(chain(*[training_dataset.features[x] for x in modality_order]))}
         
-            testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in testing_dataset.dat.keys()], dim = 1)}
-            testing_dataset.features = {'all': list(chain(*testing_dataset.features.values()))}
+            testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in modality_order], dim = 1)}
+            testing_dataset.features = {'all': list(chain(*[testing_dataset.features[x] for x in modality_order]))}
         # Save final feature lists AFTER concatenation (for inference mode)
         self.train_features = training_dataset.features.copy()
 
