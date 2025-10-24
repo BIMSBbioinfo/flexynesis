@@ -853,13 +853,183 @@ class STRING(PYGDataset):
         return self._cache_root
 
 
-def read_user_graph(fpath, sep=" ", header=None, **pd_read_csv_kw):
-    """Read edge list from a file prepared by user.
-
-    Returns
-        two cols pandas df.
+def read_user_graph(fpath, sep=None, header='infer', **pd_read_csv_kw):
+    """Read user-provided gene-gene interaction network file.
+    
+    This function reads a custom network file and validates that it contains
+    the required columns: GeneA, GeneB, and Score (or similar variations).
+    
+    Args:
+        fpath (str): Path to the network file.
+        sep (str, optional): Column separator. If None, will auto-detect from common separators.
+        header (str or int, optional): Row number to use as column names. Default is 'infer'.
+        **pd_read_csv_kw: Additional arguments to pass to pd.read_csv().
+    
+    Returns:
+        pd.DataFrame: DataFrame with exactly 3 columns: 'protein1', 'protein2', 'combined_score'
+                     (standardized column names to match STRING DB format).
+    
+    Raises:
+        ValueError: If the file doesn't have at least 3 columns or required columns are missing.
+        FileNotFoundError: If the file doesn't exist.
+    
+    Example:
+        >>> # File format: GeneA\tGeneB\tScore
+        >>> # TP53\tMDM2\t0.95
+        >>> # BRCA1\tBRCA2\t0.87
+        >>> df = read_user_graph('my_network.tsv')
     """
-    return pd.read_csv(fpath, sep=sep, header=header, **pd_read_csv_kw)
+    import os
+    
+    # Check if file exists
+    if not os.path.exists(fpath):
+        raise FileNotFoundError(f"User graph file not found: {fpath}")
+    
+    # Auto-detect separator if not provided
+    if sep is None:
+        # Use CSV Sniffer for robust separator detection
+        import csv
+        with open(fpath, 'r') as f:
+            # Read first few lines for better detection
+            sample = f.read(4096)
+        
+        try:
+            sniffer = csv.Sniffer()
+            dialect = sniffer.sniff(sample, delimiters='\t,| ')
+            sep = dialect.delimiter
+            print(f"[INFO] Auto-detected separator using CSV Sniffer: {repr(sep)}")
+        except csv.Error:
+            # Fallback to tab if Sniffer fails
+            sep = '\t'
+            print(f"[INFO] CSV Sniffer failed, using default separator: {repr(sep)}")
+    
+    # Read the file
+    df = pd.read_csv(fpath, sep=sep, header=header, **pd_read_csv_kw)
+    
+    # Validate: must have at least 3 columns
+    if df.shape[1] < 3:
+        raise ValueError(
+            f"User graph must have at least 3 columns (GeneA, GeneB, Score), "
+            f"but found only {df.shape[1]} columns."
+        )
+    
+    # Get column names (handle cases with or without header)
+    if header is None or (isinstance(header, int) and header < 0):
+        # No header - assign default names
+        print("[INFO] No header detected. Assuming first 3 columns are: GeneA, GeneB, Score")
+        df.columns = [f'col_{i}' for i in range(len(df.columns))]
+        col_gene_a = 'col_0'
+        col_gene_b = 'col_1'
+        col_score = 'col_2'
+    else:
+        # Header present - use hybrid scoring to intelligently identify columns
+        from difflib import SequenceMatcher
+        
+        # Define candidate keywords for each column type
+        candidates = {
+            'gene_a': ['genea', 'gene_a', 'gene1', 'protein1', 'node1', 'source', 'from'],
+            'gene_b': ['geneb', 'gene_b', 'gene2', 'protein2', 'node2', 'target', 'to'],
+            'score': ['score', 'weight', 'combined_score', 'correlation', 'confidence', 
+                     'value', 'strength', 'coef', 'coefficient', 'corr', 'pvalue', 'p_value']
+        }
+        
+        def score_column_match(col, col_idx, category, total_cols):
+            """
+            Score how well a column matches a category using multiple signals.
+            Returns a score between 0-100 (100 = perfect match).
+            """
+            total_score = 0
+            col_lower = str(col).lower()
+            
+            # Signal 1: Exact match in candidates (40 points)
+            if col_lower in candidates[category]:
+                total_score += 40
+            
+            # Signal 2: Substring match (25 points)
+            for candidate in candidates[category]:
+                if candidate in col_lower or col_lower in candidate:
+                    total_score += 25
+                    break
+            
+            # Signal 3: Fuzzy matching (up to 20 points)
+            best_fuzzy = max(
+                SequenceMatcher(None, col_lower, c).ratio() 
+                for c in candidates[category]
+            )
+            total_score += best_fuzzy * 20
+            
+            # Signal 4: Position hints (10 points)
+            # First column likely gene_a, second likely gene_b, third+ likely score
+            if category == 'gene_a' and col_idx == 0:
+                total_score += 10
+            elif category == 'gene_b' and col_idx == 1:
+                total_score += 10
+            elif category == 'score' and col_idx >= 2:
+                total_score += 10
+            
+            # Signal 5: Data type hint for score (5 points)
+            if category == 'score':
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    total_score += 5
+            
+            return total_score
+        
+        # Find best match for each category
+        total_cols = len(df.columns)
+        matches = {}
+        
+        for category in ['gene_a', 'gene_b', 'score']:
+            best_col = None
+            best_score = 0
+            
+            for idx, col in enumerate(df.columns):
+                col_score = score_column_match(col, idx, category, total_cols)
+                if col_score > best_score:
+                    best_score = col_score
+                    best_col = col
+            
+            matches[category] = (best_col, best_score)
+        
+        # Extract matched columns and scores
+        col_gene_a, score_a = matches['gene_a']
+        col_gene_b, score_b = matches['gene_b']
+        col_score, score_s = matches['score']
+        
+        # Check if confidence is too low
+        min_threshold = 30
+        if score_a < min_threshold or score_b < min_threshold or score_s < min_threshold:
+            print(f"[WARNING] Low confidence in column detection. Using first 3 columns as fallback.")
+            col_gene_a = df.columns[0]
+            col_gene_b = df.columns[1]
+            col_score = df.columns[2]
+        else:
+            print(f"[INFO] Detected columns - GeneA: '{col_gene_a}', GeneB: '{col_gene_b}', Score: '{col_score}'")
+    
+    # Extract only the required 3 columns and standardize names
+    result_df = df[[col_gene_a, col_gene_b, col_score]].copy()
+    result_df.columns = ['protein1', 'protein2', 'combined_score']
+    
+    # Validate data types
+    # Convert score to numeric if not already
+    if not pd.api.types.is_numeric_dtype(result_df['combined_score']):
+        try:
+            result_df['combined_score'] = pd.to_numeric(result_df['combined_score'])
+        except ValueError:
+            raise ValueError(
+                f"Score column must contain numeric values. "
+                f"Found non-numeric values in column '{col_score}'."
+            )
+    
+    # Remove any rows with missing values
+    original_len = len(result_df)
+    result_df = result_df.dropna()
+    if len(result_df) < original_len:
+        print(f"[WARNING] Removed {original_len - len(result_df)} rows with missing values")
+    
+    print(f"[INFO] Successfully loaded user graph: {len(result_df)} interactions")
+    print(f"[INFO] Score range: [{result_df['combined_score'].min():.4f}, {result_df['combined_score'].max():.4f}]")
+    
+    return result_df
 
 def read_stringdb_links(fname, top_neighbors = 5):
     """

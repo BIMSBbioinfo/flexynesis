@@ -55,7 +55,7 @@ def print_full_help():
           "[--input_layers INPUT_LAYERS] [--output_layers OUTPUT_LAYERS] [--outdir OUTDIR] [--prefix PREFIX] [--log_transform {True,False}] "
           "[--early_stop_patience EARLY_STOP_PATIENCE] [--hpo_patience HPO_PATIENCE] [--val_size VAL_SIZE] [--use_cv] [--use_loss_weighting {True,False}] "
           "[--evaluate_baseline_performance] [--threads THREADS] [--num_workers NUM_WORKERS] [--device {auto,cuda,mps,cpu}] [--use_gpu] [--feature_importance_method {IntegratedGradients,GradientShap,Both}] "
-          "[--disable_marker_finding] [--string_organism STRING_ORGANISM] [--string_node_name {gene_name,gene_id}] [--safetensors]")
+          "[--disable_marker_finding] [--string_organism STRING_ORGANISM] [--string_node_name {gene_name,gene_id}] [--user_graph USER_GRAPH] [--safetensors]")
     print()
     print("Flexynesis model training interface")
     print()
@@ -139,6 +139,10 @@ def print_full_help():
     print("                        STRING DB organism id. (default: 9606)")
     print("  --string_node_name {gene_name,gene_id}")
     print("                        Type of node name. (default: gene_name)")
+    print("  --user_graph USER_GRAPH")
+    print("                        Path to user-provided gene-gene interaction network file.")
+    print("                        Must have at least 3 columns: GeneA, GeneB, Score.")
+    print("                        If provided, this will be used instead of STRING DB.")
     print("  --safetensors         If set, the model will be saved in the SafeTensors format. Default is False.")
     print()
     print_test_installation()
@@ -271,6 +275,11 @@ def main():
 
       --string_node_name (str):
         Node name type: ["gene_name", "gene_id"]. Default: `gene_name`.
+
+      --user_graph (str):
+        Path to user-provided gene-gene interaction network file.
+        Must have at least 3 columns: GeneA, GeneB, Score.
+        If provided, this will be used instead of STRING DB. Default: `None`.
 
       --safetensors (bool):
         Save the model in SafeTensors format. Default: `False`.
@@ -406,6 +415,10 @@ def main():
                         help="STRING DB organism id.")
     parser.add_argument("--string_node_name", type=str, choices=["gene_name", "gene_id"], default="gene_name",
                         help="Type of node name.")
+    parser.add_argument("--user_graph", type=str, default=None,
+                        help="Path to user-provided gene-gene interaction network file. "
+                             "Must have at least 3 columns: GeneA, GeneB, Score. "
+                             "If provided, this will be used instead of STRING DB.")
     # safetensors args
     parser.add_argument("--safetensors", action="store_true",
                         help="If set, the model will be saved in the SafeTensors format. Default is False.")
@@ -670,12 +683,23 @@ def main():
 
     # GNN overlay (temporary solution)
     if args.model_class == 'GNN':
-        print("[INFO] Overlaying the dataset with network data from STRINGDB")
-        obj = STRING(os.path.join(args.data_path, '_'.join(['processed', args.prefix])),
-                     args.string_organism, args.string_node_name)
-        train_dataset = MultiOmicDatasetNW(train_dataset, obj.graph_df)
+        # Check if user provided a custom graph
+        if args.user_graph is not None:
+            print(f"[INFO] Using user-provided network from: {args.user_graph}")
+            from flexynesis.data import read_user_graph
+            graph_df = read_user_graph(args.user_graph)
+            print(f"[INFO] Loaded {len(graph_df)} interactions from user graph")
+        else:
+            # Fallback to STRING DB (default behavior)
+            print("[INFO] No user graph provided. Using STRING DB network (default)")
+            obj = STRING(os.path.join(args.data_path, '_'.join(['processed', args.prefix])),
+                         args.string_organism, args.string_node_name)
+            graph_df = obj.graph_df
+        
+        # Overlay the graph onto datasets
+        train_dataset = MultiOmicDatasetNW(train_dataset, graph_df)
         train_dataset.print_stats()
-        test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df)
+        test_dataset = MultiOmicDatasetNW(test_dataset, graph_df)
 
     # feature logs
     feature_logs = data_importer.feature_logs
