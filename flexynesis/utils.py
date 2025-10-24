@@ -21,6 +21,8 @@ from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 from sklearn.utils import resample
+from sksurv.metrics import cumulative_dynamic_auc
+from sksurv.util import Surv
 
 from scipy.stats import pearsonr, linregress
 
@@ -1088,66 +1090,98 @@ def plot_hazard_ratios(cox_model):
     )
     return p    
 
-def build_cox_model(df, duration_col, event_col, crossval=False, n_splits=5, random_state=42):
+def build_cox_model(
+    df: pd.DataFrame,
+    duration_col: str,
+    event_col: str,
+    n_splits: int = 5,
+    random_state: int = 42,
+    eval_time: float | None = None,     # single horizon, same units as duration_col
+    low_variance_threshold: float = 0.01,
+    return_metrics: bool = True,
+):
     """
-    Fits a Cox Proportional Hazards model to the data with optional cross-validation.
+    Fit a Cox PH model. Compute K-fold CV C-index and (optionally) time-dependent AUC at ONE horizon.
 
-    Parameters:
-    - df: Pandas DataFrame containing features, survival times, and event indicators.
-    - duration_col: Column name for survival times.
-    - event_col: Column name for event indicator (1 = event occurred, 0 = censored).
-    - crossval: If True, performs K-fold cross-validation and returns average C-index.
-    - n_splits: Number of folds for cross-validation.
-    - random_state: Random seed for reproducibility.
-
-    Returns:
-    - cox_model: Fitted CoxPH model on the full data.
-    - mean_c_index (optional): Mean C-index from cross-validation if crossval=True.
+    Returns
+    -------
+    final_model : lifelines.CoxPHFitter  (fit on all data)
+    metrics : dict (if return_metrics=True)
+        {
+          "cv_cindex_mean": float or None,
+          "cv_auc_mean": float or None,   # mean over folds that could evaluate
+        }
     """
 
-    def remove_low_variance_survival_features(df, duration_col, event_col, threshold=0.01):
+    def remove_low_variance_survival_features(df, duration_col, event_col, threshold):
         events = df[event_col].astype(bool)
-        low_variance_features = []
-
+        low_var = []
         for feature in df.drop(columns=[duration_col, event_col]).columns:
-            variance_when_event = df.loc[events, feature].var()
-            variance_when_no_event = df.loc[~events, feature].var()
-            if variance_when_event < threshold or variance_when_no_event < threshold:
-                low_variance_features.append(feature)
+            v1 = df.loc[events, feature].var()
+            v0 = df.loc[~events, feature].var()
+            if (v1 is not None and v1 < threshold) or (v0 is not None and v0 < threshold):
+                low_var.append(feature)
+        df_f = df.drop(columns=low_var, errors="ignore")
+        if low_var:
+            print("Removed low variance features:", low_var)
+        return df_f
 
-        df_filtered = df.drop(columns=low_variance_features)
-        if low_variance_features:
-            print("Removed low variance features:", low_variance_features)
-        return df_filtered
+    df = remove_low_variance_survival_features(df, duration_col, event_col, low_variance_threshold)
+    metrics = {
+        "cv_cindex_mean": None,
+        "cv_auc_mean": None,
+    }
 
-    df = remove_low_variance_survival_features(df, duration_col, event_col)
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+    c_indices = []
+    auc_per_fold = []
 
-    if crossval:
-        kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
-        c_indices = []
+    for train_idx, test_idx in kf.split(df):
+        train_df = df.iloc[train_idx]
+        test_df  = df.iloc[test_idx]
 
-        for train_idx, test_idx in kf.split(df):
-            train_df = df.iloc[train_idx]
-            test_df = df.iloc[test_idx]
+        model = CoxPHFitter(penalizer=0.1)
+        model.fit(train_df, duration_col=duration_col, event_col=event_col)
 
-            model = CoxPHFitter()
-            model.fit(train_df, duration_col=duration_col, event_col=event_col)
+        # C-index on the test fold
+        risk_scores = model.predict_partial_hazard(test_df).values.ravel()
+        ci = concordance_index(
+            test_df[duration_col].values,
+            -risk_scores,  # higher hazard => higher risk
+            test_df[event_col].astype(int).values
+        )
+        c_indices.append(ci)
 
-            # Compute risk scores on test set and C-index
-            risk_scores = model.predict_partial_hazard(test_df)
-            ci = concordance_index(test_df[duration_col], -risk_scores, test_df[event_col])
-            c_indices.append(ci)
+        # Time-dependent AUC at a single horizon (if provided)
+        if eval_time is not None:
+            y_train = Surv.from_arrays(
+                event=train_df[event_col].astype(bool).values,
+                time=train_df[duration_col].values
+            )
+            y_test = Surv.from_arrays(
+                event=test_df[event_col].astype(bool).values,
+                time=test_df[duration_col].values
+            )
 
-        mean_c_index = np.mean(c_indices)
-        print(f"Cross-validated C-index (mean over {n_splits} folds): {mean_c_index:.3f}")
-    else:
-        mean_c_index = None
+            # Only evaluate if the horizon lies strictly inside this test fold's follow-up
+            test_min = float(np.min(test_df[duration_col].values))
+            test_max = float(np.max(test_df[duration_col].values))
+            eps = 1e-8
+            if (test_min + eps) < float(eval_time) < (test_max - eps):
+                _, auc_val = cumulative_dynamic_auc(
+                    y_train, y_test, risk_scores, np.asarray([float(eval_time)])
+                )
+                auc_val = float(np.atleast_1d(auc_val)[0])
+                auc_per_fold.append(auc_val)
+    # Aggregate CV metrics
+    metrics["cv_cindex_mean"] = float(np.mean(c_indices)) if c_indices else None
+    metrics["cv_auc_mean"] = float(np.mean(auc_per_fold)) if auc_per_fold else None
 
-    # Fit on full data
-    final_model = CoxPHFitter()
+    # Fit final model on full data for downstream use (forest plots, HRs, etc.)
+    final_model = CoxPHFitter(penalizer=0.1)
     final_model.fit(df, duration_col=duration_col, event_col=event_col)
 
-    return final_model
+    return final_model, metrics
 
 
 def k_means_clustering(data, k):
