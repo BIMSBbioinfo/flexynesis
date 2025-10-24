@@ -1871,34 +1871,3 @@ def create_device_from_string(device_str):
             return torch.device('cpu')
     else:
         return torch.device('cpu')
-
-
-class mps_safe_context:
-    """
-    Context manager to ensure MPS compatibility by temporarily setting
-    default tensor dtype to float32 when using MPS device.
-    
-    This fixes issues with external libraries like captum that might create
-    float64 tensors internally, which MPS doesn't support.
-    """
-    def __init__(self, device):
-        self.device = device
-        self.original_dtype = None
-        self.should_change_dtype = False
-        
-    def __enter__(self):
-        if hasattr(self.device, 'type'):
-            device_type = self.device.type
-        else:
-            device_type = str(self.device)
-            
-        if device_type == 'mps':
-            self.original_dtype = torch.get_default_dtype()
-            if self.original_dtype != torch.float32:
-                torch.set_default_dtype(torch.float32)
-                self.should_change_dtype = True
-        return self
-        
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.should_change_dtype and self.original_dtype is not None:
-            torch.set_default_dtype(self.original_dtype)
