@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 from captum.attr import IntegratedGradients, GradientShap
 
-from ..utils import to_device_safe, mps_safe_context
+from ..utils import to_device_safe
 from ..modules import MLP, cox_ph_loss, flexGCN
 
 
@@ -396,10 +396,18 @@ class GNN(pl.LightningModule):
         """
         def bytes_to_gb(bytes):
             return bytes / 1024 ** 2
-        from ..utils import create_device_from_string
+        from ..utils import create_device_from_string, to_device_safe
         device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
+        
+        # For MPS devices, we MUST force CPU for feature importance due to Captum's float64 usage
+        # This is the safest approach until Captum fully supports MPS
+        if device.type == 'mps':
+            print("[WARNING] MPS device detected. Computing feature importance on CPU due to Captum library limitations.")
+            print("[INFO] This is a known limitation: Captum uses float64 internally, which MPS doesn't support.")
+            device = torch.device('cpu')
+            
         self.to(device)
-        self.dataset_edge_index = dataset.edge_index.to(device)
+        self.dataset_edge_index = to_device_safe(dataset.edge_index, device)
 
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         
@@ -416,13 +424,22 @@ class GNN(pl.LightningModule):
         else:
             num_class = len(np.unique(dataset.ann[target_var]))
         
-        print("Memory before batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
+        # Report memory usage based on device type
+        if device.type == 'cuda':
+            print("Memory before batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
+        # MPS and CPU don't have detailed memory tracking like CUDA
 
         aggregated_attributions = [[] for _ in range(num_class)]
         for batch in dataloader:
             x, y_dict, samples = batch
             
-            input_data = x.unsqueeze(0).requires_grad_().to(device)
+            # Ensure input data is on the correct device
+            x = to_device_safe(x, device)
+            input_data = x.unsqueeze(0).requires_grad_()
+            baseline = torch.zeros_like(input_data)
+            # Ensure input data is float32 for MPS compatibility
+            x = to_device_safe(x, device)
+            input_data = x.unsqueeze(0).requires_grad_()
             baseline = torch.zeros_like(input_data)
             
             if method == 'IntegratedGradients':
@@ -433,30 +450,26 @@ class GNN(pl.LightningModule):
             if num_class == 1:
                 # returns a tuple of tensors (one per data modality)
                 if method == 'IntegratedGradients':
-                    with mps_safe_context(device):
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                     additional_forward_args=(target_var, steps_or_samples), 
-                                                     n_steps=steps_or_samples)
+                    attributions = explainer.attribute(input_data, baseline, 
+                                                 additional_forward_args=(target_var, steps_or_samples), 
+                                                 n_steps=steps_or_samples)
                 elif method == 'GradientShap':
-                    with mps_safe_context(device):
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                     additional_forward_args=(target_var, steps_or_samples), 
-                                                     n_samples=steps_or_samples)
+                    attributions = explainer.attribute(input_data, baseline, 
+                                                 additional_forward_args=(target_var, steps_or_samples), 
+                                                 n_samples=steps_or_samples)
                 aggregated_attributions[0].append(attributions)
             else:
                 for target_class in range(num_class):
                     if method == 'IntegratedGradients':
-                        with mps_safe_context(device):
-                            attributions = explainer.attribute(input_data, baseline, 
-                                                               additional_forward_args=(target_var, steps_or_samples), 
-                                                               target=target_class,
-                                                               n_steps=steps_or_samples)
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                           additional_forward_args=(target_var, steps_or_samples), 
+                                                           target=target_class,
+                                                           n_steps=steps_or_samples)
                     elif method == 'GradientShap':
-                        with mps_safe_context(device):
-                            attributions = explainer.attribute(input_data, baseline, 
-                                                               additional_forward_args=(target_var, steps_or_samples), 
-                                                               target=target_class,
-                                                               n_samples=steps_or_samples)
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                           additional_forward_args=(target_var, steps_or_samples), 
+                                                           target=target_class,
+                                                           n_samples=steps_or_samples)
                     aggregated_attributions[target_class].append(attributions)
         # For each target class concatenate node attributions accross batches 
         processed_attributions = [] 
@@ -474,8 +487,11 @@ class GNN(pl.LightningModule):
 
         # move the model also back to cpu (if not already on cpu)
         self.to('cpu')
-        print("Memory after batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
-
+        
+        # Report memory usage based on device type
+        if device.type == 'cuda':
+            print("Memory after batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
+        # MPS and CPU don't have detailed memory tracking like CUDA
 
         df_list = []
         layers = list(getattr(dataset, 'multiomic_dataset', dataset).dat.keys())
