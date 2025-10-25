@@ -502,11 +502,9 @@ class CrossModalPred(pl.LightningModule):
         from ..utils import create_device_from_string, to_device_safe
         device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
         
-        # For MPS devices, we MUST force CPU for feature importance due to Captum's float64 usage
-        # This is the safest approach until Captum fully supports MPS
+        # Force CPU for Captum feature importance, as MPS lacks the required float64 support.
         if device.type == 'mps':
-            print("[WARNING] MPS device detected. Computing feature importance on CPU due to Captum library limitations.")
-            print("[INFO] This is a known limitation: Captum uses float64 internally, which MPS doesn't support.")
+            print("[WARNING] MPS device detected. Computing feature importance on CPU due to MPS float64 incompatibility.")
             device = torch.device('cpu')
             
         self.to(device)
