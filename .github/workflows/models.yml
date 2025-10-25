@@ -38,9 +38,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install my package from source
-        shell: bash -l {0}
-        run: |
-          pip install -e .
+        run: python -m pip install -e .
 
       - name: Download dataset1
         run: |
