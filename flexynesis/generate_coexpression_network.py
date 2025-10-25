@@ -180,11 +180,14 @@ def generate_coexpression_network(
     # Check for missing values
     na_count = expr_df.isna().sum().sum()
     if na_count > 0:
-        print(f"  [WARNING] Found {na_count} missing values. Filling with row means...")
-        expr_df = expr_df.T.fillna(expr_df.mean(axis=1)).T
+        genes_with_na = expr_df.isna().any(axis=1).sum()
+        print(f"  [WARNING] Found {na_count} missing values in {genes_with_na} genes")
+        print(f"  [INFO] Removing genes with missing data.")
+        expr_df = expr_df.dropna()
+        print(f"  [INFO] Retained {expr_df.shape[0]} genes ({genes_with_na} genes removed)")
     
-    # Build network directly (streaming approach - no full correlation matrix)
-    print(f"\n[2/3] Building network (streaming mode to save memory)...")
+    # Build network directly
+    print(f"\n[2/3] Building network...")
     edges = build_network(
         expr_df,
         method=method,
