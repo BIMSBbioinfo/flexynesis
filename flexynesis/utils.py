@@ -1039,6 +1039,10 @@ def plot_hazard_ratios(cox_model):
     Plots the sorted log hazard ratios using plotnine from a fitted Cox Proportional Hazards model,
     with 95% CI and statistical significance annotations. Displays the C-index in the top-right.
     """
+    # Handle case where cox_model is a tuple (model, metrics) from build_cox_model
+    if isinstance(cox_model, tuple):
+        cox_model = cox_model[0]
+    
     # Extract summary
     coef_summary = cox_model.summary[['coef', 'coef lower 95%', 'coef upper 95%', 'p']].copy()
     coef_summary.columns = ['coef', 'coef_lower_95', 'coef_upper_95', 'p']
