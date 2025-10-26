@@ -64,3 +64,8 @@ jobs:
         run: |
           notebook='examples/tutorials/cbioportal'
           papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
+
+      - name: Compile gnn_custom_networks
+        run: |
+          notebook='examples/tutorials/gnn_custom_networks'
+          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
