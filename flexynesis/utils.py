@@ -1039,6 +1039,10 @@ def plot_hazard_ratios(cox_model):
     Plots the sorted log hazard ratios using plotnine from a fitted Cox Proportional Hazards model,
     with 95% CI and statistical significance annotations. Displays the C-index in the top-right.
     """
+    # Handle case where cox_model is a tuple (model, metrics) from build_cox_model
+    if isinstance(cox_model, tuple):
+        cox_model = cox_model[0]
+    
     # Extract summary
     coef_summary = cox_model.summary[['coef', 'coef lower 95%', 'coef upper 95%', 'p']].copy()
     coef_summary.columns = ['coef', 'coef_lower_95', 'coef_upper_95', 'p']
@@ -1872,34 +1876,3 @@ def create_device_from_string(device_str):
             return torch.device('cpu')
     else:
         return torch.device('cpu')
-
-
-class mps_safe_context:
-    """
-    Context manager to ensure MPS compatibility by temporarily setting
-    default tensor dtype to float32 when using MPS device.
-    
-    This fixes issues with external libraries like captum that might create
-    float64 tensors internally, which MPS doesn't support.
-    """
-    def __init__(self, device):
-        self.device = device
-        self.original_dtype = None
-        self.should_change_dtype = False
-        
-    def __enter__(self):
-        if hasattr(self.device, 'type'):
-            device_type = self.device.type
-        else:
-            device_type = str(self.device)
-            
-        if device_type == 'mps':
-            self.original_dtype = torch.get_default_dtype()
-            if self.original_dtype != torch.float32:
-                torch.set_default_dtype(torch.float32)
-                self.should_change_dtype = True
-        return self
-        
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.should_change_dtype and self.original_dtype is not None:
-            torch.set_default_dtype(self.original_dtype)

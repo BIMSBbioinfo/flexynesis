@@ -24,9 +24,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.11", "3.12", "3.x"]  # 👈 add latest (3.x)
+        python-version: ["3.11", "3.12", "3.13"]  # Exclude 3.14 due to qdldl build failure
     runs-on: ${{ matrix.os }}
-    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}     # 👈 unique job name for badges
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
 
     steps:
       - name: Checkout repository
@@ -38,9 +38,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install my package from source
-        shell: bash -l {0}
-        run: |
-          pip install -e .
+        run: python -m pip install -e .
 
       - name: Download dataset1
         run: |

@@ -13,7 +13,7 @@ from functools import reduce
 from captum.attr import IntegratedGradients, GradientShap
 
 from ..modules import *
-from ..utils import to_device_safe, mps_safe_context
+from ..utils import to_device_safe
 
 class DirectPred(pl.LightningModule):
     """
@@ -377,8 +377,14 @@ class DirectPred(pl.LightningModule):
         Returns:
             pd.DataFrame: A DataFrame containing feature importances across different variables and data modalities.
         """
-        from ..utils import create_device_from_string
+        from ..utils import create_device_from_string, to_device_safe
         device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
+        
+        # Force CPU for Captum feature importance, as MPS lacks the required float64 support.
+        if device.type == 'mps':
+            print("[WARNING] MPS device detected. Computing feature importance on CPU due to MPS float64 incompatibility.")
+            device = torch.device('cpu')
+            
         self.to(device)
 
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
@@ -413,31 +419,27 @@ class DirectPred(pl.LightningModule):
             if num_class == 1:
                 # returns a tuple of tensors (one per data modality)
                 if method == 'IntegratedGradients':
-                    with mps_safe_context(device):
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                     additional_forward_args=(target_var, steps_or_samples), 
-                                                     n_steps=steps_or_samples)
+                    attributions = explainer.attribute(input_data, baseline, 
+                                                 additional_forward_args=(target_var, steps_or_samples), 
+                                                 n_steps=steps_or_samples)
                 elif method == 'GradientShap':
-                    with mps_safe_context(device):
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                     additional_forward_args=(target_var, steps_or_samples), 
-                                                     n_samples=steps_or_samples)
+                    attributions = explainer.attribute(input_data, baseline, 
+                                                 additional_forward_args=(target_var, steps_or_samples), 
+                                                 n_samples=steps_or_samples)
                 aggregated_attributions[0].append(attributions)
             else:
                 for target_class in range(num_class):
                     # returns a tuple of tensors (one per data modality)
                     if method == 'IntegratedGradients':
-                        with mps_safe_context(device):
-                            attributions = explainer.attribute(input_data, baseline, 
-                                                               additional_forward_args=(target_var, steps_or_samples), 
-                                                               target=target_class,
-                                                               n_steps=steps_or_samples)
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                           additional_forward_args=(target_var, steps_or_samples), 
+                                                           target=target_class,
+                                                           n_steps=steps_or_samples)
                     elif method == 'GradientShap':
-                        with mps_safe_context(device):
-                            attributions = explainer.attribute(input_data, baseline, 
-                                                               additional_forward_args=(target_var, steps_or_samples), 
-                                                               target=target_class,
-                                                               n_samples=steps_or_samples)
+                        attributions = explainer.attribute(input_data, baseline, 
+                                                           additional_forward_args=(target_var, steps_or_samples), 
+                                                           target=target_class,
+                                                           n_samples=steps_or_samples)
                     aggregated_attributions[target_class].append(attributions)
         # Post-process attributions
         layers = list(dataset.dat.keys())
