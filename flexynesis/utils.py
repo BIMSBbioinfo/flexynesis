@@ -1098,6 +1098,7 @@ def build_cox_model(
     random_state: int = 42,
     eval_time: float | None = None,     # single horizon, same units as duration_col
     low_variance_threshold: float = 0.01,
+    cox_penalizer = 0.05,
     return_metrics: bool = True,
 ):
     """
@@ -1140,7 +1141,7 @@ def build_cox_model(
         train_df = df.iloc[train_idx]
         test_df  = df.iloc[test_idx]
 
-        model = CoxPHFitter(penalizer=0.1)
+        model = CoxPHFitter(penalizer=cox_penalizer)
         model.fit(train_df, duration_col=duration_col, event_col=event_col)
 
         # C-index on the test fold
@@ -1178,7 +1179,7 @@ def build_cox_model(
     metrics["cv_auc_mean"] = float(np.mean(auc_per_fold)) if auc_per_fold else None
 
     # Fit final model on full data for downstream use (forest plots, HRs, etc.)
-    final_model = CoxPHFitter(penalizer=0.1)
+    final_model = CoxPHFitter(penalizer=cox_penalizer)
     final_model.fit(df, duration_col=duration_col, event_col=event_col)
 
     return final_model, metrics
