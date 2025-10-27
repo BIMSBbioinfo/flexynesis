@@ -31,14 +31,14 @@
       <b>Ubuntu</b><br>
       <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.11%20on%20ubuntu-latest&label=Py3.11"/><br>
       <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.12%20on%20ubuntu-latest&label=Py3.12"/><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.x%20on%20ubuntu-latest&label=Latest"/>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.13%20on%20ubuntu-latest&label=Py3.13"/><br>
     </td>
     <!-- Tutorials macOS -->
     <td align="center">
       <b>macOS</b><br>
       <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.11%20on%20macos-latest&label=Py3.11"/><br>
       <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.12%20on%20macos-latest&label=Py3.12"/><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.x%20on%20macos-latest&label=Latest"/>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.12%20on%20macos-latest&label=Py3.13"/><br>
     </td>
     <!-- Models Ubuntu -->
     <td align="center">
