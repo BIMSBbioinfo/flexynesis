@@ -451,7 +451,6 @@ def main():
     # ---------- Inference mode: early exit path ----------
     if args.pretrained_model and args.artifacts and args.data_path_test:
         import torch
-        from .inference import run_inference
         from .utils import get_optimal_device, create_device_from_string
 
         # quick existence checks
@@ -473,9 +472,8 @@ def main():
             device_preference = args.device
         
         # Get optimal device for inference
-        device_str, device_type = get_optimal_device(device_preference)
-        device = create_device_from_string(device_str)
-        print(f"[INFO] Using device for inference: {device_str}")
+        device = torch.device("cpu")  # Force CPU in inference mode
+        print("[INFO] Inference mode: forcing device to CPU")
 
         # Robust load across PyTorch versions & checkpoint types
         try:
@@ -488,201 +486,228 @@ def main():
             except TypeError:
                 model = torch.load(args.pretrained_model, map_location=device)
 
+        # Extract model class name for metrics
+        args.model_class = model.__class__.__name__
         if hasattr(model, "to"):
             model.to(device).eval()
 
-        run_inference(
-            model=model,
+        # Load test data using DataImporterInference
+        from .data import DataImporterInference
+        print('[INFO] Loading test data for inference...')
+        importer = DataImporterInference(
+            test_data_path=args.data_path_test,
             artifacts_path=args.artifacts,
-            data_path_test=args.data_path_test,
-            outdir=args.outdir,
-            prefix=args.prefix,
+            verbose=True
         )
-        return  # inside main(); done after inference
+        test_dataset = importer.import_data()
+        
+        # Convert to GNN dataset if needed
+        if args.model_class == 'GNN':
+            print("[INFO] Overlaying the dataset with network data from STRINGDB")
+            from .main import STRING
+            from .data import MultiOmicDatasetNW
+            # Get STRING organism from artifacts
+            string_organism = importer.artifacts.get('string_organism', 9606)  # default human
+            string_node_name = importer.artifacts.get('string_node_name', 'HGNC')
+            # Load STRING network
+            obj = STRING(
+                os.path.join(args.data_path_test, '_'.join(['processed', args.prefix])),
+                string_organism,
+                string_node_name
+            )
+            # Get modality order from artifacts for consistent feature stacking
+            modality_order = importer.artifacts.get("original_modalities", importer.artifacts.get("data_types"))
+            test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df, modality_order=modality_order)
+        train_dataset = None  # No training data in inference mode
+        
+        # Move dataset to same device as model
+        if hasattr(test_dataset, 'to_device'):
+            test_dataset.to_device(device)
+        print(f'[INFO] Test dataset loaded: {len(test_dataset.samples)} samples')
+        # Continue to evaluation section (skip training)
 
     # ------------- Heavy imports only when training -------------
-    print("[INFO] Loading Flexynesis modules...")
-    import flexynesis
-    from lightning import seed_everything
-    import lightning as pl
-    from typing import NamedTuple
-    import torch
-    import pandas as pd
-    from safetensors.torch import save_file
-
-    # models
-    from .models.direct_pred import DirectPred
-    from .models.supervised_vae import supervised_vae
-    from .models.triplet_encoder import MultiTripletNetwork
-    from .models.crossmodal_pred import CrossModalPred
-    from .models.gnn_early import GNN
-
-    # data + utils
-    from .data import STRING, MultiOmicDatasetNW, DataImporter
-    from .main import HyperparameterTuning, FineTuner
     from .utils import evaluate_baseline_performance, evaluate_baseline_survival_performance, get_predicted_labels, evaluate_wrapper, get_optimal_device, get_device_memory_info, create_device_from_string
-    import tracemalloc, psutil
-    import json
+    if not (args.pretrained_model and args.artifacts and args.data_path_test):
+        import flexynesis
+        from lightning import seed_everything
+        import lightning as pl
+        from typing import NamedTuple
+        import torch
+        import pandas as pd
+        from safetensors.torch import save_file
 
-    # --------- Sanity checks on args ---------
-    # 1. survival variables consistency
-    if (args.surv_event_var is None) != (args.surv_time_var is None):
-        parser.error("Both --surv_event_var and --surv_time_var must be provided together or left as None.")
+        # models
+        from .models.direct_pred import DirectPred
+        from .models.supervised_vae import supervised_vae
+        from .models.triplet_encoder import MultiTripletNetwork
+        from .models.crossmodal_pred import CrossModalPred
+        from .models.gnn_early import GNN
 
-    # 2. required variables for model classes
-    if args.model_class not in ("supervised_vae", "CrossModalPred"):
-        if not any([args.target_variables, args.surv_event_var]):
-            parser.error("When selecting a model other than 'supervised_vae' or 'CrossModalPred', you must provide at least one of --target_variables, or survival variables (--surv_event_var and --surv_time_var)")
+        # data + utils
+        from .data import STRING, MultiOmicDatasetNW, DataImporter
+        from .main import HyperparameterTuning, FineTuner
+        import tracemalloc, psutil
+        import json
 
-    # 3. Check for compatibility of fusion_type with CrossModalPred
-    if args.fusion_type == "early":
-        if args.model_class == 'CrossModalPred':
-            parser.error("The 'CrossModalPred' model cannot be used with early fusion type. "
-                         "Use --fusion_type intermediate instead.")
+        # --------- Sanity checks on args ---------
+        # 1. survival variables consistency
+        if (args.surv_event_var is None) != (args.surv_time_var is None):
+            parser.error("Both --surv_event_var and --surv_time_var must be provided together or left as None.")
+
+        # 2. required variables for model classes
+        if args.model_class not in ("supervised_vae", "CrossModalPred"):
+            if not any([args.target_variables, args.surv_event_var]):
+                parser.error("When selecting a model other than 'supervised_vae' or 'CrossModalPred', you must provide at least one of --target_variables, or survival variables (--surv_event_var and --surv_time_var)")
+
+        # 3. Check for compatibility of fusion_type with CrossModalPred
+        if args.fusion_type == "early":
+            if args.model_class == 'CrossModalPred':
+                parser.error("The 'CrossModalPred' model cannot be used with early fusion type. "
+                             "Use --fusion_type intermediate instead.")
             
     
-    # 4. Handle device selection with MPS support
-    # Support legacy --use_gpu flag for backward compatibility
-    if args.use_gpu:
-        warnings.warn("--use_gpu is deprecated. Use --device instead.", DeprecationWarning)
-        # If --device is not explicitly set (still at default auto), let auto-detection handle it
-        if args.device != "auto":
-            # If both --use_gpu and explicit --device are provided, respect --device but warn
+        # 4. Handle device selection with MPS support
+        # Support legacy --use_gpu flag for backward compatibility
+        if args.use_gpu:
+            warnings.warn("--use_gpu is deprecated. Use --device instead.", DeprecationWarning)
+            # If --device is not explicitly set (still at default auto), let auto-detection handle it
+            if args.device != "auto":
+                # If both --use_gpu and explicit --device are provided, respect --device but warn
+                device_preference = args.device
+                print(f"[WARN] Both --use_gpu and --device {args.device} specified. Using --device {args.device}.")
+            else:
+                # Let auto-detection find the best GPU device (CUDA or MPS)
+                device_preference = "auto"
+        else:
             device_preference = args.device
-            print(f"[WARN] Both --use_gpu and --device {args.device} specified. Using --device {args.device}.")
-        else:
-            # Let auto-detection find the best GPU device (CUDA or MPS)
-            device_preference = "auto"
-    else:
-        device_preference = args.device
     
-    # Get optimal device using new device detection
-    device_str, device_type = get_optimal_device(device_preference)
+        # Get optimal device using new device detection
+        device_str, device_type = get_optimal_device(device_preference)
     
-    # Print device information
-    print(f"[INFO] Using device: {device_str}")
-    if device_str != 'cpu':
-        memory_info = get_device_memory_info(device_str)
-        print(f"[INFO] Device name: {memory_info['device_name']}")
-        if device_str == 'cuda':
-            print(f"[INFO] Available CUDA devices: {memory_info['device_count']}")
+        # Print device information
+        print(f"[INFO] Using device: {device_str}")
+        if device_str != 'cpu':
+            memory_info = get_device_memory_info(device_str)
+            print(f"[INFO] Device name: {memory_info['device_name']}")
+            if device_str == 'cuda':
+                print(f"[INFO] Available CUDA devices: {memory_info['device_count']}")
 
-    # gnn
-    if args.model_class == 'GNN':
-        if not args.gnn_conv_type:
-            warnings.warn("\n\n!!! When running GNN, set --gnn_conv_type (GC/GCN/SAGE). Falling back to GC !!!\n")
-            time.sleep(3)
-            gnn_conv_type = 'GC'
+        # gnn
+        if args.model_class == 'GNN':
+            if not args.gnn_conv_type:
+                warnings.warn("\n\n!!! When running GNN, set --gnn_conv_type (GC/GCN/SAGE). Falling back to GC !!!\n")
+                time.sleep(3)
+                gnn_conv_type = 'GC'
+            else:
+                gnn_conv_type = args.gnn_conv_type
         else:
-            gnn_conv_type = args.gnn_conv_type
-    else:
-        gnn_conv_type = None
+            gnn_conv_type = None
 
-    # CrossModalPred IO layers
-    input_layers = args.input_layers
-    output_layers = args.output_layers
-    datatypes = args.data_types.strip().split(',')
-    if args.model_class == 'CrossModalPred':
-        if args.input_layers:
-            input_layers = input_layers.strip().split(',')
-            if not all(layer in datatypes for layer in input_layers):
-                raise ValueError(f"Input layers {input_layers} are not a valid subset of the data types: ({datatypes}).")
-        if args.output_layers:
-            output_layers = output_layers.strip().split(',')
-            if not all(layer in datatypes for layer in output_layers):
-                raise ValueError(f"Output layers {output_layers} are not a valid subset of the data types: ({datatypes}).")
+        # CrossModalPred IO layers
+        input_layers = args.input_layers
+        output_layers = args.output_layers
+        datatypes = args.data_types.strip().split(',')
+        if args.model_class == 'CrossModalPred':
+            if args.input_layers:
+                input_layers = input_layers.strip().split(',')
+                if not all(layer in datatypes for layer in input_layers):
+                    raise ValueError(f"Input layers {input_layers} are not a valid subset of the data types: ({datatypes}).")
+            if args.output_layers:
+                output_layers = output_layers.strip().split(',')
+                if not all(layer in datatypes for layer in output_layers):
+                    raise ValueError(f"Output layers {output_layers} are not a valid subset of the data types: ({datatypes}).")
 
-    # paths
-    if not os.path.exists(args.data_path):
-        raise FileNotFoundError(f"Input --data_path doesn't exist at: {args.data_path}")
-    if not os.path.exists(args.outdir):
-        raise FileNotFoundError(f"Path to --outdir doesn't exist at: {args.outdir}")
+        # paths
+        if not os.path.exists(args.data_path):
+            raise FileNotFoundError(f"Input --data_path doesn't exist at: {args.data_path}")
+        if not os.path.exists(args.outdir):
+            raise FileNotFoundError(f"Path to --outdir doesn't exist at: {args.outdir}")
 
-    available_models = {
-        "DirectPred": (DirectPred, "DirectPred"),
-        "supervised_vae": (supervised_vae, "supervised_vae"),
-        "MultiTripletNetwork": (MultiTripletNetwork, "MultiTripletNetwork"),
-        "CrossModalPred": (CrossModalPred, "CrossModalPred"),
-        "GNN": (GNN, "GNN"),
-        "RandomForest": ("RandomForest", None),
-        "XGBoost": ("XGBoost", None),
-        "SVM": ("SVM", None),
-        "RandomSurvivalForest": ("RandomSurvivalForest", None),
-    }
+        available_models = {
+            "DirectPred": (DirectPred, "DirectPred"),
+            "supervised_vae": (supervised_vae, "supervised_vae"),
+            "MultiTripletNetwork": (MultiTripletNetwork, "MultiTripletNetwork"),
+            "CrossModalPred": (CrossModalPred, "CrossModalPred"),
+            "GNN": (GNN, "GNN"),
+            "RandomForest": ("RandomForest", None),
+            "XGBoost": ("XGBoost", None),
+            "SVM": ("SVM", None),
+            "RandomSurvivalForest": ("RandomSurvivalForest", None),
+        }
 
-    model_info = available_models.get(args.model_class)
-    if model_info is None:
-        raise ValueError(f"Unsupported model class {args.model_class}")
-    model_class, config_name = model_info
+        model_info = available_models.get(args.model_class)
+        if model_info is None:
+            raise ValueError(f"Unsupported model class {args.model_class}")
+        model_class, config_name = model_info
 
-    # Set concatenate to True to use early fusion, otherwise intermediate
-    concatenate = args.fusion_type == 'early' and args.model_class != 'GNN'
+        # Set concatenate to True to use early fusion, otherwise intermediate
+        concatenate = args.fusion_type == 'early' and args.model_class != 'GNN'
 
-    # covariates
-    if args.covariates:
-        if args.model_class == 'GNN':  # Covariates not yet supported for GNNs
-            warnings.warn("\n\n!!! Covariates are currently not supported for GNN models, they will be ignored. !!!\n")
-            time.sleep(3)
+        # covariates
+        if args.covariates:
+            if args.model_class == 'GNN':  # Covariates not yet supported for GNNs
+                warnings.warn("\n\n!!! Covariates are currently not supported for GNN models, they will be ignored. !!!\n")
+                time.sleep(3)
+                covariates = None
+            else:
+                covariates = args.covariates.strip().split(',')
+        else:
             covariates = None
-        else:
-            covariates = args.covariates.strip().split(',')
-    else:
-        covariates = None
 
-    data_importer = DataImporter(
-        path=args.data_path,
-        data_types=datatypes,
-        covariates=covariates,
-        concatenate=concatenate,
-        log_transform=args.log_transform == 'True',
-        variance_threshold=args.variance_threshold / 100,
-        correlation_threshold=args.correlation_threshold,
-        restrict_to_features=args.restrict_to_features,
-        min_features=args.features_min,
-        top_percentile=args.features_top_percentile,
-        processed_dir='_'.join(['processed', args.prefix]),
-        downsample=args.subsample
-    )
+        data_importer = DataImporter(
+            path=args.data_path,
+            data_types=datatypes,
+            covariates=covariates,
+            concatenate=concatenate,
+            log_transform=args.log_transform == 'True',
+            variance_threshold=args.variance_threshold / 100,
+            correlation_threshold=args.correlation_threshold,
+            restrict_to_features=args.restrict_to_features,
+            min_features=args.features_min,
+            top_percentile=args.features_top_percentile,
+            processed_dir='_'.join(['processed', args.prefix]),
+            downsample=args.subsample
+        )
 
-    # import data
-    tracemalloc.start()
-    process = psutil.Process(os.getpid())
-    t1 = time.time()
-    train_dataset, test_dataset = data_importer.import_data()
+        # import data
+        tracemalloc.start()
+        process = psutil.Process(os.getpid())
+        t1 = time.time()
+        train_dataset, test_dataset = data_importer.import_data()
 
-    data_import_time = time.time() - t1
-    data_import_ram = process.memory_info().rss
+        data_import_time = time.time() - t1
+        data_import_ram = process.memory_info().rss
 
-    # classical ML baselines
-    if args.model_class in ["RandomForest", "SVM", "XGBoost"]:
-        if args.target_variables:
-            var = args.target_variables.strip().split(',')[0]
-            print(f"Training {args.model_class} on variable: {var}")
-            metrics, predictions = evaluate_baseline_performance(
-                train_dataset, test_dataset, variable_name=var, methods=[args.model_class], n_folds=5, n_jobs=args.threads
-            )
-            metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
-            predictions.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
-            print(f"{args.model_class} evaluation complete. Results saved.")
-            sys.exit(0)
-        else:
-            raise ValueError("At least one target variable is required to run RandomForest/SVM/XGBoost models. Set --target_variables")
+        # classical ML baselines
+        if args.model_class in ["RandomForest", "SVM", "XGBoost"]:
+            if args.target_variables:
+                var = args.target_variables.strip().split(',')[0]
+                print(f"Training {args.model_class} on variable: {var}")
+                metrics, predictions = evaluate_baseline_performance(
+                    train_dataset, test_dataset, variable_name=var, methods=[args.model_class], n_folds=5, n_jobs=args.threads
+                )
+                metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
+                predictions.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
+                print(f"{args.model_class} evaluation complete. Results saved.")
+                sys.exit(0)
+            else:
+                raise ValueError("At least one target variable is required to run RandomForest/SVM/XGBoost models. Set --target_variables")
 
-    if args.model_class == "RandomSurvivalForest":
-        if args.surv_event_var and args.surv_time_var:
-            print(f"Training {args.model_class} on survival variables: {args.surv_event_var} and {args.surv_time_var}")
-            metrics, predictions = evaluate_baseline_survival_performance(
-                train_dataset, test_dataset, args.surv_time_var, args.surv_event_var, n_folds=5, n_jobs=int(args.threads)
-            )
-            metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
-            predictions.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
-            print(f"{args.model_class} evaluation complete. Results saved.")
-            sys.exit(0)
-        else:
-            raise ValueError("Missing survival variables. Set --surv_event_var --surv_time_var")
-
-    # GNN overlay (temporary solution)
-    if args.model_class == 'GNN':
+        if args.model_class == "RandomSurvivalForest":
+            if args.surv_event_var and args.surv_time_var:
+                print(f"Training {args.model_class} on survival variables: {args.surv_event_var} and {args.surv_time_var}")
+                metrics, predictions = evaluate_baseline_survival_performance(
+                    train_dataset, test_dataset, args.surv_time_var, args.surv_event_var, n_folds=5, n_jobs=int(args.threads)
+                )
+                metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'stats.csv'])), header=True, index=False)
+                predictions.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
+                print(f"{args.model_class} evaluation complete. Results saved.")
+                sys.exit(0)
+            else:
+                raise ValueError("Missing survival variables. Set --surv_event_var --surv_time_var")
+    # GNN overlay (training mode only - inference mode already handled this)
+    if args.model_class == 'GNN' and train_dataset is not None:
         # Check if user provided a custom graph
         if args.user_graph is not None:
             print(f"[INFO] Using user-provided network from: {args.user_graph}")
@@ -696,76 +721,81 @@ def main():
                          args.string_organism, args.string_node_name)
             graph_df = obj.graph_df
         
+        # Use data_types order from args for consistent modality ordering
+        modality_order = args.data_types.split(',')
         # Overlay the graph onto datasets
-        train_dataset = MultiOmicDatasetNW(train_dataset, graph_df)
+        train_dataset = MultiOmicDatasetNW(train_dataset, graph_df, modality_order=modality_order)
         train_dataset.print_stats()
-        test_dataset = MultiOmicDatasetNW(test_dataset, graph_df)
+        test_dataset = MultiOmicDatasetNW(test_dataset, graph_df, modality_order=modality_order)
 
-    # feature logs
-    feature_logs = data_importer.feature_logs
-    for key in feature_logs.keys():
-        feature_logs[key].to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_logs', key, 'csv'])),
-                                 header=True, index=False)
+    # Training only happens when train_dataset exists (not in inference mode)
+    if train_dataset is not None:
+        # feature logs
+        feature_logs = data_importer.feature_logs
+        for key in feature_logs.keys():
+            feature_logs[key].to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_logs', key, 'csv'])),
+                                     header=True, index=False)
 
-    # tuner
-    tuner = HyperparameterTuning(
-        dataset=train_dataset,
-        model_class=model_class,
-        target_variables=args.target_variables.strip().split(',') if args.target_variables is not None else [],
-        batch_variables=None,
-        surv_event_var=args.surv_event_var,
-        surv_time_var=args.surv_time_var,
-        config_name=config_name,
-        config_path=args.config_path,
-        n_iter=int(args.hpo_iter),
-        use_loss_weighting=args.use_loss_weighting == 'True',
-        val_size=args.val_size,
-        use_cv=args.use_cv,
-        early_stop_patience=int(args.early_stop_patience),
-        device_type=device_type,
-        gnn_conv_type=gnn_conv_type,
-        input_layers=input_layers,
-        output_layers=output_layers,
-        num_workers=args.num_workers
-    )
+        # tuner
+        tuner = HyperparameterTuning(
+            dataset=train_dataset,
+            model_class=model_class,
+            target_variables=args.target_variables.strip().split(',') if args.target_variables is not None else [],
+            batch_variables=None,
+            surv_event_var=args.surv_event_var,
+            surv_time_var=args.surv_time_var,
+            config_name=config_name,
+            config_path=args.config_path,
+            n_iter=int(args.hpo_iter),
+            use_loss_weighting=args.use_loss_weighting == 'True',
+            val_size=args.val_size,
+            use_cv=args.use_cv,
+            early_stop_patience=int(args.early_stop_patience),
+            device_type=device_type,
+            gnn_conv_type=gnn_conv_type,
+            input_layers=input_layers,
+            output_layers=output_layers,
+            num_workers=args.num_workers
+        )
 
-    # do a hyperparameter search training multiple models and get the best configuration
-    t1 = time.time()
-    model, best_params = tuner.perform_tuning(hpo_patience=args.hpo_patience)
-    hpo_time = time.time() - t1
-    hpo_system_ram = process.memory_info().rss
+        # do a hyperparameter search training multiple models and get the best configuration
+        t1 = time.time()
+        model, best_params = tuner.perform_tuning(hpo_patience=args.hpo_patience)
+        hpo_time = time.time() - t1
+        hpo_system_ram = process.memory_info().rss
 
-    # if fine-tuning is enabled; fine tune the model on a portion of test samples
-    if args.finetuning_samples > 0:
-        finetuneSampleN = args.finetuning_samples
-        print("[INFO] Finetuning the model on ", finetuneSampleN, "test samples")
-        # split test dataset into finetuning and holdout datasets
-        all_indices = range(len(test_dataset))
-        import random as _random
-        finetune_indices = _random.sample(list(all_indices), finetuneSampleN)
-        holdout_indices = list(set(all_indices) - set(finetune_indices))
-        finetune_dataset = test_dataset.subset(finetune_indices)
-        holdout_dataset = test_dataset.subset(holdout_indices)
+        # if fine-tuning is enabled; fine tune the model on a portion of test samples
+        if args.finetuning_samples > 0:
+            finetuneSampleN = args.finetuning_samples
+            print("[INFO] Finetuning the model on ", finetuneSampleN, "test samples")
+            # split test dataset into finetuning and holdout datasets
+            all_indices = range(len(test_dataset))
+            import random as _random
+            finetune_indices = _random.sample(list(all_indices), finetuneSampleN)
+            holdout_indices = list(set(all_indices) - set(finetune_indices))
+            finetune_dataset = test_dataset.subset(finetune_indices)
+            holdout_dataset = test_dataset.subset(holdout_indices)
 
-        # fine tune on the finetuning dataset; freeze the encoders
-        finetuner = FineTuner(model, finetune_dataset)
-        finetuner.run_experiments()
+            # fine tune on the finetuning dataset; freeze the encoders
+            finetuner = FineTuner(model, finetune_dataset)
+            finetuner.run_experiments()
 
-        # update the model to finetuned model
-        model = finetuner.model
-        # update the test dataset to exclude finetuning samples
-        test_dataset = holdout_dataset
+            # update the model to finetuned model
+            model = finetuner.model
+            # update the test dataset to exclude finetuning samples
+            test_dataset = holdout_dataset
 
     # get sample embeddings and save
     print("[INFO] Extracting sample embeddings")
-    embeddings_train = model.transform(train_dataset)
+    if train_dataset is not None:
+        embeddings_train = model.transform(train_dataset)
+        embeddings_train.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.csv'])), header=True)
     embeddings_test = model.transform(test_dataset)
-    embeddings_train.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_train.csv'])), header=True)
     embeddings_test.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'embeddings_test.csv'])), header=True)
 
     # evaluate predictions;  (if any supervised learning happened)
     if any([args.target_variables, args.surv_event_var]):
-        if not args.disable_marker_finding:  # unless marker discovery is disabled
+        if not args.disable_marker_finding and train_dataset is not None:  # unless marker discovery is disabled
             # compute feature importance values
             if args.feature_importance_method == 'Both':
                 explainers = ['IntegratedGradients', 'GradientShap']
@@ -782,10 +812,13 @@ def main():
                 df_imp.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'feature_importance', explainer, 'csv'])), header=True, index=False)
 
         # print known/predicted labels
-        predicted_labels = pd.concat([
-            get_predicted_labels(model.predict(train_dataset), train_dataset, 'train', args.model_class),
-            get_predicted_labels(model.predict(test_dataset), test_dataset, 'test', args.model_class)
-        ], ignore_index=True)
+        if train_dataset is not None:
+            predicted_labels = pd.concat([
+                get_predicted_labels(model.predict(train_dataset), train_dataset, 'train', args.model_class),
+                get_predicted_labels(model.predict(test_dataset), test_dataset, 'test', args.model_class)
+            ], ignore_index=True)
+        else:
+            predicted_labels = get_predicted_labels(model.predict(test_dataset), test_dataset, 'test', args.model_class)
         predicted_labels.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'predicted_labels.csv'])), header=True, index=False)
 
         print("[INFO] Computing model evaluation metrics")
@@ -799,13 +832,15 @@ def main():
     # for architectures with decoders; print decoded output layers
     if args.model_class == 'CrossModalPred':
         print("[INFO] Printing decoded output layers")
-        output_layers_train = model.decode(train_dataset)
+        # In inference mode, only decode test dataset
+        if train_dataset is not None:
+            output_layers_train = model.decode(train_dataset)
+            for layer in output_layers_train.keys():
+                output_layers_train[layer].to_csv(
+                    os.path.join(args.outdir, '.'.join([args.prefix, 'train_decoded', layer, 'csv'])),
+                    header=True
+                )
         output_layers_test = model.decode(test_dataset)
-        for layer in output_layers_train.keys():
-            output_layers_train[layer].to_csv(
-                os.path.join(args.outdir, '.'.join([args.prefix, 'train_decoded', layer, 'csv'])),
-                header=True
-            )
         for layer in output_layers_test.keys():
             output_layers_test[layer].to_csv(
                 os.path.join(args.outdir, '.'.join([args.prefix, 'test_decoded', layer, 'csv'])),
@@ -878,53 +913,24 @@ def main():
             json.dump(config, f, indent=2, default=str)
 
     # --- write inference artifacts joblib (auto-generated after training) ---
-    try:
-        from .inference import InferenceArtifacts
-        import joblib  # noqa: F401  (ensures joblib is present if InferenceArtifacts uses it)
-
-        # Build feature list dictionary from the processed training dataset if available
-        feature_lists = {}
-        if hasattr(train_dataset, "data"):
-            try:
-                for k, df in getattr(train_dataset, "data", {}).items():
-                    try:
-                        feature_lists[k] = list(df.columns)
-                    except Exception:
-                        feature_lists[k] = []
-            except Exception:
-                feature_lists = {dt: [] for dt in args.data_types.split(',')}
-        else:
-            feature_lists = {dt: [] for dt in args.data_types.split(',')}
-
-        art = InferenceArtifacts(
-            schema_version=1,
-            data_types=args.data_types.split(','),
-            target_variables=(args.target_variables.split(',') if args.target_variables else []),
-            feature_lists=feature_lists,
-            transforms={},          # TODO: plug in real scalers/encoders when available
-            label_encoders={},      # TODO: plug in label encoders if used
-            join_key=args.join_key, # default "JoinKey"
-        )
-        joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
-        art.save(joblib_path)
-        print(f"[INFO] Wrote inference artifacts to {joblib_path}")
-    except Exception as e:
-        print(f"[WARN] Could not write inference artifacts: {e}")
-
-    print(f"[INFO] Time spent in data import: {data_import_time:.2f} sec")
-    print(f"[INFO] RAM after data import: {data_import_ram / (1024**2):.2f} MB")
-    print(f"[INFO] Time spent in HPO: {hpo_time:.2f} sec")
-    
-    # Enhanced device memory reporting
-    final_memory_info = get_device_memory_info(device_str)
-    if device_str == 'cuda':
-        print(f"[INFO] Peak CUDA RAM allocated: {final_memory_info['max_allocated']:.2f} MB")
-    elif device_str == 'mps':
-        print(f"[INFO] MPS device used (detailed memory tracking not available)")
-    
-    print(f"[INFO] CPU RAM after HPO: {hpo_system_ram / (1024**2):.2f} MB")
-    print("[INFO] Finished the analysis!")
-
-
-if __name__ == "__main__":
-    main()
+    if train_dataset is not None:  # Only save artifacts in training mode
+        try:
+            import joblib
+            artifacts = {
+                'schema_version': 1,
+                'data_types': list(data_importer.train_features.keys()) if hasattr(data_importer, 'train_features') else args.data_types.split(','),  # Use actual data structure keys (e.g. ['all'] for early fusion)
+                'original_modalities': args.data_types.split(','),  # Original modalities from CLI before concatenation
+                'target_variables': args.target_variables.split(',') if args.target_variables else [],
+                'feature_lists': data_importer.train_features if hasattr(data_importer, 'train_features') else {},
+                'transforms': data_importer.scalers if hasattr(data_importer, 'scalers') else {},
+                'label_encoders': data_importer.label_encoders if hasattr(data_importer, 'label_encoders') else {},
+                'covariate_vars': covariates if covariates is not None else [],  # Store covariate variable names
+                'join_key': args.join_key,
+                'string_organism': args.string_organism,
+                'string_node_name': args.string_node_name,
+            }
+            joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
+            joblib.dump(artifacts, joblib_path)
+            print(f'[INFO] Wrote inference artifacts to {joblib_path}')
+        except Exception as e:
+            print(f'[WARN] Could not write inference artifacts: {e}')
