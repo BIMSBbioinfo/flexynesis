@@ -924,6 +924,7 @@ def main():
                 'feature_lists': data_importer.train_features if hasattr(data_importer, 'train_features') else {},
                 'transforms': data_importer.scalers if hasattr(data_importer, 'scalers') else {},
                 'label_encoders': data_importer.label_encoders if hasattr(data_importer, 'label_encoders') else {},
+                'covariate_vars': covariates if covariates is not None else [],  # Store covariate variable names
                 'join_key': args.join_key,
                 'string_organism': args.string_organism,
                 'string_node_name': args.string_node_name,

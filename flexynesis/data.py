@@ -578,8 +578,10 @@ class DataImporterInference:
             if not modalities_to_load:
                 raise ValueError('[ERROR] Early fusion mode but original_modalities not found in artifacts')
         
-        # Load each modality
+        # Load each modality (skip 'covariates' - it's in clin.csv)
         for modality in modalities_to_load:
+            if modality == 'covariates':
+                continue  # Covariates are in clin.csv, not a separate file
             file_path = os.path.join(self.test_data_path, f'{modality}.csv')
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"[ERROR] Required file not found: {file_path}")
@@ -591,13 +593,19 @@ class DataImporterInference:
                 # More rows than columns - likely features as rows, samples as columns
                 df = df.T
             
-            # Filter features
+            # Filter and harmonize features
             # ALWAYS use scaler's feature_names_in_ to ensure correct order
             expected_features = list(self.scalers[modality].feature_names_in_)
+            
+            # Add missing features as zeros
             missing = set(expected_features) - set(df.columns)
             if missing:
-                raise ValueError(f"[ERROR] {modality}: Missing {len(missing)} features")
+                if self.verbose:
+                    print(f"[INFO] {modality}: Adding {len(missing)} missing features as zeros")
+                for feat in missing:
+                    df[feat] = 0.0
             
+            # Select only expected features in correct order (ignore extra features)
             df = df[expected_features]
             
             # Apply scaling
@@ -609,6 +617,21 @@ class DataImporterInference:
             
             # Convert to torch tensor
             test_data[modality] = torch.from_numpy(df_scaled.values).float()
+        
+        
+        # Create covariates matrix if needed
+        if 'covariates' in self.modalities and labels_df is not None:
+            from flexynesis.utils import create_covariate_matrix, get_variable_types
+            covariate_vars = self.artifacts.get('covariate_vars', [])
+            if covariate_vars:
+                if self.verbose:
+                    print(f"[INFO] Creating covariate matrix for: {covariate_vars}")
+                variable_types_clin = get_variable_types(labels_df)
+                covariates_df = create_covariate_matrix(covariate_vars, variable_types_clin, labels_df)
+                # Convert to torch tensor and add to test_data
+                test_data['covariates'] = torch.from_numpy(covariates_df.T.values).float()
+                if samples is None:
+                    samples = covariates_df.T.index.tolist()
         
         # Process labels
         ann_dict = {}
