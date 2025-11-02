@@ -571,12 +571,18 @@ class DataImporterInference:
         if os.path.exists(clin_path):
             labels_df = pd.read_csv(clin_path, index_col=0)
         
-        # Handle early fusion: if data_types=['all'], load original modalities
+        # Determine which modalities to load from files
+        # For early fusion: load original modalities before concatenation
+        # For covariates: load only the omics data (covariates come from clin.csv)
         modalities_to_load = self.modalities
         if self.modalities == ['all']:
             modalities_to_load = self.artifacts.get('original_modalities', [])
             if not modalities_to_load:
                 raise ValueError('[ERROR] Early fusion mode but original_modalities not found in artifacts')
+        else:
+            # Filter out 'covariates' from modalities_to_load
+            # Covariates will be created from clinical data later
+            modalities_to_load = [m for m in self.modalities if m != 'covariates']
         
         # Load each modality (skip 'covariates' - it's in clin.csv)
         for modality in modalities_to_load:
@@ -587,25 +593,26 @@ class DataImporterInference:
                 raise FileNotFoundError(f"[ERROR] Required file not found: {file_path}")
             
             df = pd.read_csv(file_path, index_col=0)
-            # Auto-detect if transpose is needed: if first column looks like a sample ID, transpose
-            # Check if index (rows) looks like features and columns look like samples
-            if len(df.index) > len(df.columns):
-                # More rows than columns - likely features as rows, samples as columns
-                df = df.T
+            # Transpose if needed: data files have features as rows, samples as columns
+            # We need samples as rows, features as columns
+            df = df.T
             
-            # Filter and harmonize features
+            # Filter to expected features from training
             # ALWAYS use scaler's feature_names_in_ to ensure correct order
             expected_features = list(self.scalers[modality].feature_names_in_)
             
-            # Add missing features as zeros
+            # Check for missing or extra features
             missing = set(expected_features) - set(df.columns)
-            if missing:
-                if self.verbose:
-                    print(f"[INFO] {modality}: Adding {len(missing)} missing features as zeros")
-                for feat in missing:
-                    df[feat] = 0.0
+            extra = set(df.columns) - set(expected_features)
             
-            # Select only expected features in correct order (ignore extra features)
+            if missing:
+                raise ValueError(f"[ERROR] {modality}: Missing {len(missing)} features required by model. "
+                                f"Test data must have same preprocessing as training data.")
+            
+            if extra and self.verbose:
+                print(f"[INFO] {modality}: Ignoring {len(extra)} extra features not in training")
+            
+            # Select only expected features in correct order
             df = df[expected_features]
             
             # Apply scaling
@@ -680,9 +687,12 @@ class DataImporterInference:
         else:
             features = {modality: self.feature_names[modality] for modality in self.modalities}
         
+        # CRITICAL: Reorder test_data dict to match self.modalities order (model expects specific order)
+        test_data_ordered = {mod: test_data[mod] for mod in self.modalities if mod in test_data}
+        
         # Create MultiOmicDataset object
         dataset = MultiOmicDataset(
-            dat=test_data,
+            dat=test_data_ordered,
             ann=ann_dict,
             variable_types=variable_types,
             features=features,
@@ -693,21 +703,23 @@ class DataImporterInference:
         # Concatenate for early fusion if needed
         if self.modalities == ['all']:
             from itertools import chain
-            # Concatenate all modalities in the SAME ORDER as training
-            # Use original_modalities to ensure correct order
-            modality_order = self.artifacts.get('original_modalities', list(dataset.dat.keys()))
-            # Store original features before overwriting
-            original_features = {x: dataset.features[x] for x in modality_order}
-            dataset.dat = {'all': torch.cat([dataset.dat[x] for x in modality_order], dim=1)}
+            # For early fusion, we already loaded original modalities into test_data
+            # Now concatenate them in the SAME ORDER as training
+            modality_order = self.artifacts.get('original_modalities', list(test_data.keys()))
+            
+            # Concatenate the data tensors
+            concatenated_data = torch.cat([test_data[x] for x in modality_order], dim=1)
+            
             # Chain features in the same order
-            all_features = list(chain(*[original_features[x] for x in modality_order]))
-            dataset.features = {'all': all_features}
+            all_features = list(chain(*[dataset.features[x] for x in modality_order]))
             
             # Filter to expected features from artifacts
             expected_all_features = self.feature_names['all']
             feature_indices = [i for i, f in enumerate(all_features) if f in expected_all_features]
-            dataset.dat['all'] = dataset.dat['all'][:, feature_indices]
-            dataset.features['all'] = [all_features[i] for i in feature_indices]
+            
+            # Update dataset with concatenated data
+            dataset.dat = {'all': concatenated_data[:, feature_indices]}
+            dataset.features = {'all': [all_features[i] for i in feature_indices]}
         
         return dataset
     
