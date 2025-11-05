@@ -122,6 +122,11 @@ class DataImporter:
         # record if the feature is dropped due to these metrics or due to high correlation to a 
         # higher ranking feature
         self.feature_logs = {} 
+        
+        # NEW: Storage for inference mode artifacts
+        self.train_features = {}      # Stores final feature names per modality after selection
+        self.label_encoders = {}      # Stores fitted label encoders for categorical variables
+        # Note: self.scalers already exists, so we'll use that! 
     
     def get_user_features(self):
         """
@@ -195,11 +200,16 @@ class DataImporter:
 
         # for early fusion, concatenate all data matrices and feature lists
         if self.concatenate:
-            training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in training_dataset.dat.keys()], dim = 1)}
-            training_dataset.features = {'all': list(chain(*training_dataset.features.values()))}
+            # Use data_types order for consistent concatenation
+            modality_order = self.data_types
+            training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in modality_order], dim = 1)}
+            training_dataset.features = {'all': list(chain(*[training_dataset.features[x] for x in modality_order]))}
+        
+            testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in modality_order], dim = 1)}
+            testing_dataset.features = {'all': list(chain(*[testing_dataset.features[x] for x in modality_order]))}
+        # Save final feature lists AFTER concatenation (for inference mode)
+        self.train_features = training_dataset.features.copy()
 
-            testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in testing_dataset.dat.keys()], dim = 1)}
-            testing_dataset.features = {'all': list(chain(*testing_dataset.features.values()))}
         
         print("[INFO] Training Data Stats: ", training_dataset.get_dataset_stats())
         print("[INFO] Test Data Stats: ", testing_dataset.get_dataset_stats())
@@ -361,6 +371,7 @@ class DataImporter:
             X_filt, log_df = filter_by_laplacian(X = dat[layer].T, layer = layer, 
                                                       topN=counts[layer], correlation_threshold = self.correlation_threshold)
             dat_filtered[layer] = X_filt.T # transpose after laplacian filtering again
+            # Features will be stored after concatenation
             feature_logs[layer] = log_df
         # update main feature logs with events from this function
         self.feature_logs['select_features'] = feature_logs
@@ -423,6 +434,8 @@ class DataImporter:
             if series.name not in self.encoders:
                 self.encoders[series.name] = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
                 encoded_series = self.encoders[series.name].fit_transform(series.to_frame())
+                # NEW: Store encoder for inference mode
+                self.label_encoders[series.name] = self.encoders[series.name]
             else:
                 encoded_series = self.encoders[series.name].transform(series.to_frame())
             
@@ -501,6 +514,215 @@ class DataImporter:
         if not warnings and not errors:
             print("[INFO] Data structure is valid with no errors or warnings.")       
             
+
+
+"""
+DataImporterInference class for flexynesis inference mode.
+Add this to flexynesis/data.py
+"""
+
+import os
+import pandas as pd
+import numpy as np
+import joblib
+
+
+
+class DataImporterInference:
+    """
+    Data importer for inference mode.
+    Returns MultiOmicDataset object compatible with model.predict()
+    """
+    
+    def __init__(self, test_data_path, artifacts_path, verbose=True):
+        self.test_data_path = test_data_path
+        self.verbose = verbose
+        self.artifacts = joblib.load(artifacts_path)
+        
+        # Map artifact keys to expected names (compatibility layer)
+        self.feature_names = self.artifacts.get("feature_lists", self.artifacts.get("feature_names", {}))
+        self.scalers = self.artifacts.get("transforms", self.artifacts.get("scalers", {}))
+        self.label_encoders = self.artifacts.get("label_encoders", {})
+        self.modalities = self.artifacts.get("data_types", self.artifacts.get("modalities", []))
+        self.target_variables = self.artifacts.get("target_variables", [])
+        
+        # For early fusion, we need feature lists for original modalities
+        # but artifacts only have 'all'. We need to reconstruct from transforms.
+        if self.modalities == ['all']:
+            original_modalities = self.artifacts.get('original_modalities', [])
+            # Feature lists for original modalities can be inferred from transforms
+            # since transforms are keyed by original modality names
+            if original_modalities:
+                # We'll populate feature_names per modality when we load the data
+                # For now, just note that we need to handle this
+                self.original_modalities = original_modalities
+        
+        if self.verbose:
+            print(f"[INFO] Loaded artifacts for modalities: {self.modalities}")
+    
+    def import_data(self):
+        """Returns MultiOmicDataset object"""
+        test_data = {}
+        samples = None
+        labels_df = None
+        
+        # Load clinical data
+        clin_path = os.path.join(self.test_data_path, 'clin.csv')
+        if os.path.exists(clin_path):
+            labels_df = pd.read_csv(clin_path, index_col=0)
+        
+        # Determine which modalities to load from files
+        # For early fusion: load original modalities before concatenation
+        # For covariates: load only the omics data (covariates come from clin.csv)
+        modalities_to_load = self.modalities
+        if self.modalities == ['all']:
+            modalities_to_load = self.artifacts.get('original_modalities', [])
+            if not modalities_to_load:
+                raise ValueError('[ERROR] Early fusion mode but original_modalities not found in artifacts')
+        else:
+            # Filter out 'covariates' from modalities_to_load
+            # Covariates will be created from clinical data later
+            modalities_to_load = [m for m in self.modalities if m != 'covariates']
+        
+        # Load each modality (skip 'covariates' - it's in clin.csv)
+        for modality in modalities_to_load:
+            if modality == 'covariates':
+                continue  # Covariates are in clin.csv, not a separate file
+            file_path = os.path.join(self.test_data_path, f'{modality}.csv')
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"[ERROR] Required file not found: {file_path}")
+            
+            df = pd.read_csv(file_path, index_col=0)
+            # Transpose if needed: data files have features as rows, samples as columns
+            # We need samples as rows, features as columns
+            df = df.T
+            
+            # Filter to expected features from training
+            # ALWAYS use scaler's feature_names_in_ to ensure correct order
+            expected_features = list(self.scalers[modality].feature_names_in_)
+            
+            # Check for missing or extra features
+            missing = set(expected_features) - set(df.columns)
+            extra = set(df.columns) - set(expected_features)
+            
+            if missing:
+                raise ValueError(f"[ERROR] {modality}: Missing {len(missing)} features required by model. "
+                                f"Test data must have same preprocessing as training data.")
+            
+            if extra and self.verbose:
+                print(f"[INFO] {modality}: Ignoring {len(extra)} extra features not in training")
+            
+            # Select only expected features in correct order
+            df = df[expected_features]
+            
+            # Apply scaling
+            scaler = self.scalers[modality]
+            df_scaled = pd.DataFrame(scaler.transform(df.values), index=df.index, columns=df.columns)
+            
+            if samples is None:
+                samples = df_scaled.index.tolist()
+            
+            # Convert to torch tensor
+            test_data[modality] = torch.from_numpy(df_scaled.values).float()
+        
+        
+        # Create covariates matrix if needed
+        if 'covariates' in self.modalities and labels_df is not None:
+            from flexynesis.utils import create_covariate_matrix, get_variable_types
+            covariate_vars = self.artifacts.get('covariate_vars', [])
+            if covariate_vars:
+                if self.verbose:
+                    print(f"[INFO] Creating covariate matrix for: {covariate_vars}")
+                variable_types_clin = get_variable_types(labels_df)
+                covariates_df = create_covariate_matrix(covariate_vars, variable_types_clin, labels_df)
+                # Convert to torch tensor and add to test_data
+                test_data['covariates'] = torch.from_numpy(covariates_df.T.values).float()
+                if samples is None:
+                    samples = covariates_df.T.index.tolist()
+        
+        # Process labels
+        ann_dict = {}
+        variable_types = {}
+        label_mappings = {}
+        
+        if labels_df is not None:
+            common_samples = list(set(samples) & set(labels_df.index))
+            labels_df = labels_df.loc[common_samples]
+            
+            # Reorder test_data to match labels_df order
+            for modality in test_data.keys():
+                # test_data currently has samples in original CSV order
+                # We need to reorder to match common_samples (labels_df) order
+                # Create mapping from old sample order to new order
+                old_samples = samples  # Original order from data CSV
+                df_reordered = pd.DataFrame(
+                    test_data[modality].numpy(),
+                    index=old_samples
+                ).loc[common_samples]
+                test_data[modality] = torch.from_numpy(df_reordered.values).float()
+            
+            samples = common_samples
+            
+            for col in labels_df.columns:
+                if col in self.label_encoders:
+                    encoder = self.label_encoders[col]
+                    valid_mask = ~labels_df[col].isna()
+                    encoded = np.full(len(labels_df), -1, dtype=np.int64)
+                    if valid_mask.sum() > 0:
+                        encoded[valid_mask] = encoder.transform(labels_df[col][valid_mask].values.reshape(-1, 1)).ravel()
+                    ann_dict[col] = torch.from_numpy(encoded)
+                    variable_types[col] = 'categorical'
+                    label_mappings[col] = {int(c): l for c, l in enumerate(encoder.categories_[0])}
+                    label_mappings[col][-1] = 'Unknown'  # For missing values
+                else:
+                    ann_dict[col] = torch.from_numpy(labels_df[col].values).float()
+                    variable_types[col] = 'numerical'
+        
+        # Create features dict
+        # For early fusion, get features from scalers since feature_lists only has 'all'
+        if self.modalities == ['all']:
+            modalities_for_features = self.artifacts.get('original_modalities', [])
+            # Get features from scalers for each modality
+            features = {modality: list(self.scalers[modality].feature_names_in_) for modality in modalities_for_features}
+        else:
+            features = {modality: self.feature_names[modality] for modality in self.modalities}
+        
+        # CRITICAL: Reorder test_data dict to match self.modalities order (model expects specific order)
+        test_data_ordered = {mod: test_data[mod] for mod in self.modalities if mod in test_data}
+        
+        # Create MultiOmicDataset object
+        dataset = MultiOmicDataset(
+            dat=test_data_ordered,
+            ann=ann_dict,
+            variable_types=variable_types,
+            features=features,
+            samples=samples,
+            label_mappings=label_mappings
+        )
+        
+        # Concatenate for early fusion if needed
+        if self.modalities == ['all']:
+            from itertools import chain
+            # For early fusion, we already loaded original modalities into test_data
+            # Now concatenate them in the SAME ORDER as training
+            modality_order = self.artifacts.get('original_modalities', list(test_data.keys()))
+            
+            # Concatenate the data tensors
+            concatenated_data = torch.cat([test_data[x] for x in modality_order], dim=1)
+            
+            # Chain features in the same order
+            all_features = list(chain(*[dataset.features[x] for x in modality_order]))
+            
+            # Filter to expected features from artifacts
+            expected_all_features = self.feature_names['all']
+            feature_indices = [i for i, f in enumerate(all_features) if f in expected_all_features]
+            
+            # Update dataset with concatenated data
+            dataset.dat = {'all': concatenated_data[:, feature_indices]}
+            dataset.features = {'all': [all_features[i] for i in feature_indices]}
+        
+        return dataset
+    
 
 class MultiOmicDataset(Dataset):
     """A PyTorch dataset for multiomic data.
@@ -642,9 +864,10 @@ class TripletMultiOmicDataset(Dataset):
 
     
 class MultiOmicDatasetNW(Dataset):
-    def __init__(self, multiomic_dataset, interaction_df):
+    def __init__(self, multiomic_dataset, interaction_df, modality_order=None):
         self.multiomic_dataset = multiomic_dataset
         self.interaction_df = interaction_df
+        self.modality_order = modality_order if modality_order else sorted(multiomic_dataset.dat.keys())
         
         # Compute union of features in the data matrices that also appear in the network
         self.common_features = self.find_union_features()
@@ -667,7 +890,7 @@ class MultiOmicDatasetNW(Dataset):
         # Find the union of proteins involved in interactions
         interaction_genes = set(self.interaction_df['protein1']).union(set(self.interaction_df['protein2']))
         # Return the intersection of omic features and interaction genes
-        return list(all_omic_features.intersection(interaction_genes))
+        return sorted(list(all_omic_features.intersection(interaction_genes)))
 
     def create_edge_index(self):
         # Create edges only if both proteins are within the available features
@@ -684,7 +907,9 @@ class MultiOmicDatasetNW(Dataset):
         num_data_types = len(self.multiomic_dataset.dat)
         all_features = torch.full((num_samples, num_nodes, num_data_types), float('nan'), dtype=torch.float)
 
-        for i, data_type in enumerate(self.multiomic_dataset.dat):
+        # CRITICAL: Use sorted keys to ensure consistent order across training/inference
+        data_types_ordered = sorted(self.multiomic_dataset.dat.keys())
+        for i, data_type in enumerate(data_types_ordered):
             data_matrix = self.multiomic_dataset.dat[data_type]
             feature_indices = {
                 gene: self.multiomic_dataset.features[data_type].get_loc(gene)
