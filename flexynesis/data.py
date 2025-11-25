@@ -915,8 +915,8 @@ class MultiOmicDatasetNW(Dataset):
                 gene: self.multiomic_dataset.features[data_type].get_loc(gene)
                 for gene in self.common_features if gene in self.multiomic_dataset.features[data_type]
             }
-            valid_indices = torch.tensor(list(feature_indices.values()))
-            feature_positions = torch.tensor([self.gene_to_index[gene] for gene in feature_indices.keys()])
+            valid_indices = torch.tensor(list(feature_indices.values()), dtype=torch.long)
+            feature_positions = torch.tensor([self.gene_to_index[gene] for gene in feature_indices.keys()], dtype=torch.long)
 
             # Fill in the available data
             all_features[:, feature_positions, i] = data_matrix[:, valid_indices]
