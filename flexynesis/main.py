@@ -472,8 +472,9 @@ class FineTuner(pl.LightningModule):
         
         
 import matplotlib.pyplot as plt
-from IPython.display import clear_output
+from IPython.display import display
 from lightning import Callback
+
 
 class LiveLossPlot(Callback):
     """
@@ -481,6 +482,8 @@ class LiveLossPlot(Callback):
 
     This class is a PyTorch Lightning callback that plots training loss and other metrics live as the model trains.
     It is especially useful for tracking the progress of hyperparameter optimization (HPO) steps.
+    
+    Compatible with papermill/nbclient execution by using display handles for proper output tracking.
 
     Attributes:
         hyperparams (dict): Hyperparameters being used in the current HPO step.
@@ -500,12 +503,15 @@ class LiveLossPlot(Callback):
         self.current_step = current_step
         self.total_steps = total_steps
         self.figsize = figsize
+        self.display_handle = None
 
     def on_train_start(self, trainer, pl_module):
         self.losses = {}
+        self.display_handle = None
 
     def on_train_end(self, trainer, pl_module):
         plt.ioff()
+        plt.close('all')
 
     def on_train_epoch_end(self, trainer, pl_module):
         for key, value in trainer.callback_metrics.items():
@@ -516,8 +522,7 @@ class LiveLossPlot(Callback):
 
     def plot_losses(self):
         plt.rcParams['figure.figsize'] = self.figsize
-        clear_output(wait=True)
-        plt.figure(figsize=self.figsize)
+        fig, ax = plt.subplots(figsize=self.figsize)
         epochs_to_show = 25  # Number of most recent epochs to display
 
         for key, losses in self.losses.items():
@@ -529,14 +534,22 @@ class LiveLossPlot(Callback):
                 losses_to_plot = losses
                 epochs_range = range(len(losses))
 
-            plt.plot(epochs_range, losses_to_plot, label=key)
+            ax.plot(epochs_range, losses_to_plot, label=key)
 
         hyperparams_str = ', '.join(f"{key}={value}" for key, value in self.hyperparams.items())
         title = f"HPO Step={self.current_step} out of {self.total_steps}\n({hyperparams_str})"
 
-        plt.title(title)
-        plt.xlabel(f"Last {epochs_to_show} Epochs")
-        plt.ylabel("Loss")
-        plt.legend()
-        plt.tight_layout()  # Adjust layout so everything fits
-        plt.show()
+        ax.set_title(title)
+        ax.set_xlabel(f"Last {epochs_to_show} Epochs")
+        ax.set_ylabel("Loss")
+        ax.legend()
+        fig.tight_layout()
+        
+        # Use display with a handle for proper papermill/nbclient compatibility
+        # This avoids the display_id assertion error
+        if self.display_handle is None:
+            self.display_handle = display(fig, display_id=True)
+        else:
+            self.display_handle.update(fig)
+        
+        plt.close(fig)
