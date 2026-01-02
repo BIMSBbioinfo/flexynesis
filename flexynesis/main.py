@@ -511,7 +511,6 @@ class LiveLossPlot(Callback):
 
     def on_train_end(self, trainer, pl_module):
         plt.ioff()
-        plt.close('all')
 
     def on_train_epoch_end(self, trainer, pl_module):
         for key, value in trainer.callback_metrics.items():
@@ -521,7 +520,6 @@ class LiveLossPlot(Callback):
         self.plot_losses()
 
     def plot_losses(self):
-        plt.rcParams['figure.figsize'] = self.figsize
         fig, ax = plt.subplots(figsize=self.figsize)
         epochs_to_show = 25  # Number of most recent epochs to display
 
