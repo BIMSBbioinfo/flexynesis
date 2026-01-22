@@ -1579,22 +1579,28 @@ import requests
 from io import StringIO
 
 class CBioPortalData:
-    def __init__(self, study_id, base_url="https://cbioportal-datahub.s3.amazonaws.com"):
+    def __init__(self, study_id, base_url="https://datahub.assets.cbioportal.org"):
         self.base_url = base_url
         self.study_id = study_id
         self.data_files = None
         self.data = None
     
-    def download_study_archive(self):
+    def download_study_archive(self, force=False, timeout=60):
         url = f"{self.base_url}/{self.study_id}.tar.gz"
         dest_file = f"{self.study_id}.tar.gz"
-        
-        if not os.path.exists(dest_file):
-            print(f"Downloading {url}...")
-            response = requests.get(url, stream=True)
-            with open(dest_file, "wb") as file:
-                for chunk in response.iter_content(chunk_size=8192):
-                    file.write(chunk)
+
+        if os.path.exists(dest_file) and not force:
+            return dest_file
+
+        print(f"Downloading {url}...")
+        r = requests.get(url, stream=True, allow_redirects=True, timeout=timeout)
+        r.raise_for_status()  # <-- key: fail fast on 404/403/etc.
+
+        with open(dest_file, "wb") as f:
+            for chunk in r.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+
         return dest_file
     
     def extract_archive(self, archive_path):
