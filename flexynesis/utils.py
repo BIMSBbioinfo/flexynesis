@@ -93,6 +93,7 @@ def get_color_mapping(labels):
     Uses high-contrast palettes: tab10, tab20, Dark2, Accent.
     """
     lbls = pd.Series(_labels_to_1d(labels), dtype="object").astype(str)
+    lbls = lbls.fillna("NA")
     unique_labels = sorted(pd.unique(lbls))
     n = len(unique_labels)
 
