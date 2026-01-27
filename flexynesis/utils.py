@@ -996,6 +996,7 @@ def print_summary_stats(dataset):
         print("------")
 
 
+
     
 def find_optimal_cutoff(expression, time, event, min_percent=0.1, max_percent=0.9, step=0.01):
     """
@@ -1033,6 +1034,56 @@ def find_optimal_cutoff(expression, time, event, min_percent=0.1, max_percent=0.
             best_cutoff = cutoff
 
     return best_cutoff, best_p
+
+from collections import deque
+
+def recursive_binary_split_minN(df, score='pred_risk', time='OS.time', event='OS',
+                                alpha=0.05, min_samples_per_group=25):
+    """
+    Recursively split df by optimal cutoff from flexynesis.utils.find_optimal_cutoff.
+    Stop splitting when pval >= alpha or resulting child would have < min_samples_per_group.
+    Returns df.copy() with 'auto_group' integer labels.
+    """
+    df = df.copy()
+    groups = {}
+    next_gid = 0
+    queue = deque([df])
+
+    while queue:
+        node = queue.popleft()
+        n = len(node)
+        # if node too small to split into two valid children, make leaf
+        if n < 2 * min_samples_per_group:
+            groups.update({i: next_gid for i in node.index})
+            next_gid += 1
+            continue
+
+        try:
+            cutoff, pval = find_optimal_cutoff(node[score], node[time], node[event])
+        except Exception:
+            cutoff, pval = None, 1.0
+
+        # reject split if no cutoff or not significant
+        if cutoff is None or pval >= alpha:
+            groups.update({i: next_gid for i in node.index})
+            next_gid += 1
+            continue
+
+        left = node[node[score] <= cutoff]
+        right = node[node[score] >  cutoff]
+
+        # if either resulting child is smaller than required, reject split
+        if len(left) < min_samples_per_group or len(right) < min_samples_per_group:
+            groups.update({i: next_gid for i in node.index})
+            next_gid += 1
+            continue
+
+        # accept split: enqueue children
+        queue.append(left)
+        queue.append(right)
+
+    df['auto_group'] = df.index.map(groups)
+    return df
 
     
 def plot_hazard_ratios(cox_model):
