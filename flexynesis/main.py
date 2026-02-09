@@ -109,6 +109,19 @@ class HyperparameterTuning:
         self.gnn_conv_type = gnn_conv_type
         self.input_layers = input_layers
         self.output_layers = output_layers 
+        
+        # Automatically disable multiprocessing on macOS in GHA to prevent permission error.
+        import os
+        import platform
+        if (platform.system() == 'Darwin' 
+            and os.environ.get("GITHUB_ACTIONS") == "true" 
+            and num_workers > 0):
+            import warnings
+            warnings.warn(
+                f"Detected macOS in GHA: Setting num_workers=0 (was {num_workers}) to avoid permission error in GHA.",
+                UserWarning
+            )
+            num_workers = 0
         self.num_workers = num_workers
         
         self.DataLoader = torch.utils.data.DataLoader # use torch data loader by default
