@@ -215,10 +215,14 @@ class DataImporter:
         print("[INFO] Test Data Stats: ", testing_dataset.get_dataset_stats())
         print("[INFO] Merging Feature Logs...")
         logs = self.feature_logs
-        self.feature_logs = {x: pd.merge(logs['cleanup'][x],
-                                         logs['select_features'][x],
-                                         on = 'feature', how = 'outer',
-                                         suffixes=['_cleanup', '_laplacian']) for x in self.data_types}
+        if 'select_features' in logs:
+            self.feature_logs = {x: pd.merge(logs['cleanup'][x],
+                                             logs['select_features'][x],
+                                             on = 'feature', how = 'outer',
+                                             suffixes=['_cleanup', '_laplacian']) for x in self.data_types}
+        else:
+            # Feature selection was skipped (top_percentile=0), so just use cleanup logs
+            self.feature_logs = logs['cleanup']
         print("[INFO] Data import successful.")
 
         return training_dataset, testing_dataset
