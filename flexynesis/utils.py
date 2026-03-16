@@ -318,7 +318,7 @@ def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Valu
     )
 
     plt.tight_layout()
-    plt.show()
+    return plt.gcf()
 
 # given a vector of numerical values which may contain
 # NAN values, return a binary grouping based on median values
@@ -1367,7 +1367,7 @@ def plot_label_concordance_heatmap(labels1, labels2, figsize=(12, 10)):
     plt.figure(figsize = figsize)
     sns.heatmap(ct_normalized, annot=True,cmap='viridis', linewidths=.5)# col_cluster=False)
     plt.title('Concordance between label groups')
-    plt.show()
+    return plt.gcf()
 
 def scale_and_standardize_by_labels(data_matrix, labels):
 
