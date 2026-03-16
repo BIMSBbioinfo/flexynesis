@@ -9,7 +9,7 @@ import tarfile
 import os
 from glob import glob
 import re
-import logging 
+import logging
 from tqdm import tqdm
 
 from umap import UMAP
@@ -50,7 +50,7 @@ from plotnine import (
     geom_errorbarh, geom_text,
     theme_bw, theme, element_blank, scale_y_discrete
 )
-    
+
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import euclidean_distances
@@ -58,7 +58,7 @@ import networkx as nx
 import community as community_louvain
 
 from sklearn.preprocessing import StandardScaler
-import ot 
+import ot
 
 
 # imports
@@ -252,19 +252,19 @@ def plot_scatter(true_values, predicted_values):
     # Convert to numpy arrays (if not already)
     true_values = np.array(true_values)
     predicted_values = np.array(predicted_values)
-    
+
     # Filter out NaN values
     not_nan_indices = ~np.isnan(true_values) & ~np.isnan(predicted_values)
     true_values = true_values[not_nan_indices]
     predicted_values = predicted_values[not_nan_indices]
-    
+
     # Calculate correlation coefficient
     corr, _ = pearsonr(true_values, predicted_values)
     corr_text = f"Pearson r: {corr:.2f}"
-    
+
     # Create DataFrame
     df = pd.DataFrame({"True Values": true_values, "Predicted Values": predicted_values})
-    
+
     # Generate scatter plot with regression line
     plot = (
         ggplot(df, aes(x="True Values", y="Predicted Values")) +
@@ -278,15 +278,15 @@ def plot_scatter(true_values, predicted_values):
         ) +
         theme_minimal()
     )
-    
+
     return plot
-    
-    
+
+
 from scipy.stats import mannwhitneyu, kruskal
 
 def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Values', figsize=(10, 6), jittersize = 4):
     df = pd.DataFrame({title_x: categorical_x, title_y: numerical_y})
-    
+
     # Compute p-value
     groups = df[title_x].unique()
     if len(groups) == 2:
@@ -319,12 +319,12 @@ def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Valu
 
     plt.tight_layout()
     plt.show()
-    
-# given a vector of numerical values which may contain 
-# NAN values, return a binary grouping based on median values 
+
+# given a vector of numerical values which may contain
+# NAN values, return a binary grouping based on median values
 def split_by_median(v):
     return ((v - torch.nanmedian(v)) > 0).float()
-    
+
 def evaluate_survival(outputs, durations, events):
     """
     Computes the concordance index (c-index) for survival predictions.
@@ -360,7 +360,7 @@ def generate_bootstrap_indices(n, n_bootstraps=1000, seed=42):
     rng = np.random.default_rng(seed)
     return [rng.choice(n, size=n, replace=True) for _ in range(n_bootstraps)]
 
-# bootstrapping function for regression/classification tasks 
+# bootstrapping function for regression/classification tasks
 def bootstrap_metric(y_true, y_pred, indices_list, metric_fn, ci = 95, **kwargs):
     scores = []
     y_true = np.array(y_true)
@@ -377,7 +377,7 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     """
     Evaluate the performance of a classifier using multiple metrics and optionally print a detailed classification report.
 
-    This function computes balanced accuracy, F1 score (weighted), Cohen's Kappa score, average AUROC score, and 
+    This function computes balanced accuracy, F1 score (weighted), Cohen's Kappa score, average AUROC score, and
     weighted-average AUC-PR score for the given true labels and predicted probabilities.
     If `print_report` is set to True, it prints a detailed classification report.
 
@@ -406,7 +406,7 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     # Cohen's Kappa
     kappa = cohen_kappa_score(y_true, y_pred)
 
-    # Compute AUROC/AUPR 
+    # Compute AUROC/AUPR
     try:
         if y_probs.shape[1] == 2:  # Binary classification
             y_probs_binary = y_probs[:, 1]  # Use positive class probabilities
@@ -561,12 +561,12 @@ def evaluate_regressor(y_true, y_pred):
     """
     mse = mean_squared_error(y_true, y_pred)
     slope, intercept, r_value, p_value, std_err = linregress(y_true,y_pred)
-    r2 = r_value**2 
+    r2 = r_value**2
     return {"mse": mse, "r2": r2, "pearson_corr": r_value}
 
 def evaluate_wrapper(method, y_pred_dict, dataset, surv_event_var = None, surv_time_var = None):
     """
-    Evaluates predictions for different variables within a dataset using appropriate metrics based on the variable type. 
+    Evaluates predictions for different variables within a dataset using appropriate metrics based on the variable type.
     Supports evaluation for numerical, categorical, and survival data.
 
     This function loops through each variable in the predictions dictionary, determines the type of the variable,
@@ -628,7 +628,7 @@ def get_predicted_labels(y_pred_dict, dataset, split, method_name):
             - known label (y_true)
             - predicted label (argmax of the probabilities)
             - train/test split
-            - method_name 
+            - method_name
     """
     dfs = []
 
@@ -736,7 +736,7 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
 
     metrics_list = []
     predictions = []  # Collect all predictions
-    
+
     for method in methods:
         if variable_type == 'categorical':
             if method == 'RandomForest':
@@ -777,7 +777,7 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
         # need to get test indices to only consider samples with labels
         df_preds = get_predicted_labels(y_pred_dict, test_dataset.subset(test_indices), 'test', method)
         predictions.append(df_preds)
-            
+
         for metric, value in metrics.items():
             metrics_list.append({
                 'method': method + ('Classifier' if variable_type == 'categorical' else 'Regressor'),
@@ -788,7 +788,7 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
             })
 
     predictions = pd.concat(predictions, ignore_index=True)
-    
+
     return pd.DataFrame(metrics_list), predictions
 
 
@@ -797,8 +797,8 @@ def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration
     """
     Evaluates the baseline performance of a Random Survival Forest model on survival data using the Concordance Index.
 
-    The function preprocesses both training and testing datasets to prepare appropriate survival data (comprising durations 
-    and event occurrences), performs cross-validation to assess model robustness, and then calculates the Concordance Index on 
+    The function preprocesses both training and testing datasets to prepare appropriate survival data (comprising durations
+    and event occurrences), performs cross-validation to assess model robustness, and then calculates the Concordance Index on
     the test data. It uses a Random Survival Forest (RSF) as the predictive model.
 
     Args:
@@ -818,13 +818,13 @@ def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration
     def prepare_data(data_object, duration_col, event_col):
         # Concatenate Data Matrices
         X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=1)
-        
+
         # Prepare Survival Data (Durations and Events)
         durations = np.array(data_object.ann[duration_col])
         events = np.array(data_object.ann[event_col])
-        y = np.array([(event, duration) for event, duration in zip(events, durations)], 
+        y = np.array([(event, duration) for event, duration in zip(events, durations)],
                      dtype=[('Event', '?'), ('Time', '<f8')])
-        
+
         # Filter out samples without a valid survival data
         valid_indices = ~np.isnan(durations) & ~np.isnan(events)
         X = X[valid_indices]
@@ -846,7 +846,7 @@ def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration
     for train_index, test_index in kf.split(X_train):
         X_fold_train, X_fold_test = X_train[train_index], X_train[test_index]
         y_fold_train, y_fold_test = y_train[train_index], y_train[test_index]
-        
+
         rsf.fit(X_fold_train, y_fold_train)
         prediction = rsf.predict(X_fold_test)
         c_index = concordance_index_censored(y_fold_test['Event'], y_fold_test['Time'], prediction)
@@ -862,25 +862,25 @@ def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration
     test_c_index = concordance_index_censored(y_test['Event'], y_test['Time'], test_prediction)
     print(f"[INFO] C-index on test data: {test_c_index[0]}")
 
-    
+
     # need to get test indices to only consider samples with labels
     predicted_labels = get_predicted_labels({event_col: test_prediction}, test_dataset.subset(test_indices), 'test', 'RandomSurvivalForest')
     # Reporting
     metrics_list = [{
         'method': 'RandomSurvivalForest',
-        'var': event_col, 
+        'var': event_col,
         'variable_type': 'numerical',
         'metric': 'cindex',
         'value': test_c_index[0]
     }]
-    
+
     return pd.DataFrame(metrics_list), predicted_labels
 
 def remove_batch_associated_variables(data, variable_types, target_dict, batch_dict = None, mi_threshold=0.1):
     """
-    Filter the data matrix to keep only the columns that are predictive of the target variables 
+    Filter the data matrix to keep only the columns that are predictive of the target variables
     and not predictive of the batch variables.
-    
+
     Args:
         data (pd.DataFrame): The data matrix.
         target_dict (dict): A dictionary of target variables.
@@ -888,7 +888,7 @@ def remove_batch_associated_variables(data, variable_types, target_dict, batch_d
         variable_types (dict): A dictionary of variable types (either "numerical" or "categorical").
         mi_threshold (float, optional): The mutual information threshold for a column to be considered predictive.
                                         Defaults to 0.1.
-    
+
     Returns:
         pd.DataFrame: The filtered data matrix.
     """
@@ -902,7 +902,7 @@ def remove_batch_associated_variables(data, variable_types, target_dict, batch_d
         # Skip if all values are missing
         if np.all(np.isnan(target)):
             continue
-            
+
         # Subset data and target where target is not missing
         not_missing = ~np.isnan(target)
         data_sub = data[not_missing]
@@ -912,7 +912,7 @@ def remove_batch_associated_variables(data, variable_types, target_dict, batch_d
             clf = RandomForestClassifier()
         else:  # numerical
             clf = RandomForestRegressor()
-            
+
         clf = clf.fit(data_sub, target_sub)
         model = SelectFromModel(clf, prefit=True)
         important_features.update(data.columns[model.get_support()])
@@ -955,7 +955,7 @@ def get_important_features(model, var, top=20):
     return top_features
 
 def subset_assays_by_features(dataset, features_dict):
-    # Find indices of the features in the corresponding 
+    # Find indices of the features in the corresponding
     # data matrix for each key in features_dict
     subset_dat = {}
     for layer in features_dict.keys():
@@ -966,24 +966,24 @@ def subset_assays_by_features(dataset, features_dict):
     for layer, data in subset_dat.items():
         # Convert matrix to DataFrame
         df_temp = pd.DataFrame(data)
-        
+
         # Rename columns to prepend with layer name
         df_temp.columns = [f"{layer}_{feature}" for feature in features_dict[layer]]
         df_list.append(df_temp)
     # Concatenate dataframes horizontally
     concatenated_df = pd.concat(df_list, axis=1)
-    return concatenated_df    
+    return concatenated_df
 
 # Accepts as input a MultiOmicDataset object and prints summary stats per variable
 def print_summary_stats(dataset):
     for var, tensor in dataset.ann.items():
         print(f"Summary for variable: {var}")
-        
+
         if dataset.variable_types[var] == "categorical":
             # Handle Categorical Variable
             unique_vals, counts = np.unique(tensor, return_counts=True)
             print("Categorical Variable Summary:")
-            
+
             for uv, cnt in zip(unique_vals, counts):
                 original_label = dataset.label_mappings.get(var, {}).get(uv, uv)  # Fall back to uv if mapping doesn't exist
                 print(f"  Label: {original_label}, Count: {cnt}")
@@ -997,12 +997,12 @@ def print_summary_stats(dataset):
 
 
 
-    
+
 def find_optimal_cutoff(expression, time, event, min_percent=0.1, max_percent=0.9, step=0.01):
     """
     Find the optimal cutoff in a continuous variable (e.g., gene expression)
     that best separates survival curves based on log-rank test.
-    
+
     Parameters:
     - expression: pd.Series (continuous values)
     - time: survival time vector (aligned)
@@ -1016,7 +1016,7 @@ def find_optimal_cutoff(expression, time, event, min_percent=0.1, max_percent=0.
     """
     quantiles = np.arange(min_percent, max_percent, step)
     cutoffs = expression.quantile(quantiles).unique()
-    
+
     best_p = 1
     best_cutoff = None
 
@@ -1085,7 +1085,7 @@ def recursive_binary_split_minN(df, score='pred_risk', time='OS.time', event='OS
     df['auto_group'] = df.index.map(groups)
     return df
 
-    
+
 def plot_hazard_ratios(cox_model):
     """
     Plots the sorted log hazard ratios using plotnine from a fitted Cox Proportional Hazards model,
@@ -1094,7 +1094,7 @@ def plot_hazard_ratios(cox_model):
     # Handle case where cox_model is a tuple (model, metrics) from build_cox_model
     if isinstance(cox_model, tuple):
         cox_model = cox_model[0]
-    
+
     # Extract summary
     coef_summary = cox_model.summary[['coef', 'coef lower 95%', 'coef upper 95%', 'p']].copy()
     coef_summary.columns = ['coef', 'coef_lower_95', 'coef_upper_95', 'p']
@@ -1115,7 +1115,7 @@ def plot_hazard_ratios(cox_model):
             return '.'
         else:
             return ''
-    
+
     coef_summary_sorted['stars'] = coef_summary_sorted['p'].apply(significance)
 
     # Reverse the order for top-to-bottom importance
@@ -1144,7 +1144,7 @@ def plot_hazard_ratios(cox_model):
             plot_title=element_text(weight='bold'),
         )
     )
-    return p    
+    return p
 
 def build_cox_model(
     df: pd.DataFrame,
@@ -1268,12 +1268,12 @@ def louvain_clustering(X, threshold=None, k=None):
     """
     Create a graph from pairwise distances within X. You can define a threshold to connect edges
     or specify k for k-nearest neighbors.
-    
+
     Parameters:
     - X: numpy array, shape (n_samples, n_features)
     - threshold: float, distance threshold to create an edge between two nodes.
     - k: int, number of nearest neighbors to connect for each node.
-    
+
     Returns:
     - G: a networkx graph
     """
@@ -1289,7 +1289,7 @@ def louvain_clustering(X, threshold=None, k=None):
                 if np.argsort(distances[i])[:k + 1].__contains__(j):
                     G.add_edge(i, j, weight=1/distances[i, j])
     partition = community_louvain.best_partition(G)
-    
+
     cluster_labels = np.full(len(X), np.nan, dtype=float)
     # Fill the array with the cluster labels from the partition dictionary
     for node_id, cluster_label in partition.items():
@@ -1327,16 +1327,16 @@ def get_optimal_clusters(data, min_k=2, max_k=10):
         silhouette_scores.append((k, silhouette_avg))
         cluster_labels_dict[k] = cluster_labels  # Store cluster labels
         #print(f"Number of clusters: {k}, Silhouette Score: {silhouette_avg:.4f}")
-    
+
     # Convert silhouette scores to DataFrame for easier handling and visualization
     silhouette_scores_df = pd.DataFrame(silhouette_scores, columns=['k', 'silhouette_score'])
-    
+
     # Find the optimal k (number of clusters) with the highest silhouette score
     optimal_k = silhouette_scores_df.loc[silhouette_scores_df['silhouette_score'].idxmax()]['k']
-    
+
     # Retrieve the cluster labels for the optimal k
     optimal_cluster_labels = cluster_labels_dict[optimal_k]
-    
+
     return optimal_cluster_labels, optimal_k, silhouette_scores_df
 
 # compute adjusted rand index; adjusted mutual information for two sets of paired labels
@@ -1362,18 +1362,18 @@ def plot_label_concordance_heatmap(labels1, labels2, figsize=(12, 10)):
     ct = pd.crosstab(pd.Series(labels1, name='Labels Set 1'), pd.Series(labels2, name='Labels Set 2'))
     # Normalize the cross-tabulation matrix column-wise
     ct_normalized = ct.div(ct.sum(axis=1), axis=0)
-    
+
     # Plot the heatmap
     plt.figure(figsize = figsize)
     sns.heatmap(ct_normalized, annot=True,cmap='viridis', linewidths=.5)# col_cluster=False)
     plt.title('Concordance between label groups')
     plt.show()
-    
+
 def scale_and_standardize_by_labels(data_matrix, labels):
-    
+
     """
     Scale and standardize data_matrix by factor labels.
-    Data is split by factors and each subset is scaled/standardized. 
+    Data is split by factors and each subset is scaled/standardized.
 
     Parameters:
     - data_matrix (numpy.ndarray): The matrix of shape (n_samples, n_features).
@@ -1411,7 +1411,7 @@ def scale_and_standardize_by_labels(data_matrix, labels):
 # given a pandas data frame, go through each column and find out if the column is numeric or categorical
 def get_variable_types(df):
     # Select only the categorical columns
-    df_categorical = df.select_dtypes(include=['object', 'category']) 
+    df_categorical = df.select_dtypes(include=['object', 'category'])
     variable_types = {col: 'categorical' for col in df_categorical.columns}
     variable_types.update({col: 'numerical' for col in df.select_dtypes(exclude=['object', 'category']).columns})
     return variable_types
@@ -1458,7 +1458,7 @@ def create_covariate_matrix(covariates, variable_types, ann):
 
     return covariate_matrix
 
-def generate_synthetic_batches (n_samples_per_batch = 150,  n_features = 50):    
+def generate_synthetic_batches (n_samples_per_batch = 150,  n_features = 50):
     # Generate batch 1 data (mean centered at 0, standard deviation 1)
     batch1_data = np.random.normal(loc=0.0, scale=1.0, size=(n_samples_per_batch, n_features))
 
@@ -1520,7 +1520,7 @@ def optimal_transport_align(embeddings, batch_labels, standardize_by_labels = Fa
     aligned_embeddings[batch2_indices] = aligned_batch2
 
     # Standardize the aligned embeddings separately for each batch
-    if standardize_by_labels: 
+    if standardize_by_labels:
         scaler1 = StandardScaler()
         scaler2 = StandardScaler()
 
@@ -1618,8 +1618,8 @@ def reciprocal_pca_mnn(embeddings, batch_labels, n_components=10, n_neighbors=5,
     aligned_embeddings[batch2_indices] = aligned_batch2
 
     # Convert back to pandas DataFrame and Series, preserving indices
-    aligned_embeddings_df = pd.DataFrame(aligned_embeddings, 
-                                         columns=[f"rPCA_{i+1}" for i in range(n_components)], 
+    aligned_embeddings_df = pd.DataFrame(aligned_embeddings,
+                                         columns=[f"rPCA_{i+1}" for i in range(n_components)],
                                          index=embeddings.index)
     aligned_batch_labels = pd.Series(batch_labels, index=embeddings.index, name="batch_labels")
 
@@ -1636,7 +1636,7 @@ class CBioPortalData:
         self.study_id = study_id
         self.data_files = None
         self.data = None
-    
+
     def download_study_archive(self, force=False, timeout=60):
         url = f"{self.base_url}/{self.study_id}.tar.gz"
         dest_file = f"{self.study_id}.tar.gz"
@@ -1654,65 +1654,65 @@ class CBioPortalData:
                     f.write(chunk)
 
         return dest_file
-    
+
     def extract_archive(self, archive_path):
         base = archive_path.split(".")[0]
-        
+
         if not os.path.exists(base):
             print(f"Extracting {archive_path}...")
             with tarfile.open(archive_path, "r:gz") as tar:
                 tar.extractall()
-        
+
         self.data_files = [f for f in os.listdir(base) if f.startswith("data_") and f.endswith(".txt")]
         return base
-    
+
     def read_data(self, files=None):
         if files is None:
             files = self.data_files
-        
+
         data = {}
         for datatype, file in files.items():
             print(f"Importing {file}...")
             file_path = os.path.join(self.study_id, file)
             df = pd.read_csv(file_path, sep='\t', comment='#', low_memory=False)
-            
+
             if 'mutations' in file:
                 print(f"Binarizing and converting {file} to matrix...")
                 df = self.binarize_mutations(df)
             elif 'clinical' not in file and 'drug_treatment' not in file:
                 print(f"Converting {file} to matrix...")
                 df = self.process_data(df)
-            
-            data[datatype] = df        
+
+            data[datatype] = df
         return data
-    
+
     def process_data(self, df):
         if 'Hugo_Symbol' in df.columns and 'Entrez_Gene_Id' in df.columns:
             df = df.drop(columns=['Entrez_Gene_Id'], errors='ignore')
-        
+
         if 'Hugo_Symbol' in df.columns:
             df = df.drop_duplicates(subset=['Hugo_Symbol'])
             df.set_index('Hugo_Symbol', inplace=True)
-        
+
         return df
-    
+
     def binarize_mutations(self, df):
         required_cols = ["Hugo_Symbol", "Tumor_Sample_Barcode"]
-        
+
         for col in required_cols:
             if col not in df.columns:
                 raise ValueError(f"Can't map mutations to sample IDs. Column {col} not found.")
-        
+
         mutation_counts = df.groupby(["Hugo_Symbol", "Tumor_Sample_Barcode"]).size().reset_index(name='count')
         mutation_matrix = mutation_counts.pivot(index='Hugo_Symbol', columns='Tumor_Sample_Barcode', values='count').fillna(0)
         mutation_matrix[mutation_matrix > 0] = 1
-        
+
         return mutation_matrix
-    
+
     def print_data_files(self):
         df = pd.DataFrame(self.data_files, columns=["Available Data Files"])
         print(df.to_string(index=False))
-        
+
     def get_cbioportal_data(self, study_id, files=None):
         archive_path = self.download_study_archive()
         study_dir = self.extract_archive(archive_path)
@@ -1731,8 +1731,8 @@ class CBioPortalData:
             data['clin'] = clin
 
         print({x: data[x].shape for x in data.keys()})
-        self.data = data 
-        
+        self.data = data
+
     def split_data(self, samples=None, ratio=0.7):
         if samples is None:
             samples = self.data['clin'].index.tolist()
@@ -1760,9 +1760,9 @@ class CBioPortalData:
 
             for file, df in data.items():
                 df.to_csv(os.path.join(split_dir, f"{file}.csv"), sep=',')
-                
-    
-    
+
+
+
 def compute_correlation_loss(embeddings, batch_labels):
     # Ensure batch_labels is a float tensor
     batch_labels = batch_labels.float()
@@ -1823,7 +1823,7 @@ def to_device_safe(tensor, device):
     # Handle both torch.device objects and string device names
     if isinstance(device, str):
         device = torch.device(device)
-    
+
     if device.type == "mps" and tensor.dtype == torch.float64:
         tensor = tensor.float()  # Convert to float32
     elif device.type == "mps" and tensor.dtype == torch.double:
@@ -1834,11 +1834,11 @@ def to_device_safe(tensor, device):
 def get_optimal_device(device_preference=None):
     """
     Automatically detect and return the optimal device for PyTorch operations.
-    
+
     Args:
         device_preference (str, optional): Preferred device type ('cuda', 'mps', 'cpu', 'auto').
                                          If None or 'auto', automatically selects the best available device.
-    
+
     Returns:
         tuple: (device_str, device_type) where:
             - device_str: String suitable for torch.device() and PyTorch Lightning accelerator
@@ -1846,7 +1846,7 @@ def get_optimal_device(device_preference=None):
     """
     if device_preference is None:
         device_preference = 'auto'
-    
+
     # If specific device is requested, validate and return it
     if device_preference == 'cuda':
         if torch.cuda.is_available():
@@ -1860,7 +1860,7 @@ def get_optimal_device(device_preference=None):
             warnings.warn("MPS requested but not available. Falling back to auto-detection.")
     elif device_preference == 'cpu':
         return 'cpu', 'cpu'
-    
+
     # Auto-detection logic (priority: CUDA > MPS > CPU)
     if torch.cuda.is_available():
         return 'cuda', 'gpu'
@@ -1873,10 +1873,10 @@ def get_optimal_device(device_preference=None):
 def get_device_memory_info(device_str):
     """
     Get memory information for the specified device.
-    
+
     Args:
         device_str (str): Device string ('cuda', 'mps', 'cpu')
-    
+
     Returns:
         dict: Memory information dictionary
     """
@@ -1892,7 +1892,7 @@ def get_device_memory_info(device_str):
         # MPS doesn't have the same detailed memory tracking as CUDA
         return {
             'allocated': 'N/A (MPS)',
-            'reserved': 'N/A (MPS)', 
+            'reserved': 'N/A (MPS)',
             'max_allocated': 'N/A (MPS)',
             'device_name': 'Apple Metal Performance Shaders',
             'device_count': 1
@@ -1901,7 +1901,7 @@ def get_device_memory_info(device_str):
         return {
             'allocated': 'N/A (CPU)',
             'reserved': 'N/A (CPU)',
-            'max_allocated': 'N/A (CPU)', 
+            'max_allocated': 'N/A (CPU)',
             'device_name': 'CPU',
             'device_count': 1
         }
@@ -1910,10 +1910,10 @@ def get_device_memory_info(device_str):
 def create_device_from_string(device_str):
     """
     Create a torch.device object from device string, with MPS support.
-    
+
     Args:
         device_str (str): Device string ('cuda', 'mps', 'cpu', 'gpu', 'auto')
-    
+
     Returns:
         torch.device: PyTorch device object
     """
