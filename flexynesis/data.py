@@ -623,12 +623,20 @@ class DataImporterInference:
             scaler = self.scalers[modality]
             df_scaled = pd.DataFrame(scaler.transform(df.values), index=df.index, columns=df.columns)
 
+            # Store as DataFrame for cross-modality intersection
+            test_data[modality] = df_scaled
             if samples is None:
                 samples = df_scaled.index.tolist()
 
-            # Convert to torch tensor
-            test_data[modality] = torch.from_numpy(df_scaled.values).float()
-
+        # Intersect samples across all modalities
+        if test_data:
+            sample_sets = [set(df.index) for df in test_data.values()]
+            common = list(sample_sets[0].intersection(*sample_sets[1:]))
+            samples = common
+            for modality in test_data:
+                test_data[modality] = torch.from_numpy(
+                    test_data[modality].loc[common].values
+                ).float()
 
         # Create covariates matrix if needed
         if 'covariates' in self.modalities and labels_df is not None:

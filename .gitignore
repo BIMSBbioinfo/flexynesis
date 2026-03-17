@@ -143,3 +143,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Test data and outputs
+test_data/
+test_output/
+test_infer_output/
+lgggbm_tcga_pub/
+
+# Patch scripts
+patch_*.py
+prepare_test_data.py

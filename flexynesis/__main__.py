@@ -475,16 +475,37 @@ def main():
         device = torch.device("cpu")  # Force CPU in inference mode
         print("[INFO] Inference mode: forcing device to CPU")
 
-        # Robust load across PyTorch versions & checkpoint types
-        try:
-            model = torch.load(args.pretrained_model, map_location=device, weights_only=False)
-        except TypeError:
-            model = torch.load(args.pretrained_model, map_location=device)
-        except Exception:
+        # Route to safetensors reconstruction or standard torch.load
+        if args.pretrained_model.endswith('.safetensors'):
+            from .inference import reconstruct_model
+            # Derive config path: same prefix as safetensors file
+            config_path = args.pretrained_model.replace('.safetensors', '_config.json')
+            if not os.path.exists(config_path):
+                # Try alongside the safetensors file with standard naming
+                base = args.pretrained_model.replace('.final_model.safetensors', '')
+                config_path = base + '.final_model_config.json'
+            if not os.path.exists(config_path):
+                raise FileNotFoundError(
+                    f"Cannot find config JSON for safetensors model. "
+                    f"Expected: {config_path}"
+                )
+            model = reconstruct_model(
+                safetensors_path=args.pretrained_model,
+                config_path=config_path,
+                artifacts_path=args.artifacts,
+                device="cpu",
+            )
+        else:
+            # Standard .pth load — robust across PyTorch versions
             try:
-                model = torch.load(args.pretrained_model, map_location=device, weights_only=True)
+                model = torch.load(args.pretrained_model, map_location=device, weights_only=False)
             except TypeError:
                 model = torch.load(args.pretrained_model, map_location=device)
+            except Exception:
+                try:
+                    model = torch.load(args.pretrained_model, map_location=device, weights_only=True)
+                except TypeError:
+                    model = torch.load(args.pretrained_model, map_location=device)
 
         # Extract model class name for metrics
         args.model_class = model.__class__.__name__
@@ -889,11 +910,12 @@ def main():
         if not metrics.empty:
             metrics.to_csv(os.path.join(args.outdir, '.'.join([args.prefix, 'baseline.stats.csv'])), header=True, index=False)
 
-    # save the trained model in file
-    if not args.safetensors:
-        torch.save(model, os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.pth'])))
-    else:
-        save_file(model.state_dict(), os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.safetensors'])))
+    # save the trained model in file (skip in inference mode)
+    if not in_infer:
+        if not args.safetensors:
+            torch.save(model, os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.pth'])))
+        else:
+            save_file(model.state_dict(), os.path.join(args.outdir, '.'.join([args.prefix, 'final_model.safetensors'])))
         # save model config as JSON
         config = {
             "model_class": model.__class__.__name__,
@@ -901,7 +923,7 @@ def main():
         }
         # Common attributes to save
         common_attrs = [
-            'input_dims', 'layers',
+            'input_dims', 'layers', 'input_layers', 'output_layers',
             'device_type', 'target_variables',
             'surv_event_var', 'surv_time_var',
             'config', 'current_epoch', 'num_layers'
