@@ -48,24 +48,24 @@ jobs:
       - name: Compile brca_subtypes.ipynb
         run: |
           notebook='examples/tutorials/brca_subtypes'
-          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel --iopub-timeout 3600 
+          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel --execution-timeout 3600 
 
       - name: Compile lgg_gbm.ipynb
         run: |
           notebook='examples/tutorials/survival_subtypes_LGG_GBM'
-          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel --iopub-timeout 3600
+          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel --execution-timeout 3600
 
       - name: Compile unsupervised-analysis
         run: |
           notebook='examples/tutorials/unsupervised_analysis_single_cell'
-          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel --iopub-timeout 3600
+          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel --execution-timeout 3600
 
       - name: Compile cbioportal
         run: |
           notebook='examples/tutorials/cbioportal'
-          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel --iopub-timeout 3600
+          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel --execution-timeout 3600
 
       - name: Compile gnn_custom_networks
         run: |
           notebook='examples/tutorials/gnn_custom_networks'
-          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel --iopub-timeout 3600
+          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel --execution-timeout 3600
