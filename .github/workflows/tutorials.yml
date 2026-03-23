@@ -26,10 +26,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -45,27 +45,34 @@ jobs:
         run: |
           python -m ipykernel install --user --name my_env_kernel --display-name "my_env_kernel"
 
-      - name: Compile brca_subtypes.ipynb
+      - name: Create papermill wrapper
         run: |
-          notebook='examples/tutorials/brca_subtypes'
-          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel 
+          cat > run_nb.py << 'EOF'
+          import sys
+          import papermill as pm
+          
+          notebook = sys.argv[1]
+          pm.execute_notebook(
+              f'examples/tutorials/{notebook}.ipynb',
+              f'examples/tutorials/{notebook}_out.ipynb',
+              parameters={'HPO_ITER': 1},
+              kernel_name='my_env_kernel',
+              execution_timeout=3600,
+              iopub_timeout=3600
+          )
+          EOF
+
+      - name: Compile brca_subtypes.ipynb
+        run: python run_nb.py brca_subtypes
 
       - name: Compile lgg_gbm.ipynb
-        run: |
-          notebook='examples/tutorials/survival_subtypes_LGG_GBM'
-          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
+        run: python run_nb.py survival_subtypes_LGG_GBM
 
       - name: Compile unsupervised-analysis
-        run: |
-          notebook='examples/tutorials/unsupervised_analysis_single_cell'
-          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
+        run: python run_nb.py unsupervised_analysis_single_cell
 
       - name: Compile cbioportal
-        run: |
-          notebook='examples/tutorials/cbioportal'
-          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
+        run: python run_nb.py cbioportal
 
       - name: Compile gnn_custom_networks
-        run: |
-          notebook='examples/tutorials/gnn_custom_networks'
-          papermill "${notebook}.ipynb" "${notebook}_out.ipynb" -p HPO_ITER 1 -k my_env_kernel
+        run: python run_nb.py gnn_custom_networks
