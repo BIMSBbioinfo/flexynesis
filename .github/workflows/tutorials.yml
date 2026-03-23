@@ -21,6 +21,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.13"]
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     name: Tutorials Python ${{ matrix.python-version }} on ${{ matrix.os }}
 
