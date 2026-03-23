@@ -861,10 +861,9 @@ class TripletMultiOmicDataset(Dataset):
         return len(self.dataset)
 
     def get_label_indices(self, labels):
-        labels_array = labels.numpy()
-        labels_set = set(l for l in labels_array if not np.isnan(l))
-        label_to_indices = {label: np.where(labels_array == label)[0]
-                            for label in labels_set}
+        labels_set = set(labels.numpy())
+        label_to_indices = {label: np.where(labels.numpy() == label)[0]
+                             for label in labels_set}
         return labels_set, label_to_indices
 
 
