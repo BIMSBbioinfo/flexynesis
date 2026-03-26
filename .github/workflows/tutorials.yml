@@ -60,7 +60,12 @@ jobs:
           pm.execute_notebook(
               f'examples/tutorials/{notebook}.ipynb',
               f'examples/tutorials/{notebook}_out.ipynb',
-              parameters={'HPO_ITER': 1},
+              parameters={
+                  'HPO_ITER': 1,
+                  'TOP_PERCENTILE': 0.5,
+                  'PLOT_LOSSES': False,
+                  'EARLY_STOP_PATIENCE': 1
+              },
               kernel_name='my_env_kernel',
               execution_timeout=3600,
               iopub_timeout=3600
