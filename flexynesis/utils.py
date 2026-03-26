@@ -33,7 +33,11 @@ from sklearn.feature_selection import SelectFromModel
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
 from sklearn.model_selection import KFold, cross_val_score, GridSearchCV
 
-from xgboost import XGBClassifier, XGBRegressor
+try:
+    from xgboost import XGBClassifier, XGBRegressor
+except Exception:
+    XGBClassifier = None
+    XGBRegressor = None
 
 from sksurv.ensemble import RandomSurvivalForest
 from sksurv.metrics import concordance_index_censored
@@ -746,6 +750,9 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
                 model = SVC(probability=True, random_state=42)
                 params = {'C': [0.1, 1, 10], 'kernel': ['rbf', 'poly']}
             elif method == 'XGBoost':
+                if XGBClassifier is None:
+                    print("[WARNING] XGBoost is not available (on macOS, run: brew install libomp). Skipping.")
+                    continue
                 model = XGBClassifier(eval_metric='logloss', random_state=42)
                 params = {'n_estimators': [100, 200, 300], 'max_depth': [3, 6, 9], 'learning_rate': [0.01, 0.1, 0.2]}
         elif variable_type == 'numerical':
@@ -756,6 +763,9 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
                 model = SVR()
                 params = {'C': [0.1, 1, 10], 'kernel': ['rbf', 'poly']}
             elif method == 'XGBoost':
+                if XGBRegressor is None:
+                    print("[WARNING] XGBoost is not available (on macOS, run: brew install libomp). Skipping.")
+                    continue
                 model = XGBRegressor(random_state=42)
                 params = {'n_estimators': [100, 200, 300], 'max_depth': [3, 6, 9], 'learning_rate': [0.01, 0.1, 0.2]}
 
