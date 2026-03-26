@@ -99,3 +99,35 @@ MultiTripletNetwork:
     name: epochs
     categories: [200]
 
+GNN:
+  - type: Integer
+    name: latent_dim
+    low: 16
+    high: 128
+  - type: Integer
+    name: node_embedding_dim
+    low: 4
+    high: 32
+  - type: Integer
+    name: num_convs
+    low: 1
+    high: 4
+  - type: Real
+    name: lr
+    low: 0.0001
+    high: 0.01
+    prior: log-uniform
+  - type: Integer
+    name: supervisor_hidden_dim
+    low: 8
+    high: 32
+  - type: Categorical
+    name: batch_size
+    categories: [32, 64, 128]
+  - type: Categorical
+    name: epochs
+    categories: [500]
+  - type: Categorical
+    name: activation
+    categories: ['relu']
+
