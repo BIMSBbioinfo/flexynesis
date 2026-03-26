@@ -680,6 +680,13 @@ def main():
         data_import_ram = process.memory_info().rss
 
         # classical ML baselines
+        if args.model_class == "XGBoost":
+            try:
+                from xgboost import XGBClassifier
+            except Exception:
+                raise ImportError(
+                    "XGBoost is not available. On macOS, install the OpenMP runtime: brew install libomp"
+                )
         if args.model_class in ["RandomForest", "SVM", "XGBoost"]:
             if args.target_variables:
                 var = args.target_variables.strip().split(',')[0]
