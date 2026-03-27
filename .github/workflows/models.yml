@@ -115,14 +115,3 @@ jobs:
           flexynesis --data_path dataset1 --model_class GNN --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_top_percentile 10 --log_transform False --data_types gex --outdir . --prefix erlotinib_gnn --early_stop_patience 3 --use_loss_weighting False --subsample 50
           flexynesis --pretrained_model erlotinib_gnn.final_model.pth --artifacts erlotinib_gnn.artifacts.joblib --data_path_test dataset1/test --target_variables Erlotinib
 
-      - name: Update badge
-        uses: Schneegans/dynamic-badges-action@v1.7.0
-        if: always()
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: 8ab5e247e31ba784601b14fe40bc1d00 
-          filename: flexynesis_${{ matrix.python-version }}_${{ matrix.os }}.json
-          label: ${{ matrix.python-version }}
-          message: ${{ job.status }}
-          color: ${{ job.status == 'success' && 'green' || 'red' }}
-

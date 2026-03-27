@@ -86,14 +86,3 @@ jobs:
 
       - name: Compile gnn_custom_networks
         run: python run_nb.py gnn_custom_networks
-
-      - name: Update badge
-        uses: Schneegans/dynamic-badges-action@v1.7.0
-        if: always()
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: 8ab5e247e31ba784601b14fe40bc1d00 
-          filename: flexynesis_${{ matrix.python-version }}_${{ matrix.os }}.json
-          label: ${{ matrix.python-version }}
-          message: ${{ job.status }}
-          color: ${{ job.status == 'success' && 'green' || 'red' }}
