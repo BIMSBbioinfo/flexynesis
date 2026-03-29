@@ -6,8 +6,6 @@ import time
 import random
 import warnings
 import json
-import numpy as np
-from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler
 import tracemalloc
 import psutil
 from . import __version__
@@ -972,6 +970,8 @@ def main():
                 print(f'[INFO] Wrote inference artifacts to {joblib_path}')
 
             elif args.safetensors or args.artifacts.endswith('.json'):
+                import numpy as np
+                from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler
                 json_ready = {
                     "schema_version": artifacts["schema_version"],
                     "data_types": artifacts["data_types"],
