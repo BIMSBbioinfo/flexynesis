@@ -480,7 +480,7 @@ def main():
         print("[INFO] Inference mode: forcing device to CPU")
 
         # Route to safetensors reconstruction or standard torch.load
-        if args.safetensors:
+        if args.safetensors or args.pretrained_model.endswith('.safetensors'):
             from .inference import reconstruct_model
             # Derive config path from model basename
             model_base = os.path.splitext(args.pretrained_model)[0]
@@ -966,12 +966,12 @@ def main():
                 'string_node_name': args.string_node_name,
             }
 
-            if not args.safetensors:
+            if not args.safetensors or args.artifacts.endswith('.joblib'):
                 joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
                 joblib.dump(artifacts, joblib_path)
                 print(f'[INFO] Wrote inference artifacts to {joblib_path}')
 
-            elif args.safetensors:
+            elif args.safetensors or args.artifacts.endswith('.json'):
                 json_ready = {
                     "schema_version": artifacts["schema_version"],
                     "data_types": artifacts["data_types"],
