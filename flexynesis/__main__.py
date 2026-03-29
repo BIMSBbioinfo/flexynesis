@@ -522,7 +522,7 @@ def main():
         importer = DataImporterInference(
             test_data_path=args.data_path_test,
             artifacts_path=args.artifacts,
-            use_json_artifacts=args.safetensors,
+            use_json_artifacts=(args.safetensors or (args.artifacts and args.artifacts.endswith('.json'))),
             verbose=True
         )
         test_dataset = importer.import_data()
@@ -964,12 +964,12 @@ def main():
                 'string_node_name': args.string_node_name,
             }
 
-            if not args.safetensors or args.artifacts.endswith('.joblib'):
+            if not args.safetensors:
                 joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
                 joblib.dump(artifacts, joblib_path)
                 print(f'[INFO] Wrote inference artifacts to {joblib_path}')
 
-            elif args.safetensors or args.artifacts.endswith('.json'):
+            elif args.safetensors:
                 import numpy as np
                 from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler
                 json_ready = {

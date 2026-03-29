@@ -645,7 +645,8 @@ class DataImporterInference:
                 if "feature_names_in" in encoder_dict:
                     enc.feature_names_in_ = np.array(encoder_dict["feature_names_in"], dtype=object)
                 if "_missing_indices" in encoder_dict:
-                    setattr(enc, "_missing_indices", {int(k): v for k, v in encoder_dict["_missing_indices"].items()})
+                    mi = encoder_dict["_missing_indices"]
+                    setattr(enc, "_missing_indices", {int(k): v for k, v in mi.items()} if isinstance(mi, dict) else mi)
                 if "_infrequent_enabled" in encoder_dict:
                     setattr(enc, "_infrequent_enabled", encoder_dict["_infrequent_enabled"])
                 label_encoders[variable] = enc
