@@ -285,20 +285,20 @@ def main():
         Save the model in SafeTensors format. Default: `False`.
 
     Inference mode (skip training):
-    
+
       To run *inference only*, provide **all three** of the following:
-      
+
         --pretrained_model (str): Path to a saved model file (e.g., `model.pth` or `.safetensors`).
         --artifacts (str): Path to the training artifacts bundle (e.g., `artifacts.joblib`).
         --data_path_test (str): Folder containing test-only data.
 
       Optional:
-      
+
         --join_key (str): Column in `clin.csv` used to join samples. Default: `JoinKey`.
 
       Behavior:
         When the three required arguments above are present, the CLI:
-        
+
           1) skips training and hyperparameter search,
           2) loads the pretrained model and artifacts,
           3) performs inference on `--data_path_test`,
@@ -306,19 +306,19 @@ def main():
           5) exits.
 
     Examples:
-    
+
       Train:
-      
+
         ```
-        flexynesis --data_path ./data --data_types gex,cnv --model_class DirectPred 
+        flexynesis --data_path ./data --data_types gex,cnv --model_class DirectPred
         ```
 
       Inference only:
-      
+
         ```
         flexynesis --pretrained_model ./outputs/best_model.pth --artifacts ./outputs/artifacts.joblib --data_path_test ./data_test --outdir ./predictions --prefix run1
         ```
-        
+
     """
 
     # Early help (no heavy imports)
@@ -400,9 +400,9 @@ def main():
                         help="(Optional) How many threads to use when using CPU (default is 4)")
     parser.add_argument("--num_workers", type=int, default=0,
                         help="(Optional) How many workers to use for model training (default is 0)")
-    parser.add_argument("--use_gpu", action="store_true", 
+    parser.add_argument("--use_gpu", action="store_true",
                         help="(Optional) DEPRECATED: Use --device instead. If set, attempts to use CUDA/GPU if available.")
-    parser.add_argument("--device", type=str, 
+    parser.add_argument("--device", type=str,
                         choices=["auto", "cuda", "mps", "cpu"], default="auto",
                         help="Device type: 'auto' (automatic detection), 'cuda' (NVIDIA GPU), 'mps' (Apple Silicon), 'cpu'")
     parser.add_argument("--feature_importance_method", type=str,
@@ -470,7 +470,7 @@ def main():
                 device_preference = "auto"
         else:
             device_preference = args.device
-        
+
         # Get optimal device for inference
         device = torch.device("cpu")  # Force CPU in inference mode
         print("[INFO] Inference mode: forcing device to CPU")
@@ -521,7 +521,7 @@ def main():
             verbose=True
         )
         test_dataset = importer.import_data()
-        
+
         # Convert to GNN dataset if needed
         if args.model_class == 'GNN':
             print("[INFO] Overlaying the dataset with network data from STRINGDB")
@@ -540,7 +540,7 @@ def main():
             modality_order = importer.artifacts.get("original_modalities", importer.artifacts.get("data_types"))
             test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df, modality_order=modality_order)
         train_dataset = None  # No training data in inference mode
-        
+
         # Move dataset to same device as model
         if hasattr(test_dataset, 'to_device'):
             test_dataset.to_device(device)
@@ -586,8 +586,8 @@ def main():
             if args.model_class == 'CrossModalPred':
                 parser.error("The 'CrossModalPred' model cannot be used with early fusion type. "
                              "Use --fusion_type intermediate instead.")
-            
-    
+
+
         # 4. Handle device selection with MPS support
         # Support legacy --use_gpu flag for backward compatibility
         if args.use_gpu:
@@ -602,10 +602,10 @@ def main():
                 device_preference = "auto"
         else:
             device_preference = args.device
-    
+
         # Get optimal device using new device detection
         device_str, device_type = get_optimal_device(device_preference)
-    
+
         # Print device information
         print(f"[INFO] Using device: {device_str}")
         if device_str != 'cpu':
@@ -748,7 +748,7 @@ def main():
             obj = STRING(os.path.join(args.data_path, '_'.join(['processed', args.prefix])),
                          args.string_organism, args.string_node_name)
             graph_df = obj.graph_df
-        
+
         # Use data_types order from args for consistent modality ordering
         modality_order = args.data_types.split(',')
         # Overlay the graph onto datasets
@@ -889,10 +889,10 @@ def main():
         else:
             train = train_dataset
             test = test_dataset
-        
-        if var != model.surv_event_var: 
-            metrics, predictions = evaluate_baseline_performance(train, test, 
-                                                               variable_name = var, 
+
+        if var != model.surv_event_var:
+            metrics, predictions = evaluate_baseline_performance(train, test,
+                                                               variable_name = var,
                                                                methods = ['RandomForest', 'SVM', 'XGBoost'],
                                                                n_folds = 5,
                                                                n_jobs = int(args.threads))
