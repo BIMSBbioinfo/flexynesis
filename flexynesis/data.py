@@ -774,11 +774,20 @@ class DataImporterInference:
                     encoder = self.label_encoders[col]
                     valid_mask = ~labels_df[col].isna()
                     encoded = np.full(len(labels_df), -1, dtype=np.int64)
-                    if valid_mask.sum() > 0:
-                        encoded[valid_mask] = encoder.transform(labels_df[col][valid_mask].values.reshape(-1, 1)).ravel()
-                    ann_dict[col] = torch.from_numpy(encoded)
-                    variable_types[col] = 'categorical'
-                    label_mappings[col] = {int(c): l for c, l in enumerate(encoder.categories_[0])}
+                    
+                    if hasattr(encoder, 'classes_'):  # LabelEncoder
+                        if valid_mask.sum() > 0:
+                            encoded[valid_mask] = encoder.transform(labels_df[col][valid_mask].values)
+                        ann_dict[col] = torch.from_numpy(encoded)
+                        variable_types[col] = 'categorical'
+                        label_mappings[col] = {int(c): l for c, l in enumerate(encoder.classes_)}
+                    else:  # OrdinalEncoder
+                        if valid_mask.sum() > 0:
+                            encoded[valid_mask] = encoder.transform(labels_df[col][valid_mask].values.reshape(-1, 1)).ravel()
+                        ann_dict[col] = torch.from_numpy(encoded)
+                        variable_types[col] = 'categorical'
+                        label_mappings[col] = {int(c): l for c, l in enumerate(encoder.categories_[0])}
+                    
                     label_mappings[col][-1] = 'Unknown'  # For missing values
                 else:
                     ann_dict[col] = torch.from_numpy(labels_df[col].values).float()
