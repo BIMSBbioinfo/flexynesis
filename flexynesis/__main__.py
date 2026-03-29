@@ -292,7 +292,7 @@ def main():
 
       To run *inference only*, provide **all three** of the following:
 
-        --pretrained_model (str): Path to a saved model file (e.g., `model.pth` or `.safetensors`).
+        --pretrained_model (str): Path to a saved model file (e.g., `model.pth` or `model.safetensors`).
         --artifacts (str): Path to the training artifacts bundle (e.g., `artifacts.joblib` or `artifacts.json`).
         --data_path_test (str): Folder containing test-only data.
 
@@ -425,7 +425,7 @@ def main():
                              "If provided, this will be used instead of STRING DB.")
     # safetensors args
     parser.add_argument("--safetensors", action="store_true",
-                        help="If set, the model will be saved in the SafeTensors format. Default is False.")
+                        help="If set, use SafeTensors + JSON artifacts for save/load (training and inference). Default is False.")
     # NEW: inference flags
     parser.add_argument("--pretrained_model", type=str, default=None,
                         help="Path to a saved model (.pth/.safetensors) to use for inference")
@@ -480,10 +480,11 @@ def main():
         print("[INFO] Inference mode: forcing device to CPU")
 
         # Route to safetensors reconstruction or standard torch.load
-        if args.pretrained_model.endswith('.safetensors'):
+        if args.safetensors:
             from .inference import reconstruct_model
-            # Derive config path: same prefix as safetensors file
-            config_path = args.pretrained_model.replace('.safetensors', '_config.json')
+            # Derive config path from model basename
+            model_base = os.path.splitext(args.pretrained_model)[0]
+            config_path = model_base + '_config.json'
             if not os.path.exists(config_path):
                 # Try alongside the safetensors file with standard naming
                 base = args.pretrained_model.replace('.final_model.safetensors', '')
@@ -498,6 +499,7 @@ def main():
                 config_path=config_path,
                 artifacts_path=args.artifacts,
                 device="cpu",
+                use_json_artifacts=True,
             )
         else:
             # Standard .pth load — robust across PyTorch versions
@@ -522,6 +524,7 @@ def main():
         importer = DataImporterInference(
             test_data_path=args.data_path_test,
             artifacts_path=args.artifacts,
+            use_json_artifacts=args.safetensors,
             verbose=True
         )
         test_dataset = importer.import_data()

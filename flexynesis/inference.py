@@ -97,7 +97,14 @@ def _resolve_input_dims(config, artifacts):
     return config
 
 
-def reconstruct_model(safetensors_path, config_path, artifacts_path, device="cpu"):
+def _load_artifacts(artifacts_path, use_json_artifacts=False):
+    if use_json_artifacts:
+        with open(artifacts_path, "r") as f:
+            return json.load(f)
+    return joblib.load(artifacts_path)
+
+
+def reconstruct_model(safetensors_path, config_path, artifacts_path, device="cpu", use_json_artifacts=False):
     """
     Reconstruct a full Flexynesis model from:
       - safetensors_path : .safetensors weights file
@@ -123,10 +130,10 @@ def reconstruct_model(safetensors_path, config_path, artifacts_path, device="cpu
         raise ValueError("Config JSON is missing 'model_class' field.")
     print(f"[INFO]   model_class: {model_class_name}")
 
-    # 2. Load artifacts (joblib)
+    # 2. Load artifacts
     if not os.path.exists(artifacts_path):
         raise FileNotFoundError(f"Artifacts file not found: {artifacts_path}")
-    artifacts = joblib.load(artifacts_path)
+    artifacts = _load_artifacts(artifacts_path, use_json_artifacts=use_json_artifacts)
 
     # 3. Resolve dims
     config = _resolve_input_dims(config, artifacts)

@@ -16,7 +16,7 @@ from platformdirs import user_cache_dir
 from tqdm import tqdm
 
 
-from sklearn.preprocessing import OrdinalEncoder, StandardScaler, MinMaxScaler, PowerTransformer
+from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler, MinMaxScaler, PowerTransformer
 from .feature_selection import filter_by_laplacian
 from .utils import get_variable_types, create_covariate_matrix
 
@@ -526,6 +526,7 @@ Add this to flexynesis/data.py
 """
 
 import os
+import json
 import pandas as pd
 import numpy as np
 import joblib
@@ -538,10 +539,10 @@ class DataImporterInference:
     Returns MultiOmicDataset object compatible with model.predict()
     """
 
-    def __init__(self, test_data_path, artifacts_path, verbose=True):
+    def __init__(self, test_data_path, artifacts_path, use_json_artifacts=False, verbose=True):
         self.test_data_path = test_data_path
         self.verbose = verbose
-        self.artifacts = joblib.load(artifacts_path)
+        self.artifacts = self._load_artifacts(artifacts_path, use_json_artifacts)
 
         # Map artifact keys to expected names (compatibility layer)
         self.feature_names = self.artifacts.get("feature_lists", self.artifacts.get("feature_names", {}))
@@ -563,6 +564,98 @@ class DataImporterInference:
 
         if self.verbose:
             print(f"[INFO] Loaded artifacts for modalities: {self.modalities}")
+
+    def _load_artifacts(self, artifacts_path, use_json_artifacts=False):
+        if use_json_artifacts:
+            with open(artifacts_path, 'r') as f:
+                raw = json.load(f)
+            return self._deserialize_json_artifacts(raw)
+        return joblib.load(artifacts_path)
+
+    def _deserialize_json_artifacts(self, artifacts):
+        # Rebuild sklearn objects expected by inference code.
+        deserialized = dict(artifacts)
+
+        transforms = {}
+        for modality, scaler_dict in artifacts.get("transforms", {}).items():
+            if scaler_dict is None:
+                transforms[modality] = None
+                continue
+            scaler_type = scaler_dict.get("type")
+            if scaler_type != "StandardScaler":
+                raise ValueError(f"Unsupported scaler type in artifacts JSON for '{modality}': {scaler_type}")
+
+            scaler = StandardScaler(
+                with_mean=scaler_dict.get("with_mean", True),
+                with_std=scaler_dict.get("with_std", True)
+            )
+            if "mean" in scaler_dict:
+                scaler.mean_ = np.array(scaler_dict["mean"], dtype=float)
+            if "scale" in scaler_dict:
+                scaler.scale_ = np.array(scaler_dict["scale"], dtype=float)
+            if "var" in scaler_dict:
+                scaler.var_ = np.array(scaler_dict["var"], dtype=float)
+            if "n_features_in" in scaler_dict:
+                scaler.n_features_in_ = int(scaler_dict["n_features_in"])
+            if "feature_names_in" in scaler_dict:
+                scaler.feature_names_in_ = np.array(scaler_dict["feature_names_in"], dtype=object)
+            if "n_samples_seen" in scaler_dict:
+                n_samples_seen = scaler_dict["n_samples_seen"]
+                scaler.n_samples_seen_ = np.array(n_samples_seen) if isinstance(n_samples_seen, list) else int(n_samples_seen)
+
+            transforms[modality] = scaler
+
+        label_encoders = {}
+        for variable, encoder_dict in artifacts.get("label_encoders", {}).items():
+            if encoder_dict is None:
+                label_encoders[variable] = None
+                continue
+
+            encoder_type = encoder_dict.get("type")
+            if encoder_type == "LabelEncoder":
+                enc = LabelEncoder()
+                enc.classes_ = np.array(encoder_dict.get("classes", []), dtype=object)
+                label_encoders[variable] = enc
+                continue
+
+            if encoder_type == "OrdinalEncoder":
+                categories = [np.array(cat, dtype=object) for cat in encoder_dict.get("categories", [])]
+                encoded_missing = encoder_dict.get("encoded_missing_value", np.nan)
+                if encoded_missing == "__NaN__":
+                    encoded_missing = np.nan
+
+                # encoded_missing_value is version-dependent in sklearn; fall back.
+                ordinal_kwargs = {
+                    "categories": categories,
+                    "handle_unknown": encoder_dict.get("handle_unknown", "error"),
+                    "unknown_value": encoder_dict.get("unknown_value", None),
+                }
+                try:
+                    enc = OrdinalEncoder(
+                        encoded_missing_value=encoded_missing,
+                        **ordinal_kwargs,
+                    )
+                except TypeError:
+                    enc = OrdinalEncoder(**ordinal_kwargs)
+                setattr(enc, "categories_", categories)
+                if "encoded_missing_value" in encoder_dict:
+                    setattr(enc, "encoded_missing_value", encoded_missing)
+                if "n_features_in" in encoder_dict:
+                    enc.n_features_in_ = int(encoder_dict["n_features_in"])
+                if "feature_names_in" in encoder_dict:
+                    enc.feature_names_in_ = np.array(encoder_dict["feature_names_in"], dtype=object)
+                if "_missing_indices" in encoder_dict:
+                    setattr(enc, "_missing_indices", {int(k): v for k, v in encoder_dict["_missing_indices"].items()})
+                if "_infrequent_enabled" in encoder_dict:
+                    setattr(enc, "_infrequent_enabled", encoder_dict["_infrequent_enabled"])
+                label_encoders[variable] = enc
+                continue
+
+            raise ValueError(f"Unknown encoder type in artifacts JSON for '{variable}': {encoder_type}")
+
+        deserialized["transforms"] = transforms
+        deserialized["label_encoders"] = label_encoders
+        return deserialized
 
     def import_data(self):
         """Returns MultiOmicDataset object"""
