@@ -6,6 +6,8 @@ import time
 import random
 import warnings
 import json
+import numpy as np
+from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler
 import tracemalloc
 import psutil
 from . import __version__
@@ -63,9 +65,9 @@ def print_full_help():
 
     # --- NEW: inference-only flags (keep in full help) ---
     print("  --pretrained_model PRETRAINED_MODEL")
-    print("                        Use a saved .pth model for inference (skip training)")
+    print("                        Use a saved .pth/.safetensors model for inference (skip training)")
     print("  --artifacts ARTIFACTS")
-    print("                        Path to training-time artifacts .joblib")
+    print("                        Path to training-time artifacts .joblib or .json")
     print("  --data_path_test DATA_PATH_TEST")
     print("                        Folder with test-only dataset for inference")
     print("  --join_key JOIN_KEY   Column name in 'clin.csv' for sample IDs")
@@ -143,7 +145,9 @@ def print_full_help():
     print("                        Path to user-provided gene-gene interaction network file.")
     print("                        Must have at least 3 columns: GeneA, GeneB, Score.")
     print("                        If provided, this will be used instead of STRING DB.")
-    print("  --safetensors         If set, the model will be saved in the SafeTensors format. Default is False.")
+    print("  --safetensors")
+    print("                        If set, the model will be saved in the SafeTensors format and the artifacts saved as JSON.")
+    print("                        Default is False.")
     print()
     print_test_installation()
     print()
@@ -289,7 +293,7 @@ def main():
       To run *inference only*, provide **all three** of the following:
 
         --pretrained_model (str): Path to a saved model file (e.g., `model.pth` or `.safetensors`).
-        --artifacts (str): Path to the training artifacts bundle (e.g., `artifacts.joblib`).
+        --artifacts (str): Path to the training artifacts bundle (e.g., `artifacts.joblib` or `artifacts.json`).
         --data_path_test (str): Folder containing test-only data.
 
       Optional:
@@ -424,9 +428,9 @@ def main():
                         help="If set, the model will be saved in the SafeTensors format. Default is False.")
     # NEW: inference flags
     parser.add_argument("--pretrained_model", type=str, default=None,
-                        help="Path to a saved model (.pth) to use for inference")
+                        help="Path to a saved model (.pth/.safetensors) to use for inference")
     parser.add_argument("--artifacts", type=str, default=None,
-                        help="Path to artifacts .joblib saved during training")
+                        help="Path to artifacts .joblib or .json saved during training")
     parser.add_argument("--data_path_test", type=str, default=None,
                         help="Folder with test-only dataset for inference")
     parser.add_argument("--join_key", type=str, default="JoinKey",
@@ -958,8 +962,76 @@ def main():
                 'string_organism': args.string_organism,
                 'string_node_name': args.string_node_name,
             }
-            joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
-            joblib.dump(artifacts, joblib_path)
-            print(f'[INFO] Wrote inference artifacts to {joblib_path}')
+
+            if not args.safetensors:
+                joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
+                joblib.dump(artifacts, joblib_path)
+                print(f'[INFO] Wrote inference artifacts to {joblib_path}')
+
+            elif args.safetensors:
+            json_ready = {
+                "schema_version": artifacts["schema_version"],
+                "data_types": artifacts["data_types"],
+                "original_modalities": artifacts["original_modalities"],
+                "target_variables": artifacts["target_variables"],
+                "covariate_vars": artifacts["covariate_vars"],
+                "join_key": artifacts["join_key"],
+                "string_organism": artifacts["string_organism"],
+                "string_node_name": artifacts["string_node_name"],
+                "feature_lists": {modality: list(features) for modality, features in artifacts["feature_lists"].items()},
+                "transforms": {},
+                "label_encoders": {},
+            }
+
+            # Convert StandardScaler objects
+            for modality, scaler in artifacts["transforms"].items():
+                if scaler is None:
+                    json_ready["transforms"][modality] = None
+                    continue
+                if not isinstance(scaler, StandardScaler):
+                    raise ValueError(f"Unsupported scaler type for modality '{modality}': {type(scaler).__name__}.")
+                scaler_dict = {"type": "StandardScaler", "with_mean": scaler.with_mean, "with_std": scaler.with_std}
+                if hasattr(scaler, "mean_"): scaler_dict["mean"] = scaler.mean_.tolist()
+                if hasattr(scaler, "scale_"): scaler_dict["scale"] = scaler.scale_.tolist()
+                if hasattr(scaler, "var_"): scaler_dict["var"] = scaler.var_.tolist()
+                if hasattr(scaler, "n_features_in_"): scaler_dict["n_features_in"] = int(scaler.n_features_in_)
+                if hasattr(scaler, "feature_names_in_"): scaler_dict["feature_names_in"] = scaler.feature_names_in_.tolist()
+                if hasattr(scaler, "n_samples_seen_"):
+                    n_samples = scaler.n_samples_seen_
+                    scaler_dict["n_samples_seen"] = n_samples.tolist() if isinstance(n_samples, np.ndarray) else int(n_samples)
+                json_ready["transforms"][modality] = scaler_dict
+
+            # Convert LabelEncoder/OrdinalEncoder objects
+            for variable, encoder in artifacts["label_encoders"].items():
+                if encoder is None:
+                    json_ready["label_encoders"][variable] = None
+                    continue
+                if isinstance(encoder, LabelEncoder):
+                    encoder_dict = {"type": "LabelEncoder", "classes": encoder.classes_.tolist()}
+                elif isinstance(encoder, OrdinalEncoder):
+                    encoder_dict = {
+                        "type": "OrdinalEncoder",
+                        "categories": [cat.tolist() for cat in encoder.categories_],
+                        "handle_unknown": encoder.handle_unknown,
+                        "unknown_value": encoder.unknown_value,
+                    }
+                    if hasattr(encoder, "encoded_missing_value"):
+                        val = encoder.encoded_missing_value
+                        encoder_dict["encoded_missing_value"] = "__NaN__" if isinstance(val, float) and np.isnan(val) else val
+                    if hasattr(encoder, "n_features_in_"): encoder_dict["n_features_in"] = int(encoder.n_features_in_)
+                    if hasattr(encoder, "feature_names_in_"): encoder_dict["feature_names_in"] = encoder.feature_names_in_.tolist()
+                    if hasattr(encoder, "_missing_indices"):
+                        missing_indices = encoder._missing_indices
+                        encoder_dict["_missing_indices"] = {str(k): v for k, v in missing_indices.items()} if isinstance(missing_indices, dict) else missing_indices
+                    if hasattr(encoder, "_infrequent_enabled"): encoder_dict["_infrequent_enabled"] = encoder._infrequent_enabled
+                else:
+                    raise ValueError(f"Unknown encoder type: {type(encoder).__name__}")
+                json_ready["label_encoders"][variable] = encoder_dict
+
+            json_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.json']))
+            with open(json_path, "w") as f:
+                json.dump(json_ready, f, indent=2)
+            print(f'[INFO] Wrote inference artifacts to {json_path}')
+
         except Exception as e:
             print(f'[WARN] Could not write inference artifacts: {e}')
