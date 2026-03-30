@@ -237,7 +237,7 @@ def reconstruct_model(safetensors_path, config_path, artifacts_path, device="cpu
     Reconstruct a full Flexynesis model from:
       - safetensors_path : .safetensors weights file
       - config_path      : final_model_config.json
-      - artifacts_path   : .artifacts.joblib
+      - artifacts_path   : .artifacts.joblib/json
       - device           : torch device string
 
     Returns a fully instantiated, weights-loaded, eval-mode model.
