@@ -97,7 +97,11 @@ def _resolve_input_dims(config, artifacts):
     return config
 
 
-def _load_artifacts(artifacts_path):
+def load_and_sniff_artifacts(artifacts_path):
+    """
+    Checks if an artifacts file is JSON or Joblib,
+    loads it appropriately, and returns (file_type, content).
+    """
     import json
     import joblib
 
@@ -126,11 +130,106 @@ def _load_artifacts(artifacts_path):
     file_type = check_file_type(artifacts_path)
     if file_type == "json":
         with open(artifacts_path, "r") as f:
-            return json.load(f)
+            raw = json.load(f)
+        return "json", raw
     elif file_type == "joblib":
-        return joblib.load(artifacts_path)
+        return "joblib", joblib.load(artifacts_path)
     else:
         raise ValueError(f"[ERROR] The artifacts file {artifacts_path} is neither a valid JSON nor a recognized Joblib format.")
+
+def _deserialize_json_artifacts(artifacts):
+    import numpy as np
+    from sklearn.preprocessing import StandardScaler, LabelEncoder, OrdinalEncoder
+    # Rebuild sklearn objects expected by inference code.
+    deserialized = dict(artifacts)
+
+    transforms = {}
+    for modality, scaler_dict in artifacts.get("transforms", {}).items():
+        if scaler_dict is None:
+            transforms[modality] = None
+            continue
+        scaler_type = scaler_dict.get("type")
+        if scaler_type != "StandardScaler":
+            raise ValueError(f"Unsupported scaler type in artifacts JSON for '{modality}': {scaler_type}")
+
+        scaler = StandardScaler(
+            with_mean=scaler_dict.get("with_mean", True),
+            with_std=scaler_dict.get("with_std", True)
+        )
+        if "mean" in scaler_dict:
+            scaler.mean_ = np.array(scaler_dict["mean"], dtype=float)
+        if "scale" in scaler_dict:
+            scaler.scale_ = np.array(scaler_dict["scale"], dtype=float)
+        if "var" in scaler_dict:
+            scaler.var_ = np.array(scaler_dict["var"], dtype=float)
+        if "n_features_in" in scaler_dict:
+            scaler.n_features_in_ = int(scaler_dict["n_features_in"])
+        if "feature_names_in" in scaler_dict:
+            scaler.feature_names_in_ = np.array(scaler_dict["feature_names_in"], dtype=object)
+        if "n_samples_seen" in scaler_dict:
+            n_samples_seen = scaler_dict["n_samples_seen"]
+            scaler.n_samples_seen_ = np.array(n_samples_seen) if isinstance(n_samples_seen, list) else int(n_samples_seen)
+
+        transforms[modality] = scaler
+
+    label_encoders = {}
+    for variable, encoder_dict in artifacts.get("label_encoders", {}).items():
+        if encoder_dict is None:
+            label_encoders[variable] = None
+            continue
+
+        encoder_type = encoder_dict.get("type")
+        if encoder_type == "LabelEncoder":
+            enc = LabelEncoder()
+            enc.classes_ = np.array(encoder_dict.get("classes", []), dtype=object)
+            label_encoders[variable] = enc
+            continue
+
+        if encoder_type == "OrdinalEncoder":
+            categories = [np.array(cat, dtype=object) for cat in encoder_dict.get("categories", [])]
+            encoded_missing = encoder_dict.get("encoded_missing_value", np.nan)
+            if encoded_missing == "__NaN__":
+                encoded_missing = np.nan
+
+            # encoded_missing_value is version-dependent in sklearn; fall back.
+            ordinal_kwargs = {
+                "categories": categories,
+                "handle_unknown": encoder_dict.get("handle_unknown", "error"),
+                "unknown_value": encoder_dict.get("unknown_value", None),
+            }
+            try:
+                enc = OrdinalEncoder(
+                    encoded_missing_value=encoded_missing,
+                    **ordinal_kwargs,
+                )
+            except TypeError:
+                enc = OrdinalEncoder(**ordinal_kwargs)
+            setattr(enc, "categories_", categories)
+            if "encoded_missing_value" in encoder_dict:
+                setattr(enc, "encoded_missing_value", encoded_missing)
+            if "n_features_in" in encoder_dict:
+                enc.n_features_in_ = int(encoder_dict["n_features_in"])
+            if "feature_names_in" in encoder_dict:
+                enc.feature_names_in_ = np.array(encoder_dict["feature_names_in"], dtype=object)
+            if "_missing_indices" in encoder_dict:
+                mi = encoder_dict["_missing_indices"]
+                setattr(enc, "_missing_indices", {int(k): v for k, v in mi.items()} if isinstance(mi, dict) else mi)
+            if "_infrequent_enabled" in encoder_dict:
+                setattr(enc, "_infrequent_enabled", encoder_dict["_infrequent_enabled"])
+            label_encoders[variable] = enc
+            continue
+
+        raise ValueError(f"Unknown encoder type in artifacts JSON for '{variable}': {encoder_type}")
+
+    deserialized["transforms"] = transforms
+    deserialized["label_encoders"] = label_encoders
+    return deserialized
+
+def _load_artifacts(artifacts_path):
+    file_type, raw = load_and_sniff_artifacts(artifacts_path)
+    if file_type == "json":
+        return _deserialize_json_artifacts(raw)
+    return raw
 
 
 def reconstruct_model(safetensors_path, config_path, artifacts_path, device="cpu"):
