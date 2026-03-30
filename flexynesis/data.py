@@ -16,7 +16,7 @@ from platformdirs import user_cache_dir
 from tqdm import tqdm
 
 
-from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler, MinMaxScaler, PowerTransformer
+from sklearn.preprocessing import OrdinalEncoder, StandardScaler, MinMaxScaler, PowerTransformer
 from .feature_selection import filter_by_laplacian
 from .utils import get_variable_types, create_covariate_matrix
 
