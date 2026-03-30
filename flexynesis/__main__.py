@@ -487,9 +487,7 @@ def main():
             if len(header_start) < 8:
                 return "unknown"
 
-            if header_start.startswith(b'PK\x03\x04') or header_start.startswith(b'\x80'):
-                return "pth"
-
+            # 1. Try SafeTensors check first
             try:
                 header_size = struct.unpack('<Q', header_start)[0]
                 if header_size < 100_000_000:
@@ -501,6 +499,15 @@ def main():
                         return "safetensors"
             except (struct.error, UnicodeDecodeError, json.JSONDecodeError):
                 pass
+
+            # 2. Try PyTorch ZIP or Pickle check
+            # PyTorch models are either ZIP (starts with PK\x03\x04) or Pickle
+            # Pickle files start with 0x80 followed by a protocol byte (e.g., 0x02 to 0x05)
+            if header_start.startswith(b'PK\x03\x04'):
+                return "pth"
+            if header_start[0] == 0x80 and header_start[1] in (2, 3, 4, 5):
+                return "pth"
+
             return "unknown"
 
         model_format = check_model_type(args.pretrained_model)
