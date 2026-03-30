@@ -577,8 +577,16 @@ class DataImporterInference:
                 if text_header.startswith('{') or text_header.startswith('['):
                     return "json"
             except UnicodeDecodeError:
-                pass 
-            joblib_magic_bytes = (b'\x80', b'\x1f\x8b', b'BZh', b'\x04"M\x18', b'\x78', b'\xfd7zXZ')
+                pass
+            joblib_magic_bytes = (
+                b'\x80',        # pickle protocol
+                b'\x1f\x8b',    # gzip
+                b'BZh',         # bzip2
+                b'\x04"M\x18',  # lzma
+                b'\x78\x9c',    # zlib (deflate, default compression)
+                b'\x78\xda',    # zlib (deflate, max compression)
+                b'\xfd7zXZ',    # xz
+            )
             if header.startswith(joblib_magic_bytes):
                 return "joblib"
             return "unknown"
