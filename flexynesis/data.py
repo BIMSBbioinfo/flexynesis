@@ -539,10 +539,10 @@ class DataImporterInference:
     Returns MultiOmicDataset object compatible with model.predict()
     """
 
-    def __init__(self, test_data_path, artifacts_path, use_json_artifacts=False, verbose=True):
+    def __init__(self, test_data_path, artifacts_path, verbose=True):
         self.test_data_path = test_data_path
         self.verbose = verbose
-        self.artifacts = self._load_artifacts(artifacts_path, use_json_artifacts)
+        self.artifacts = self._load_artifacts(artifacts_path)
 
         # Map artifact keys to expected names (compatibility layer)
         self.feature_names = self.artifacts.get("feature_lists", self.artifacts.get("feature_names", {}))
@@ -565,12 +565,33 @@ class DataImporterInference:
         if self.verbose:
             print(f"[INFO] Loaded artifacts for modalities: {self.modalities}")
 
-    def _load_artifacts(self, artifacts_path, use_json_artifacts=False):
-        if use_json_artifacts:
+    def _load_artifacts(self, artifacts_path):
+        import json
+        import joblib
+
+        def check_file_type(file_path):
+            with open(file_path, 'rb') as f:
+                header = f.read(10)
+            try:
+                text_header = header.decode('utf-8').lstrip()
+                if text_header.startswith('{') or text_header.startswith('['):
+                    return "json"
+            except UnicodeDecodeError:
+                pass 
+            joblib_magic_bytes = (b'\x80', b'\x1f\x8b', b'BZh', b'\x04"M\x18', b'\x78', b'\xfd7zXZ')
+            if header.startswith(joblib_magic_bytes):
+                return "joblib"
+            return "unknown"
+
+        file_type = check_file_type(artifacts_path)
+        if file_type == "json":
             with open(artifacts_path, 'r') as f:
                 raw = json.load(f)
             return self._deserialize_json_artifacts(raw)
-        return joblib.load(artifacts_path)
+        elif file_type == "joblib":
+            return joblib.load(artifacts_path)
+        else:
+            raise ValueError(f"[ERROR] The artifacts file {artifacts_path} is neither a valid JSON nor a recognized Joblib format.")
 
     def _deserialize_json_artifacts(self, artifacts):
         # Rebuild sklearn objects expected by inference code.

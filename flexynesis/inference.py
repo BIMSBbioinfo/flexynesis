@@ -97,14 +97,35 @@ def _resolve_input_dims(config, artifacts):
     return config
 
 
-def _load_artifacts(artifacts_path, use_json_artifacts=False):
-    if use_json_artifacts:
+def _load_artifacts(artifacts_path):
+    import json
+    import joblib
+
+    def check_file_type(file_path):
+        with open(file_path, 'rb') as f:
+            header = f.read(10)
+        try:
+            text_header = header.decode('utf-8').lstrip()
+            if text_header.startswith('{') or text_header.startswith('['):
+                return "json"
+        except UnicodeDecodeError:
+            pass
+        joblib_magic_bytes = (b'\x80', b'\x1f\x8b', b'BZh', b'\x04"M\x18', b'\x78', b'\xfd7zXZ')
+        if header.startswith(joblib_magic_bytes):
+            return "joblib"
+        return "unknown"
+
+    file_type = check_file_type(artifacts_path)
+    if file_type == "json":
         with open(artifacts_path, "r") as f:
             return json.load(f)
-    return joblib.load(artifacts_path)
+    elif file_type == "joblib":
+        return joblib.load(artifacts_path)
+    else:
+        raise ValueError(f"[ERROR] The artifacts file {artifacts_path} is neither a valid JSON nor a recognized Joblib format.")
 
 
-def reconstruct_model(safetensors_path, config_path, artifacts_path, device="cpu", use_json_artifacts=False):
+def reconstruct_model(safetensors_path, config_path, artifacts_path, device="cpu"):
     """
     Reconstruct a full Flexynesis model from:
       - safetensors_path : .safetensors weights file
@@ -133,7 +154,7 @@ def reconstruct_model(safetensors_path, config_path, artifacts_path, device="cpu
     # 2. Load artifacts
     if not os.path.exists(artifacts_path):
         raise FileNotFoundError(f"Artifacts file not found: {artifacts_path}")
-    artifacts = _load_artifacts(artifacts_path, use_json_artifacts=use_json_artifacts)
+    artifacts = _load_artifacts(artifacts_path)
 
     # 3. Resolve dims
     config = _resolve_input_dims(config, artifacts)

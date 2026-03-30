@@ -477,8 +477,39 @@ def main():
         device = torch.device("cpu")  # Force CPU in inference mode
         print("[INFO] Inference mode: forcing device to CPU")
 
+        # Check model file content type
+        def check_model_type(file_path):
+            import struct
+            import json
+            with open(file_path, 'rb') as f:
+                header_start = f.read(8)
+
+            if len(header_start) < 8:
+                return "unknown"
+
+            if header_start.startswith(b'PK\x03\x04') or header_start.startswith(b'\x80'):
+                return "pth"
+
+            try:
+                header_size = struct.unpack('<Q', header_start)[0]
+                if header_size < 100_000_000:
+                    with open(file_path, 'rb') as f:
+                        f.seek(8)
+                        header_bytes = f.read(header_size)
+                    header_json = json.loads(header_bytes.decode('utf-8'))
+                    if isinstance(header_json, dict):
+                        return "safetensors"
+            except (struct.error, UnicodeDecodeError, json.JSONDecodeError):
+                pass
+            return "unknown"
+
+        model_format = check_model_type(args.pretrained_model)
+
+        if args.safetensors and model_format != "safetensors":
+            raise ValueError(f"[ERROR] The file {args.pretrained_model} is not a valid safetensors file.")
+
         # Route to safetensors reconstruction or standard torch.load
-        if args.safetensors or args.pretrained_model.endswith('.safetensors'):
+        if model_format == "safetensors":
             from .inference import reconstruct_model
             # Derive config path from model basename
             model_base = os.path.splitext(args.pretrained_model)[0]
@@ -497,7 +528,6 @@ def main():
                 config_path=config_path,
                 artifacts_path=args.artifacts,
                 device="cpu",
-                use_json_artifacts=True,
             )
         else:
             # Standard .pth load — robust across PyTorch versions
@@ -522,7 +552,6 @@ def main():
         importer = DataImporterInference(
             test_data_path=args.data_path_test,
             artifacts_path=args.artifacts,
-            use_json_artifacts=(args.safetensors or (args.artifacts and args.artifacts.endswith('.json'))),
             verbose=True
         )
         test_dataset = importer.import_data()
