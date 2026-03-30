@@ -115,10 +115,10 @@ def load_and_sniff_artifacts(artifacts_path):
         except UnicodeDecodeError:
             pass
         joblib_magic_bytes = (
-            b'\x80',       # pickle protocol 3
+            b'\x80',       # pickle binary protocol marker
             b'\x1f\x8b',   # gzip
             b'BZh',        # bzip2
-            b'\x04"M\x18', # lzma
+            b'\x04"M\x18', # LZ4 frame magic
             b'\x78\x9c',   # zlib (deflate)
             b'\x78\xda',   # zlib (deflate, alternate)
             b'\xfd7zXZ',   # xz
