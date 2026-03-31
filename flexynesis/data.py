@@ -849,29 +849,53 @@ class TripletMultiOmicDataset(Dataset):
     def __init__(self, mydataset, main_var):
         self.dataset = mydataset
         self.main_var = main_var
-        self.labels_set, self.label_to_indices = self.get_label_indices(self.dataset.ann[self.main_var])
+
+        labels = self.dataset.ann[self.main_var].numpy()
+        self.labels_set, self.label_to_indices = self.get_label_indices(labels)
+
+        # Valid anchor indices are those without NA labels
+        self.valid_indices = [i for i, label in enumerate(labels) if not np.isnan(label)]
+
     def __getitem__(self, index):
+        # We only use valid non-NA indices for anchors
+        real_index = self.valid_indices[index]
+
         # get anchor sample and its label
-        anchor, y_dict = self.dataset[index][0], self.dataset[index][1]
+        anchor, y_dict = self.dataset[real_index][0], self.dataset[real_index][1]
+
         # choose another sample with same label
         label = y_dict[self.main_var].item()
-        positive_index = index
-        while positive_index == index:
+        positive_index = real_index
+        while positive_index == real_index:
             positive_index = np.random.choice(self.label_to_indices[label])
+
         # choose another sample with a different label
-        negative_label = np.random.choice(list(self.labels_set - set([label])))
+        # possible negative labels include NA
+        import random
+        negative_label = random.choice(list(self.labels_set - set([label])))
         negative_index = np.random.choice(self.label_to_indices[negative_label])
+
         pos = self.dataset[positive_index][0] # positive example
         neg = self.dataset[negative_index][0] # negative example
         return anchor, pos, neg, y_dict
 
     def __len__(self):
-        return len(self.dataset)
+        return len(self.valid_indices)
 
-    def get_label_indices(self, labels):
-        labels_set = set(labels.numpy())
-        label_to_indices = {label: np.where(labels.numpy() == label)[0]
-                             for label in labels_set}
+    def get_label_indices(self, labels_array):
+        # Filter out NaNs for a clean set of valid classes
+        valid_labels = [l for l in labels_array if not np.isnan(l)]
+        labels_set = set(valid_labels)
+
+        label_to_indices = {label: np.where(labels_array == label)[0]
+                            for label in labels_set}
+
+        # Handle NA as a single separate group (if any exist)
+        na_indices = np.where(np.isnan(labels_array))[0]
+        if len(na_indices) > 0:
+            labels_set.add("NA")
+            label_to_indices["NA"] = na_indices
+
         return labels_set, label_to_indices
 
 
