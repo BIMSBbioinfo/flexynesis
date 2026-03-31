@@ -525,10 +525,8 @@ DataImporterInference class for flexynesis inference mode.
 Add this to flexynesis/data.py
 """
 
-import os
 import pandas as pd
 import numpy as np
-import joblib
 
 
 
@@ -539,9 +537,10 @@ class DataImporterInference:
     """
 
     def __init__(self, test_data_path, artifacts_path, verbose=True):
+        from .inference import _load_artifacts
         self.test_data_path = test_data_path
         self.verbose = verbose
-        self.artifacts = joblib.load(artifacts_path)
+        self.artifacts = _load_artifacts(artifacts_path)
 
         # Map artifact keys to expected names (compatibility layer)
         self.feature_names = self.artifacts.get("feature_lists", self.artifacts.get("feature_names", {}))
@@ -563,6 +562,7 @@ class DataImporterInference:
 
         if self.verbose:
             print(f"[INFO] Loaded artifacts for modalities: {self.modalities}")
+
 
     def import_data(self):
         """Returns MultiOmicDataset object"""
@@ -680,11 +680,20 @@ class DataImporterInference:
                     encoder = self.label_encoders[col]
                     valid_mask = ~labels_df[col].isna()
                     encoded = np.full(len(labels_df), -1, dtype=np.int64)
-                    if valid_mask.sum() > 0:
-                        encoded[valid_mask] = encoder.transform(labels_df[col][valid_mask].values.reshape(-1, 1)).ravel()
-                    ann_dict[col] = torch.from_numpy(encoded)
-                    variable_types[col] = 'categorical'
-                    label_mappings[col] = {int(c): l for c, l in enumerate(encoder.categories_[0])}
+
+                    if hasattr(encoder, 'classes_'):  # LabelEncoder
+                        if valid_mask.sum() > 0:
+                            encoded[valid_mask] = encoder.transform(labels_df[col][valid_mask].values)
+                        ann_dict[col] = torch.from_numpy(encoded)
+                        variable_types[col] = 'categorical'
+                        label_mappings[col] = {int(c): l for c, l in enumerate(encoder.classes_)}
+                    else:  # OrdinalEncoder
+                        if valid_mask.sum() > 0:
+                            encoded[valid_mask] = encoder.transform(labels_df[col][valid_mask].values.reshape(-1, 1)).ravel()
+                        ann_dict[col] = torch.from_numpy(encoded)
+                        variable_types[col] = 'categorical'
+                        label_mappings[col] = {int(c): l for c, l in enumerate(encoder.categories_[0])}
+
                     label_mappings[col][-1] = 'Unknown'  # For missing values
                 else:
                     ann_dict[col] = torch.from_numpy(labels_df[col].values).float()

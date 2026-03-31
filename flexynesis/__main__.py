@@ -63,9 +63,9 @@ def print_full_help():
 
     # --- NEW: inference-only flags (keep in full help) ---
     print("  --pretrained_model PRETRAINED_MODEL")
-    print("                        Use a saved .pth model for inference (skip training)")
+    print("                        Use a saved .pth/.safetensors model for inference (skip training)")
     print("  --artifacts ARTIFACTS")
-    print("                        Path to training-time artifacts .joblib")
+    print("                        Path to training-time artifacts .joblib or .json")
     print("  --data_path_test DATA_PATH_TEST")
     print("                        Folder with test-only dataset for inference")
     print("  --join_key JOIN_KEY   Column name in 'clin.csv' for sample IDs")
@@ -143,7 +143,9 @@ def print_full_help():
     print("                        Path to user-provided gene-gene interaction network file.")
     print("                        Must have at least 3 columns: GeneA, GeneB, Score.")
     print("                        If provided, this will be used instead of STRING DB.")
-    print("  --safetensors         If set, the model will be saved in the SafeTensors format. Default is False.")
+    print("  --safetensors")
+    print("                        If set, the model will be saved in the SafeTensors format and the artifacts saved as JSON.")
+    print("                        Default is False.")
     print()
     print_test_installation()
     print()
@@ -285,20 +287,20 @@ def main():
         Save the model in SafeTensors format. Default: `False`.
 
     Inference mode (skip training):
-    
+
       To run *inference only*, provide **all three** of the following:
-      
-        --pretrained_model (str): Path to a saved model file (e.g., `model.pth` or `.safetensors`).
-        --artifacts (str): Path to the training artifacts bundle (e.g., `artifacts.joblib`).
+
+        --pretrained_model (str): Path to a saved model file (e.g., `model.pth` or `model.safetensors`).
+        --artifacts (str): Path to the training artifacts bundle (e.g., `artifacts.joblib` or `artifacts.json`).
         --data_path_test (str): Folder containing test-only data.
 
       Optional:
-      
+
         --join_key (str): Column in `clin.csv` used to join samples. Default: `JoinKey`.
 
       Behavior:
         When the three required arguments above are present, the CLI:
-        
+
           1) skips training and hyperparameter search,
           2) loads the pretrained model and artifacts,
           3) performs inference on `--data_path_test`,
@@ -306,19 +308,19 @@ def main():
           5) exits.
 
     Examples:
-    
+
       Train:
-      
+
         ```
-        flexynesis --data_path ./data --data_types gex,cnv --model_class DirectPred 
+        flexynesis --data_path ./data --data_types gex,cnv --model_class DirectPred
         ```
 
       Inference only:
-      
+
         ```
         flexynesis --pretrained_model ./outputs/best_model.pth --artifacts ./outputs/artifacts.joblib --data_path_test ./data_test --outdir ./predictions --prefix run1
         ```
-        
+
     """
 
     # Early help (no heavy imports)
@@ -400,9 +402,9 @@ def main():
                         help="(Optional) How many threads to use when using CPU (default is 4)")
     parser.add_argument("--num_workers", type=int, default=0,
                         help="(Optional) How many workers to use for model training (default is 0)")
-    parser.add_argument("--use_gpu", action="store_true", 
+    parser.add_argument("--use_gpu", action="store_true",
                         help="(Optional) DEPRECATED: Use --device instead. If set, attempts to use CUDA/GPU if available.")
-    parser.add_argument("--device", type=str, 
+    parser.add_argument("--device", type=str,
                         choices=["auto", "cuda", "mps", "cpu"], default="auto",
                         help="Device type: 'auto' (automatic detection), 'cuda' (NVIDIA GPU), 'mps' (Apple Silicon), 'cpu'")
     parser.add_argument("--feature_importance_method", type=str,
@@ -421,12 +423,12 @@ def main():
                              "If provided, this will be used instead of STRING DB.")
     # safetensors args
     parser.add_argument("--safetensors", action="store_true",
-                        help="If set, the model will be saved in the SafeTensors format. Default is False.")
+                        help="If set, use SafeTensors + JSON artifacts for save/load (training and inference). Default is False.")
     # NEW: inference flags
     parser.add_argument("--pretrained_model", type=str, default=None,
-                        help="Path to a saved model (.pth) to use for inference")
+                        help="Path to a saved model (.pth/.safetensors) to use for inference")
     parser.add_argument("--artifacts", type=str, default=None,
-                        help="Path to artifacts .joblib saved during training")
+                        help="Path to artifacts .joblib or .json saved during training")
     parser.add_argument("--data_path_test", type=str, default=None,
                         help="Folder with test-only dataset for inference")
     parser.add_argument("--join_key", type=str, default="JoinKey",
@@ -470,16 +472,24 @@ def main():
                 device_preference = "auto"
         else:
             device_preference = args.device
-        
+
         # Get optimal device for inference
         device = torch.device("cpu")  # Force CPU in inference mode
         print("[INFO] Inference mode: forcing device to CPU")
 
+        # Check model file content type
+        from .inference import check_model_type
+        model_format = check_model_type(args.pretrained_model)
+
+        if args.safetensors and model_format != "safetensors":
+            raise ValueError(f"[ERROR] The file {args.pretrained_model} is not a valid safetensors file.")
+
         # Route to safetensors reconstruction or standard torch.load
-        if args.pretrained_model.endswith('.safetensors'):
+        if model_format == "safetensors":
             from .inference import reconstruct_model
-            # Derive config path: same prefix as safetensors file
-            config_path = args.pretrained_model.replace('.safetensors', '_config.json')
+            # Derive config path from model basename
+            model_base = os.path.splitext(args.pretrained_model)[0]
+            config_path = model_base + '_config.json'
             if not os.path.exists(config_path):
                 # Try alongside the safetensors file with standard naming
                 base = args.pretrained_model.replace('.final_model.safetensors', '')
@@ -521,7 +531,7 @@ def main():
             verbose=True
         )
         test_dataset = importer.import_data()
-        
+
         # Convert to GNN dataset if needed
         if args.model_class == 'GNN':
             print("[INFO] Overlaying the dataset with network data from STRINGDB")
@@ -540,7 +550,7 @@ def main():
             modality_order = importer.artifacts.get("original_modalities", importer.artifacts.get("data_types"))
             test_dataset = MultiOmicDatasetNW(test_dataset, obj.graph_df, modality_order=modality_order)
         train_dataset = None  # No training data in inference mode
-        
+
         # Move dataset to same device as model
         if hasattr(test_dataset, 'to_device'):
             test_dataset.to_device(device)
@@ -586,8 +596,8 @@ def main():
             if args.model_class == 'CrossModalPred':
                 parser.error("The 'CrossModalPred' model cannot be used with early fusion type. "
                              "Use --fusion_type intermediate instead.")
-            
-    
+
+
         # 4. Handle device selection with MPS support
         # Support legacy --use_gpu flag for backward compatibility
         if args.use_gpu:
@@ -602,10 +612,10 @@ def main():
                 device_preference = "auto"
         else:
             device_preference = args.device
-    
+
         # Get optimal device using new device detection
         device_str, device_type = get_optimal_device(device_preference)
-    
+
         # Print device information
         print(f"[INFO] Using device: {device_str}")
         if device_str != 'cpu':
@@ -748,7 +758,7 @@ def main():
             obj = STRING(os.path.join(args.data_path, '_'.join(['processed', args.prefix])),
                          args.string_organism, args.string_node_name)
             graph_df = obj.graph_df
-        
+
         # Use data_types order from args for consistent modality ordering
         modality_order = args.data_types.split(',')
         # Overlay the graph onto datasets
@@ -889,10 +899,10 @@ def main():
         else:
             train = train_dataset
             test = test_dataset
-        
-        if var != model.surv_event_var: 
-            metrics, predictions = evaluate_baseline_performance(train, test, 
-                                                               variable_name = var, 
+
+        if var != model.surv_event_var:
+            metrics, predictions = evaluate_baseline_performance(train, test,
+                                                               variable_name = var,
                                                                methods = ['RandomForest', 'SVM', 'XGBoost'],
                                                                n_folds = 5,
                                                                n_jobs = int(args.threads))
@@ -958,8 +968,78 @@ def main():
                 'string_organism': args.string_organism,
                 'string_node_name': args.string_node_name,
             }
-            joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
-            joblib.dump(artifacts, joblib_path)
-            print(f'[INFO] Wrote inference artifacts to {joblib_path}')
+
+            if not args.safetensors:
+                joblib_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.joblib']))
+                joblib.dump(artifacts, joblib_path)
+                print(f'[INFO] Wrote inference artifacts to {joblib_path}')
+
+            elif args.safetensors:
+                import numpy as np
+                from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler
+                json_ready = {
+                    "schema_version": artifacts["schema_version"],
+                    "data_types": artifacts["data_types"],
+                    "original_modalities": artifacts["original_modalities"],
+                    "target_variables": artifacts["target_variables"],
+                    "covariate_vars": artifacts["covariate_vars"],
+                    "join_key": artifacts["join_key"],
+                    "string_organism": artifacts["string_organism"],
+                    "string_node_name": artifacts["string_node_name"],
+                    "feature_lists": {modality: list(features) for modality, features in artifacts["feature_lists"].items()},
+                    "transforms": {},
+                    "label_encoders": {},
+                }
+
+                # Convert StandardScaler objects
+                for modality, scaler in artifacts["transforms"].items():
+                    if scaler is None:
+                        json_ready["transforms"][modality] = None
+                        continue
+                    if not isinstance(scaler, StandardScaler):
+                        raise ValueError(f"Unsupported scaler type for modality '{modality}': {type(scaler).__name__}.")
+                    scaler_dict = {"type": "StandardScaler", "with_mean": scaler.with_mean, "with_std": scaler.with_std}
+                    if hasattr(scaler, "mean_"): scaler_dict["mean"] = scaler.mean_.tolist()
+                    if hasattr(scaler, "scale_"): scaler_dict["scale"] = scaler.scale_.tolist()
+                    if hasattr(scaler, "var_"): scaler_dict["var"] = scaler.var_.tolist()
+                    if hasattr(scaler, "n_features_in_"): scaler_dict["n_features_in"] = int(scaler.n_features_in_)
+                    if hasattr(scaler, "feature_names_in_"): scaler_dict["feature_names_in"] = scaler.feature_names_in_.tolist()
+                    if hasattr(scaler, "n_samples_seen_"):
+                        n_samples = scaler.n_samples_seen_
+                        scaler_dict["n_samples_seen"] = n_samples.tolist() if isinstance(n_samples, np.ndarray) else int(n_samples)
+                    json_ready["transforms"][modality] = scaler_dict
+
+                # Convert LabelEncoder/OrdinalEncoder objects
+                for variable, encoder in artifacts["label_encoders"].items():
+                    if encoder is None:
+                        json_ready["label_encoders"][variable] = None
+                        continue
+                    if isinstance(encoder, LabelEncoder):
+                        encoder_dict = {"type": "LabelEncoder", "classes": encoder.classes_.tolist()}
+                    elif isinstance(encoder, OrdinalEncoder):
+                        encoder_dict = {
+                            "type": "OrdinalEncoder",
+                            "categories": [cat.tolist() for cat in encoder.categories_],
+                            "handle_unknown": encoder.handle_unknown,
+                            "unknown_value": encoder.unknown_value,
+                        }
+                        if hasattr(encoder, "encoded_missing_value"):
+                            val = encoder.encoded_missing_value
+                            encoder_dict["encoded_missing_value"] = "__NaN__" if isinstance(val, float) and np.isnan(val) else val
+                        if hasattr(encoder, "n_features_in_"): encoder_dict["n_features_in"] = int(encoder.n_features_in_)
+                        if hasattr(encoder, "feature_names_in_"): encoder_dict["feature_names_in"] = encoder.feature_names_in_.tolist()
+                        if hasattr(encoder, "_missing_indices"):
+                            missing_indices = encoder._missing_indices
+                            encoder_dict["_missing_indices"] = {str(k): v for k, v in missing_indices.items()} if isinstance(missing_indices, dict) else missing_indices
+                        if hasattr(encoder, "_infrequent_enabled"): encoder_dict["_infrequent_enabled"] = encoder._infrequent_enabled
+                    else:
+                        raise ValueError(f"Unknown encoder type: {type(encoder).__name__}")
+                    json_ready["label_encoders"][variable] = encoder_dict
+
+                json_path = os.path.join(args.outdir, '.'.join([args.prefix, 'artifacts.json']))
+                with open(json_path, "w") as f:
+                    json.dump(json_ready, f, indent=2)
+                print(f'[INFO] Wrote inference artifacts to {json_path}')
+
         except Exception as e:
             print(f'[WARN] Could not write inference artifacts: {e}')
