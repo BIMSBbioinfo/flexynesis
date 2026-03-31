@@ -21,6 +21,37 @@ MODEL_REGISTRY = {
     "GNN":               ("flexynesis.models.gnn_early",      "GNN"),
 }
 
+def check_model_type(file_path):
+    import struct
+    import json
+    with open(file_path, 'rb') as f:
+        header_start = f.read(8)
+
+    if len(header_start) < 8:
+        return "unknown"
+
+    # 1. Try SafeTensors check first
+    try:
+        header_size = struct.unpack('<Q', header_start)[0]
+        if header_size < 100_000_000:
+            with open(file_path, 'rb') as f:
+                f.seek(8)
+                header_bytes = f.read(header_size)
+            header_json = json.loads(header_bytes.decode('utf-8'))
+            if isinstance(header_json, dict):
+                return "safetensors"
+    except (struct.error, UnicodeDecodeError, json.JSONDecodeError):
+        pass
+
+    # 2. Try PyTorch ZIP or Pickle check
+    # PyTorch models are either ZIP (starts with PK\x03\x04) or Pickle
+    # Pickle files start with 0x80 followed by a protocol byte (e.g., 0x02 to 0x05)
+    if header_start.startswith(b'PK\x03\x04'):
+        return "pth"
+    if header_start[0] == 0x80 and header_start[1] in (2, 3, 4, 5):
+        return "pth"
+
+    return "unknown"
 
 def _import_model_class(model_class_name):
     if model_class_name not in MODEL_REGISTRY:
