@@ -8,8 +8,7 @@ import pandas as pd
 import torch
 from filelock import FileLock
 from platformdirs import user_cache_dir
-from sklearn.preprocessing import (MinMaxScaler, OrdinalEncoder,
-                                   StandardScaler)
+from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder, StandardScaler
 from torch.utils.data import Dataset
 from torch_geometric.data import Dataset as PYGDataset
 from torch_geometric.data import download_url, extract_gz
@@ -787,8 +786,7 @@ class DataImporterInference:
 
         # Create covariates matrix if needed
         if "covariates" in self.modalities and labels_df is not None:
-            from flexynesis.utils import (create_covariate_matrix,
-                                          get_variable_types)
+            from flexynesis.utils import create_covariate_matrix, get_variable_types
 
             covariate_vars = self.artifacts.get("covariate_vars", [])
             if covariate_vars:
