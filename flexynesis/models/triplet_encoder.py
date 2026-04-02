@@ -8,11 +8,10 @@ import torch
 from captum.attr import GradientShap, IntegratedGradients
 from torch import nn
 from torch.nn import functional as F
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader
 
 from ..data import TripletMultiOmicDataset
 from ..modules import *
-from ..utils import to_device_safe
 
 
 class MultiTripletNetwork(pl.LightningModule):

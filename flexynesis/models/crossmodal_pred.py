@@ -5,13 +5,11 @@ import numpy as np
 import pandas as pd
 import torch
 from captum.attr import GradientShap, IntegratedGradients
-from scipy import stats
 from torch import nn
 from torch.nn import functional as F
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader
 
 from ..modules import *
-from ..utils import to_device_safe
 
 
 class CrossModalPred(pl.LightningModule):

@@ -1,14 +1,8 @@
 import argparse
-import json
 import os
-import random
 import sys
 import time
-import tracemalloc
 import warnings
-
-import psutil
-import yaml
 
 from . import __version__
 
@@ -739,7 +733,7 @@ def main():
     if args.pretrained_model and args.artifacts and args.data_path_test:
         import torch
 
-        from .utils import create_device_from_string, get_optimal_device
+        from .utils import get_optimal_device
 
         # quick existence checks
         if not os.path.exists(args.pretrained_model):
@@ -866,8 +860,7 @@ def main():
         # Continue to evaluation section (skip training)
 
     # ------------- Heavy imports only when training -------------
-    from .utils import (create_device_from_string,
-                        evaluate_baseline_performance,
+    from .utils import (evaluate_baseline_performance,
                         evaluate_baseline_survival_performance,
                         evaluate_wrapper, get_device_memory_info,
                         get_optimal_device, get_predicted_labels)
@@ -875,16 +868,12 @@ def main():
     if not (args.pretrained_model and args.artifacts and args.data_path_test):
         import json
         import tracemalloc
-        from typing import NamedTuple
 
-        import lightning as pl
         import pandas as pd
         import psutil
         import torch
-        from lightning import seed_everything
         from safetensors.torch import save_file
 
-        import flexynesis
 
         # data + utils
         from .data import STRING, DataImporter, MultiOmicDatasetNW
@@ -1047,7 +1036,7 @@ def main():
         # classical ML baselines
         if args.model_class == "XGBoost":
             try:
-                from xgboost import XGBClassifier
+                from xgboost import XGBClassifier  # noqa: F401
             except Exception:
                 raise ImportError(
                     "XGBoost is not available. On macOS, install the OpenMP runtime: brew install libomp"

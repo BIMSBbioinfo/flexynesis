@@ -5,7 +5,7 @@ import torch
 from captum.attr import GradientShap, IntegratedGradients
 from torch import nn
 from torch.nn import functional as F
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 
 from ..modules import MLP, cox_ph_loss, flexGCN
 from ..utils import to_device_safe

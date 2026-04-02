@@ -2,7 +2,7 @@
 
 import torch
 from torch import nn
-from torch_geometric.nn import GATConv, GCNConv, GraphConv, SAGEConv, aggr
+from torch_geometric.nn import GATConv, GCNConv, GraphConv, SAGEConv
 
 __all__ = ["Encoder", "Decoder", "MLP", "flexGCN", "cox_ph_loss"]
 

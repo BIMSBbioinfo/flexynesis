@@ -1,5 +1,4 @@
 import os
-import shutil
 from functools import reduce
 from itertools import chain
 from pathlib import Path
@@ -10,11 +9,10 @@ import torch
 from filelock import FileLock
 from platformdirs import user_cache_dir
 from sklearn.preprocessing import (MinMaxScaler, OrdinalEncoder,
-                                   PowerTransformer, StandardScaler)
-from torch.utils.data import DataLoader, Dataset
+                                   StandardScaler)
+from torch.utils.data import Dataset
 from torch_geometric.data import Dataset as PYGDataset
 from torch_geometric.data import download_url, extract_gz
-from tqdm import tqdm
 
 from .feature_selection import filter_by_laplacian
 from .utils import create_covariate_matrix, get_variable_types

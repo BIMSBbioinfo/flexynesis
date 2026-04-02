@@ -1,19 +1,13 @@
-import logging
-import math
 import os
-import re
 import tarfile
 import warnings
-from glob import glob
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
 import seaborn as sns
 import torch
-from lightning import seed_everything
 from scipy.stats import linregress, pearsonr
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
@@ -23,12 +17,10 @@ from sklearn.metrics import (adjusted_mutual_info_score, adjusted_rand_score,
                              average_precision_score, balanced_accuracy_score,
                              classification_report, cohen_kappa_score,
                              f1_score, mean_squared_error, roc_auc_score)
-from sklearn.model_selection import GridSearchCV, KFold, cross_val_score
+from sklearn.model_selection import GridSearchCV, KFold
 from sklearn.svm import SVC, SVR
-from sklearn.utils import resample
 from sksurv.metrics import cumulative_dynamic_auc
 from sksurv.util import Surv
-from tqdm import tqdm
 from umap import UMAP
 
 try:
@@ -47,11 +39,11 @@ import pandas as pd
 from lifelines import CoxPHFitter, KaplanMeierFitter
 from lifelines.statistics import logrank_test, multivariate_logrank_test
 from lifelines.utils import concordance_index
-from plotnine import (aes, annotate, element_blank, element_text, geom_abline,
+from plotnine import (aes, annotate, element_text, geom_abline,
                       geom_errorbarh, geom_line, geom_point, geom_smooth,
                       geom_step, geom_text, ggplot, ggtitle, labs,
-                      scale_color_brewer, scale_color_gradient,
-                      scale_color_manual, scale_y_discrete, theme, theme_bw,
+                      scale_color_gradient,
+                      scale_color_manual, theme, theme_bw,
                       theme_minimal)
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
@@ -1861,7 +1853,6 @@ def reciprocal_pca_mnn(
 
 
 import tarfile
-from io import StringIO
 
 import requests
 

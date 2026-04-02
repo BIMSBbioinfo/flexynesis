@@ -15,7 +15,7 @@ Usage:
 Input format:
     CSV/TSV file with genes as rows and samples as columns
     First column should be gene names/IDs
-    
+
 Output format:
     CSV/TSV file with columns: GeneA, GeneB, Score
     Format matches input file extension (.csv or .tsv)
@@ -25,7 +25,6 @@ Output format:
 import argparse
 import sys
 
-import numpy as np
 import pandas as pd
 import torch
 from tqdm import tqdm
@@ -271,7 +270,7 @@ Examples:
   python generate_coexpression_network.py \\
     --input expression_data.csv \\
     --output coexpression_network.csv
-  
+
   # Use Pearson correlation with stricter threshold
   python generate_coexpression_network.py \\
     --input expression_data.csv \\
@@ -279,7 +278,7 @@ Examples:
     --method pearson \\
     --min_correlation 0.5 \\
     --top_k 15
-  
+
   # More permissive network (more edges)
   python generate_coexpression_network.py \\
     --input expression_data.csv \\
@@ -290,7 +289,7 @@ Examples:
 Input file format:
   CSV/TSV file with genes as rows, samples as columns
   First column should contain gene names/IDs
-  
+
   Example:
     ,Sample1,Sample2,Sample3
     TP53,5.2,6.1,5.8

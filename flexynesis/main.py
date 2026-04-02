@@ -7,19 +7,17 @@ import os
 import lightning as pl
 import numpy as np
 import torch
-import torch_geometric
 import yaml
 from lightning.pytorch.callbacks import EarlyStopping, RichProgressBar
 from lightning.pytorch.callbacks.progress.rich_progress import \
     RichProgressBarTheme
 from skopt import Optimizer
 from skopt.space import Categorical, Integer, Real
-from skopt.utils import use_named_args
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 
 from .config import search_spaces
-from .data import STRING, TripletMultiOmicDataset
+from .data import TripletMultiOmicDataset
 
 torch.set_float32_matmul_precision("medium")
 
@@ -448,7 +446,6 @@ class HyperparameterTuning:
 
 import copy
 import logging
-import random
 
 import numpy as np
 from sklearn.model_selection import KFold
