@@ -1,16 +1,18 @@
-from lightning import seed_everything
-
-seed_everything(42, workers=True)
-
+import copy
+import logging
 import os
 
 import lightning as pl
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import yaml
+from IPython.display import display
+from lightning import Callback, seed_everything
 from lightning.pytorch.callbacks import EarlyStopping, RichProgressBar
 from lightning.pytorch.callbacks.progress.rich_progress import \
     RichProgressBarTheme
+from sklearn.model_selection import KFold
 from skopt import Optimizer
 from skopt.space import Categorical, Integer, Real
 from torch.utils.data import DataLoader, random_split
@@ -20,7 +22,7 @@ from .config import search_spaces
 from .data import TripletMultiOmicDataset
 
 torch.set_float32_matmul_precision("medium")
-
+seed_everything(42, workers=True)
 
 class HyperparameterTuning:
     """
@@ -451,12 +453,6 @@ class HyperparameterTuning:
         return search_space_user
 
 
-import copy
-import logging
-
-import numpy as np
-from sklearn.model_selection import KFold
-from torch.utils.data import DataLoader, random_split
 
 
 class FineTuner(pl.LightningModule):
@@ -649,11 +645,6 @@ class FineTuner(pl.LightningModule):
             enable_checkpointing=False,
         )
         final_trainer.fit(self, train_dataloaders=dl)
-
-
-import matplotlib.pyplot as plt
-from IPython.display import display
-from lightning import Callback
 
 
 class LiveLossPlot(Callback):

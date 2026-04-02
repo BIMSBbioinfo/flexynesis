@@ -1,6 +1,7 @@
 import os
 import tarfile
 import warnings
+from collections import deque
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,7 +9,7 @@ import pandas as pd
 import requests
 import seaborn as sns
 import torch
-from scipy.stats import linregress, pearsonr
+from scipy.stats import kruskal, linregress, mannwhitneyu, pearsonr
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.feature_selection import (SelectFromModel, mutual_info_classif,
@@ -16,8 +17,11 @@ from sklearn.feature_selection import (SelectFromModel, mutual_info_classif,
 from sklearn.metrics import (adjusted_mutual_info_score, adjusted_rand_score,
                              average_precision_score, balanced_accuracy_score,
                              classification_report, cohen_kappa_score,
-                             f1_score, mean_squared_error, roc_auc_score)
+                             f1_score, mean_squared_error,
+                             precision_recall_curve, roc_auc_score, roc_curve)
 from sklearn.model_selection import GridSearchCV, KFold
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import label_binarize
 from sklearn.svm import SVC, SVR
 from sksurv.metrics import cumulative_dynamic_auc
 from sksurv.util import Surv
@@ -294,9 +298,6 @@ def plot_scatter(true_values, predicted_values):
     return plot
 
 
-from scipy.stats import kruskal, mannwhitneyu
-
-
 def plot_boxplot(
     categorical_x,
     numerical_y,
@@ -482,9 +483,6 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     }
 
 
-from sklearn.metrics import (average_precision_score, precision_recall_curve,
-                             roc_auc_score, roc_curve)
-from sklearn.preprocessing import label_binarize
 
 
 def plot_roc_curves(y_true, y_probs):
@@ -1201,8 +1199,6 @@ def find_optimal_cutoff(
     return best_cutoff, best_p
 
 
-from collections import deque
-
 
 def recursive_binary_split_minN(
     df,
@@ -1763,8 +1759,6 @@ def optimal_transport_align(embeddings, batch_labels, standardize_by_labels=Fals
     return aligned_embeddings_df, aligned_batch_labels
 
 
-from sklearn.neighbors import NearestNeighbors
-
 
 def reciprocal_pca_mnn(
     embeddings,
@@ -1871,9 +1865,7 @@ def reciprocal_pca_mnn(
     return aligned_embeddings_df, aligned_batch_labels
 
 
-import tarfile
 
-import requests
 
 
 class CBioPortalData:

@@ -670,10 +670,6 @@ DataImporterInference class for flexynesis inference mode.
 Add this to flexynesis/data.py
 """
 
-import numpy as np
-import pandas as pd
-
-
 class DataImporterInference:
     """
     Data importer for inference mode.
