@@ -79,6 +79,11 @@ from sksurv.ensemble import RandomSurvivalForest
 from sksurv.metrics import concordance_index_censored
 from umap import UMAP
 
+try:
+    from geomloss import SamplesLoss
+except Exception:
+    SamplesLoss = None
+
 
 def _labels_to_1d(labels):
     """Coerce labels (list/array/Series/Index/DataFrame[1-col]) to a 1-D numpy array (no index alignment)."""
@@ -2147,7 +2152,6 @@ def compute_correlation_loss(embeddings, batch_labels):
     return loss
 
 
-# from geomloss import SamplesLoss
 def compute_transport_cost(embeddings, batch_labels, blur=0.5):
     """
     Compute a transport cost using Sinkhorn loss to align embeddings between batches.
@@ -2170,6 +2174,11 @@ def compute_transport_cost(embeddings, batch_labels, blur=0.5):
     if batch1_embeddings.size(0) == 0 or batch2_embeddings.size(0) == 0:
         raise ValueError(
             "Both batches must have at least one sample for transport cost computation."
+        )
+
+    if SamplesLoss is None:
+        raise ImportError(
+            "geomloss is required for compute_transport_cost. Install it with: pip install geomloss"
         )
 
     # Initialize the Sinkhorn loss function
