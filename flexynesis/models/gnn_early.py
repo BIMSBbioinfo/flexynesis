@@ -1,19 +1,14 @@
+import lightning as pl
 import numpy as np
 import pandas as pd
-
 import torch
+from captum.attr import GradientShap, IntegratedGradients
 from torch import nn
 from torch.nn import functional as F
-from torch.utils.data import random_split
+from torch.utils.data import DataLoader, random_split
 
-import lightning as pl
-
-from torch.utils.data import DataLoader
-
-from captum.attr import IntegratedGradients, GradientShap
-
-from ..utils import to_device_safe
 from ..modules import MLP, cox_ph_loss, flexGCN
+from ..utils import to_device_safe
 
 
 class GNN(pl.LightningModule):

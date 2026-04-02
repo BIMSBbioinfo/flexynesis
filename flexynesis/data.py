@@ -1,31 +1,23 @@
-from torch.utils.data import Dataset, DataLoader
-from torch_geometric.data import download_url, extract_gz
-from torch_geometric.data import Dataset as PYGDataset
+import os
+import shutil
+from functools import reduce
+from itertools import chain
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from functools import reduce
 import torch
-import os
-import shutil
-
-from pathlib import Path
 from filelock import FileLock
 from platformdirs import user_cache_dir
-
+from sklearn.preprocessing import (MinMaxScaler, OrdinalEncoder,
+                                   PowerTransformer, StandardScaler)
+from torch.utils.data import DataLoader, Dataset
+from torch_geometric.data import Dataset as PYGDataset
+from torch_geometric.data import download_url, extract_gz
 from tqdm import tqdm
 
-
-from sklearn.preprocessing import (
-    OrdinalEncoder,
-    StandardScaler,
-    MinMaxScaler,
-    PowerTransformer,
-)
 from .feature_selection import filter_by_laplacian
-from .utils import get_variable_types, create_covariate_matrix
-
-from itertools import chain
+from .utils import create_covariate_matrix, get_variable_types
 
 
 # convert_to_labels: if true, given a numeric list, convert to binary labels by median value
@@ -669,8 +661,8 @@ DataImporterInference class for flexynesis inference mode.
 Add this to flexynesis/data.py
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 class DataImporterInference:
@@ -797,7 +789,8 @@ class DataImporterInference:
 
         # Create covariates matrix if needed
         if "covariates" in self.modalities and labels_df is not None:
-            from flexynesis.utils import create_covariate_matrix, get_variable_types
+            from flexynesis.utils import (create_covariate_matrix,
+                                          get_variable_types)
 
             covariate_vars = self.artifacts.get("covariate_vars", [])
             if covariate_vars:

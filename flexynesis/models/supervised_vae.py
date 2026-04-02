@@ -1,20 +1,18 @@
 # Supervised VAE-MMD architecture
-import torch
 import itertools
-from torch import nn
-from torch.nn import functional as F
-from torch.utils.data import Dataset, DataLoader, random_split
-
-import pandas as pd
-import numpy as np
 
 import lightning as pl
+import numpy as np
+import pandas as pd
+import torch
+from captum.attr import GradientShap, IntegratedGradients
 from scipy import stats
+from torch import nn
+from torch.nn import functional as F
+from torch.utils.data import DataLoader, Dataset, random_split
 
-from captum.attr import IntegratedGradients, GradientShap
-
-from ..utils import to_device_safe
 from ..modules import *
+from ..utils import to_device_safe
 
 
 # Supervised Variational Auto-encoder that can train one or more layers of omics datasets

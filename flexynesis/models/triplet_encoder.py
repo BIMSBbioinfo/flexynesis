@@ -1,21 +1,18 @@
 # Generating encodings of multi-omic data using triplet loss
-import torch
-from torch import nn
-from torch.nn import functional as F
-from torch.utils.data import Dataset, DataLoader, random_split
-
 import itertools
 
-import pandas as pd
-import numpy as np
-
 import lightning as pl
+import numpy as np
+import pandas as pd
+import torch
+from captum.attr import GradientShap, IntegratedGradients
+from torch import nn
+from torch.nn import functional as F
+from torch.utils.data import DataLoader, Dataset, random_split
 
-from ..utils import to_device_safe
-from ..modules import *
 from ..data import TripletMultiOmicDataset
-
-from captum.attr import IntegratedGradients, GradientShap
+from ..modules import *
+from ..utils import to_device_safe
 
 
 class MultiTripletNetwork(pl.LightningModule):

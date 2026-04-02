@@ -1,5 +1,5 @@
 # config.py
-from skopt.space import Integer, Categorical, Real
+from skopt.space import Categorical, Integer, Real
 
 epochs = [500]
 

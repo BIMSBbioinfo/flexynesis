@@ -1,9 +1,10 @@
 # Lazy imports to avoid slow startup
 # Only import essential components that are needed for basic functionality
 
+from importlib.metadata import PackageNotFoundError, version
+
 # Import core modules without heavy dependencies
 from .config import search_spaces
-from importlib.metadata import PackageNotFoundError, version
 
 # Use the distribution name as published on PyPI (may differ from import name in some projects)
 _DISTRIBUTION_NAME = "flexynesis"

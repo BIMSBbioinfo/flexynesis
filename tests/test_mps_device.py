@@ -1,5 +1,6 @@
-import torch
 import pytest
+import torch
+
 from flexynesis.utils import get_optimal_device, to_device_safe
 
 

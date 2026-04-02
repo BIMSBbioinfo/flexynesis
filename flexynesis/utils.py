@@ -1,44 +1,35 @@
-from lightning import seed_everything
-import pandas as pd
-import numpy as np
-import torch
-import math
-import warnings
-import requests
-import tarfile
-import os
-from glob import glob
-import re
 import logging
-from tqdm import tqdm
+import math
+import os
+import re
+import tarfile
+import warnings
+from glob import glob
 
-from umap import UMAP
-import seaborn as sns
-import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import requests
+import seaborn as sns
+import torch
+from lightning import seed_everything
+from scipy.stats import linregress, pearsonr
 from sklearn.decomposition import PCA
-from sklearn.metrics import (
-    balanced_accuracy_score,
-    f1_score,
-    cohen_kappa_score,
-    classification_report,
-    roc_auc_score,
-    average_precision_score,
-)
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.feature_selection import (SelectFromModel, mutual_info_classif,
+                                       mutual_info_regression)
+from sklearn.metrics import (adjusted_mutual_info_score, adjusted_rand_score,
+                             average_precision_score, balanced_accuracy_score,
+                             classification_report, cohen_kappa_score,
+                             f1_score, mean_squared_error, roc_auc_score)
+from sklearn.model_selection import GridSearchCV, KFold, cross_val_score
+from sklearn.svm import SVC, SVR
 from sklearn.utils import resample
 from sksurv.metrics import cumulative_dynamic_auc
 from sksurv.util import Surv
-
-from scipy.stats import pearsonr, linregress
-
-
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.svm import SVC, SVR
-from sklearn.feature_selection import SelectFromModel
-from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
-from sklearn.model_selection import KFold, cross_val_score, GridSearchCV
+from tqdm import tqdm
+from umap import UMAP
 
 try:
     from xgboost import XGBClassifier, XGBRegressor
@@ -46,70 +37,30 @@ except Exception:
     XGBClassifier = None
     XGBRegressor = None
 
-from sksurv.ensemble import RandomSurvivalForest
-from sksurv.metrics import concordance_index_censored
-
-from lifelines import KaplanMeierFitter
-from lifelines.utils import concordance_index
-from lifelines import CoxPHFitter
-from lifelines.statistics import logrank_test, multivariate_logrank_test
-
-from plotnine import (
-    ggplot,
-    aes,
-    geom_point,
-    geom_smooth,
-    geom_line,
-    geom_abline,
-    geom_step,
-    labs,
-    ggtitle,
-    annotate,
-    theme_minimal,
-    theme,
-    element_text,
-    scale_color_manual,
-    scale_color_gradient,
-    scale_color_brewer,
-    geom_errorbarh,
-    geom_text,
-    theme_bw,
-    theme,
-    element_blank,
-    scale_y_discrete,
-)
-
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
-from sklearn.metrics.pairwise import euclidean_distances
-import networkx as nx
 import community as community_louvain
-
-from sklearn.preprocessing import StandardScaler
-import ot
-
+import matplotlib.pyplot as plt
+import networkx as nx
 # imports
 import numpy as np
+import ot
 import pandas as pd
-import matplotlib.pyplot as plt
-from plotnine import (
-    ggplot,
-    aes,
-    geom_point,
-    geom_step,
-    labs,
-    ggtitle,
-    annotate,
-    theme_minimal,
-    theme,
-    element_text,
-    scale_color_manual,
-    scale_color_gradient,
-)
-from sklearn.decomposition import PCA
-from umap import UMAP
-from lifelines import KaplanMeierFitter
+from lifelines import CoxPHFitter, KaplanMeierFitter
 from lifelines.statistics import logrank_test, multivariate_logrank_test
+from lifelines.utils import concordance_index
+from plotnine import (aes, annotate, element_blank, element_text, geom_abline,
+                      geom_errorbarh, geom_line, geom_point, geom_smooth,
+                      geom_step, geom_text, ggplot, ggtitle, labs,
+                      scale_color_brewer, scale_color_gradient,
+                      scale_color_manual, scale_y_discrete, theme, theme_bw,
+                      theme_minimal)
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.metrics import silhouette_score
+from sklearn.metrics.pairwise import euclidean_distances
+from sklearn.preprocessing import StandardScaler
+from sksurv.ensemble import RandomSurvivalForest
+from sksurv.metrics import concordance_index_censored
+from umap import UMAP
 
 
 def _labels_to_1d(labels):
@@ -344,7 +295,7 @@ def plot_scatter(true_values, predicted_values):
     return plot
 
 
-from scipy.stats import mannwhitneyu, kruskal
+from scipy.stats import kruskal, mannwhitneyu
 
 
 def plot_boxplot(
@@ -532,9 +483,9 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     }
 
 
-from sklearn.metrics import roc_curve, roc_auc_score
+from sklearn.metrics import (average_precision_score, precision_recall_curve,
+                             roc_auc_score, roc_curve)
 from sklearn.preprocessing import label_binarize
-from sklearn.metrics import precision_recall_curve, average_precision_score
 
 
 def plot_roc_curves(y_true, y_probs):
@@ -1910,8 +1861,9 @@ def reciprocal_pca_mnn(
 
 
 import tarfile
-import requests
 from io import StringIO
+
+import requests
 
 
 class CBioPortalData:

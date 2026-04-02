@@ -7,8 +7,8 @@ import json
 import os
 from types import SimpleNamespace
 
-import numpy as np
 import joblib
+import numpy as np
 import torch
 from safetensors.torch import load_file
 
@@ -22,8 +22,8 @@ MODEL_REGISTRY = {
 
 
 def check_model_type(file_path):
-    import struct
     import json
+    import struct
 
     with open(file_path, "rb") as f:
         header_start = f.read(8)
@@ -139,6 +139,7 @@ def load_and_sniff_artifacts(artifacts_path):
     loads it appropriately, and returns (file_type, content).
     """
     import json
+
     import joblib
 
     def check_file_type(file_path):
@@ -178,7 +179,8 @@ def load_and_sniff_artifacts(artifacts_path):
 
 def _deserialize_json_artifacts(artifacts):
     import numpy as np
-    from sklearn.preprocessing import StandardScaler, LabelEncoder, OrdinalEncoder
+    from sklearn.preprocessing import (LabelEncoder, OrdinalEncoder,
+                                       StandardScaler)
 
     # Rebuild sklearn objects expected by inference code.
     deserialized = dict(artifacts)

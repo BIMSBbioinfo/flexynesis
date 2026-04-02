@@ -2,27 +2,24 @@ from lightning import seed_everything
 
 seed_everything(42, workers=True)
 
-import torch
-from torch.utils.data import DataLoader, random_split
-import torch_geometric
+import os
 
 import lightning as pl
-from lightning.pytorch.callbacks import RichProgressBar
-from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBarTheme
-from lightning.pytorch.callbacks import EarlyStopping
-
+import numpy as np
+import torch
+import torch_geometric
+import yaml
+from lightning.pytorch.callbacks import EarlyStopping, RichProgressBar
+from lightning.pytorch.callbacks.progress.rich_progress import \
+    RichProgressBarTheme
+from skopt import Optimizer
+from skopt.space import Categorical, Integer, Real
+from skopt.utils import use_named_args
+from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 
-from skopt import Optimizer
-from skopt.utils import use_named_args
 from .config import search_spaces
-from .data import TripletMultiOmicDataset
-
-import numpy as np
-
-import os, yaml
-from skopt.space import Integer, Categorical, Real
-from .data import STRING
+from .data import STRING, TripletMultiOmicDataset
 
 torch.set_float32_matmul_precision("medium")
 
@@ -449,10 +446,13 @@ class HyperparameterTuning:
         return search_space_user
 
 
-from torch.utils.data import DataLoader, random_split
-from sklearn.model_selection import KFold
+import copy
+import logging
+import random
+
 import numpy as np
-import random, copy, logging
+from sklearn.model_selection import KFold
+from torch.utils.data import DataLoader, random_split
 
 
 class FineTuner(pl.LightningModule):

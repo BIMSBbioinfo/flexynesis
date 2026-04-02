@@ -1,13 +1,15 @@
-import os
-import sys
 import argparse
-import yaml
-import time
-import random
-import warnings
 import json
+import os
+import random
+import sys
+import time
 import tracemalloc
+import warnings
+
 import psutil
+import yaml
+
 from . import __version__
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -736,7 +738,8 @@ def main():
     # ---------- Inference mode: early exit path ----------
     if args.pretrained_model and args.artifacts and args.data_path_test:
         import torch
-        from .utils import get_optimal_device, create_device_from_string
+
+        from .utils import create_device_from_string, get_optimal_device
 
         # quick existence checks
         if not os.path.exists(args.pretrained_model):
@@ -833,8 +836,8 @@ def main():
         # Convert to GNN dataset if needed
         if args.model_class == "GNN":
             print("[INFO] Overlaying the dataset with network data from STRINGDB")
-            from .main import STRING
             from .data import MultiOmicDatasetNW
+            from .main import STRING
 
             # Get STRING organism from artifacts
             string_organism = importer.artifacts.get(
@@ -863,37 +866,35 @@ def main():
         # Continue to evaluation section (skip training)
 
     # ------------- Heavy imports only when training -------------
-    from .utils import (
-        evaluate_baseline_performance,
-        evaluate_baseline_survival_performance,
-        get_predicted_labels,
-        evaluate_wrapper,
-        get_optimal_device,
-        get_device_memory_info,
-        create_device_from_string,
-    )
+    from .utils import (create_device_from_string,
+                        evaluate_baseline_performance,
+                        evaluate_baseline_survival_performance,
+                        evaluate_wrapper, get_device_memory_info,
+                        get_optimal_device, get_predicted_labels)
 
     if not (args.pretrained_model and args.artifacts and args.data_path_test):
-        import flexynesis
-        from lightning import seed_everything
-        import lightning as pl
+        import json
+        import tracemalloc
         from typing import NamedTuple
-        import torch
+
+        import lightning as pl
         import pandas as pd
+        import psutil
+        import torch
+        from lightning import seed_everything
         from safetensors.torch import save_file
 
-        # models
-        from .models.direct_pred import DirectPred
-        from .models.supervised_vae import supervised_vae
-        from .models.triplet_encoder import MultiTripletNetwork
-        from .models.crossmodal_pred import CrossModalPred
-        from .models.gnn_early import GNN
+        import flexynesis
 
         # data + utils
-        from .data import STRING, MultiOmicDatasetNW, DataImporter
-        from .main import HyperparameterTuning, FineTuner
-        import tracemalloc, psutil
-        import json
+        from .data import STRING, DataImporter, MultiOmicDatasetNW
+        from .main import FineTuner, HyperparameterTuning
+        from .models.crossmodal_pred import CrossModalPred
+        # models
+        from .models.direct_pred import DirectPred
+        from .models.gnn_early import GNN
+        from .models.supervised_vae import supervised_vae
+        from .models.triplet_encoder import MultiTripletNetwork
 
         # --------- Sanity checks on args ---------
         # 1. survival variables consistency
@@ -1487,11 +1488,9 @@ def main():
 
             elif args.safetensors:
                 import numpy as np
-                from sklearn.preprocessing import (
-                    LabelEncoder,
-                    OrdinalEncoder,
-                    StandardScaler,
-                )
+                from sklearn.preprocessing import (LabelEncoder,
+                                                   OrdinalEncoder,
+                                                   StandardScaler)
 
                 json_ready = {
                     "schema_version": artifacts["schema_version"],

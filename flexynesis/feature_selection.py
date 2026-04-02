@@ -2,11 +2,9 @@
 
 import numpy as np
 import pandas as pd
+from scipy.sparse import csgraph, csr_matrix, diags
 from scipy.spatial.distance import pdist, squareform
 from sklearn.neighbors import kneighbors_graph
-from scipy.sparse import csgraph
-
-from scipy.sparse import csr_matrix, diags
 from tqdm import tqdm
 
 
