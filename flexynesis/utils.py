@@ -942,7 +942,7 @@ def evaluate_baseline_survival_performance(
                       listed along with the method name and variable details.
 
     """
-    print(f"[INFO] Evaluating baseline survival prediction performance")
+    print("[INFO] Evaluating baseline survival prediction performance")
 
     def prepare_data(data_object, duration_col, event_col):
         # Concatenate Data Matrices

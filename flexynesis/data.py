@@ -1580,7 +1580,7 @@ def read_user_graph(fpath, sep=None, header="infer", **pd_read_csv_kw):
             or score_s < min_threshold
         ):
             print(
-                f"[WARNING] Low confidence in column detection. Using first 3 columns as fallback."
+                "[WARNING] Low confidence in column detection. Using first 3 columns as fallback."
             )
             col_gene_a = df.columns[0]
             col_gene_b = df.columns[1]

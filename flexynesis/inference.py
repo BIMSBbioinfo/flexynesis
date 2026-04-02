@@ -314,7 +314,7 @@ def reconstruct_model(safetensors_path, config_path, artifacts_path, device="cpu
 
     Returns a fully instantiated, weights-loaded, eval-mode model.
     """
-    print(f"[INFO] Reconstructing model from safetensors")
+    print("[INFO] Reconstructing model from safetensors")
     print(f"[INFO]   config    : {config_path}")
     print(f"[INFO]   artifacts : {artifacts_path}")
     print(f"[INFO]   weights   : {safetensors_path}")

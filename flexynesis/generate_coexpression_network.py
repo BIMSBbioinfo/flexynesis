@@ -193,14 +193,14 @@ def generate_coexpression_network(
     if na_count > 0:
         genes_with_na = expr_df.isna().any(axis=1).sum()
         print(f"  [WARNING] Found {na_count} missing values in {genes_with_na} genes")
-        print(f"  [INFO] Removing genes with missing data.")
+        print("  [INFO] Removing genes with missing data.")
         expr_df = expr_df.dropna()
         print(
             f"  [INFO] Retained {expr_df.shape[0]} genes ({genes_with_na} genes removed)"
         )
 
     # Build network directly
-    print(f"\n[2/3] Building network...")
+    print("\n[2/3] Building network...")
     edges = build_network(
         expr_df, method=method, min_correlation=min_correlation, top_k=top_k
     )
@@ -232,7 +232,7 @@ def generate_coexpression_network(
     print("\n" + "=" * 70)
     print("Network Generation Complete!")
     print("=" * 70)
-    print(f"\nNetwork Statistics:")
+    print("\nNetwork Statistics:")
     print(f"  Total edges: {len(network_df):,}")
     print(f"  Unique genes (GeneA): {network_df['GeneA'].nunique():,}")
     print(f"  Unique genes (GeneB): {network_df['GeneB'].nunique():,}")
@@ -246,17 +246,17 @@ def generate_coexpression_network(
     print(f"  Median score: {network_df['Score'].median():.4f}")
 
     # Show sample
-    print(f"\nSample edges (first 5):")
+    print("\nSample edges (first 5):")
     print(network_df.head().to_string(index=False))
 
     print(f"\n{'=' * 70}")
     print("Usage with Flexynesis:")
     print(f"{'=' * 70}")
-    print(f"\nflexynesis --data_path <data_path> \\")
-    print(f"  --model_class GNN \\")
-    print(f"  --gnn_conv_type GCN \\")
-    print(f"  --target_variables <target> \\")
-    print(f"  --data_types gex,cnv \\")
+    print("\nflexynesis --data_path <data_path> \\")
+    print("  --model_class GNN \\")
+    print("  --gnn_conv_type GCN \\")
+    print("  --target_variables <target> \\")
+    print("  --data_types gex,cnv \\")
     print(f"  --user_graph {output_file}")
     print()
 
