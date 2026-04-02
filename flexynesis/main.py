@@ -453,8 +453,6 @@ class HyperparameterTuning:
         return search_space_user
 
 
-
-
 class FineTuner(pl.LightningModule):
     """
     FineTuner class is designed for fine-tuning trained flexynesis models with flexible control over parameters such as

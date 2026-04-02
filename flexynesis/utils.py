@@ -483,8 +483,6 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     }
 
 
-
-
 def plot_roc_curves(y_true, y_probs):
     """
     Plot ROC curves using plotnine for binary or multiclass classification.
@@ -1199,7 +1197,6 @@ def find_optimal_cutoff(
     return best_cutoff, best_p
 
 
-
 def recursive_binary_split_minN(
     df,
     score="pred_risk",
@@ -1759,7 +1756,6 @@ def optimal_transport_align(embeddings, batch_labels, standardize_by_labels=Fals
     return aligned_embeddings_df, aligned_batch_labels
 
 
-
 def reciprocal_pca_mnn(
     embeddings,
     batch_labels,
@@ -1863,9 +1859,6 @@ def reciprocal_pca_mnn(
     )
 
     return aligned_embeddings_df, aligned_batch_labels
-
-
-
 
 
 class CBioPortalData:
