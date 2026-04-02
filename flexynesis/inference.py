@@ -102,9 +102,7 @@ def _build_dataset_namespace(config, artifacts):
         cats = (
             enc.categories_[0].tolist()
             if hasattr(enc, "categories_")
-            else (
-                enc.get("categories", [[]])[0] if isinstance(enc, dict) else []
-            )
+            else (enc.get("categories", [[]])[0] if isinstance(enc, dict) else [])
         )
         if cats:
             ann[var] = cats
@@ -128,15 +126,11 @@ def _resolve_input_dims(config, artifacts):
     """Ensure input_dims is present in config, deriving from feature_lists if needed."""
     feature_lists = artifacts.get("feature_lists", {})
     layers = (
-        config.get("input_layers")
-        or config.get("layers")
-        or list(feature_lists.keys())
+        config.get("input_layers") or config.get("layers") or list(feature_lists.keys())
     )
     input_dims = config.get("input_dims")
     if not input_dims:
-        input_dims = [
-            len(feature_lists[l]) for l in layers if l in feature_lists
-        ]
+        input_dims = [len(feature_lists[l]) for l in layers if l in feature_lists]
         config["input_dims"] = input_dims
     return config
 
@@ -242,9 +236,7 @@ def _deserialize_json_artifacts(artifacts):
         encoder_type = encoder_dict.get("type")
         if encoder_type == "LabelEncoder":
             enc = LabelEncoder()
-            enc.classes_ = np.array(
-                encoder_dict.get("classes", []), dtype=object
-            )
+            enc.classes_ = np.array(encoder_dict.get("classes", []), dtype=object)
             label_encoders[variable] = enc
             continue
 
@@ -315,9 +307,7 @@ def _load_artifacts(artifacts_path):
     return raw
 
 
-def reconstruct_model(
-    safetensors_path, config_path, artifacts_path, device="cpu"
-):
+def reconstruct_model(safetensors_path, config_path, artifacts_path, device="cpu"):
     """
     Reconstruct a full Flexynesis model from:
       - safetensors_path : .safetensors weights file

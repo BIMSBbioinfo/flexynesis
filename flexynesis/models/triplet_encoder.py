@@ -52,9 +52,7 @@ class MultiTripletNetwork(pl.LightningModule):
         # both surv event and time variables are assumed to be numerical variables
         # we create only one survival variable for the pair (surv_time_var and surv_event_var)
         if self.surv_event_var is not None and self.surv_time_var is not None:
-            self.target_variables = self.target_variables + [
-                self.surv_event_var
-            ]
+            self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
         self.variables = (
             self.target_variables + batch_variables
@@ -85,8 +83,7 @@ class MultiTripletNetwork(pl.LightningModule):
 
         self.layers = list(dataset.dat.keys())
         self.input_dims = [
-            len(dataset.features[self.layers[i]])
-            for i in range(len(self.layers))
+            len(dataset.features[self.layers[i]]) for i in range(len(self.layers))
         ]
 
         self.encoders = nn.ModuleList(
@@ -239,9 +236,7 @@ class MultiTripletNetwork(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
             else:
-                loss = torch.tensor(
-                    0.0, device=y_hat.device, requires_grad=True
-                )
+                loss = torch.tensor(0.0, device=y_hat.device, requires_grad=True)
         return loss
 
     def compute_total_loss(self, losses):
@@ -511,9 +506,7 @@ class MultiTripletNetwork(pl.LightningModule):
 
         # define data loader
         triplet_dataset = TripletMultiOmicDataset(dataset, self.main_var)
-        dataloader = DataLoader(
-            triplet_dataset, batch_size=batch_size, shuffle=False
-        )
+        dataloader = DataLoader(triplet_dataset, batch_size=batch_size, shuffle=False)
 
         # Choose the attribution method dynamically
         if method == "IntegratedGradients":
@@ -533,7 +526,7 @@ class MultiTripletNetwork(pl.LightningModule):
         aggregated_attributions = [[] for _ in range(num_class)]
         for batch in dataloader:
             # see training_step to see how elements are accessed in batches
-            anchor, positive, negative= (
+            anchor, positive, negative = (
                 batch[0],
                 batch[1],
                 batch[2],
@@ -541,29 +534,18 @@ class MultiTripletNetwork(pl.LightningModule):
 
             # Move tensors to the specified device using MPS-safe method
             anchor = {k: to_device_safe(v, device) for k, v in anchor.items()}
-            positive = {
-                k: to_device_safe(v, device) for k, v in positive.items()
-            }
-            negative = {
-                k: to_device_safe(v, device) for k, v in negative.items()
-            }
+            positive = {k: to_device_safe(v, device) for k, v in positive.items()}
+            negative = {k: to_device_safe(v, device) for k, v in negative.items()}
 
             anchor = [data.requires_grad_() for data in list(anchor.values())]
-            positive = [
-                data.requires_grad_() for data in list(positive.values())
-            ]
-            negative = [
-                data.requires_grad_() for data in list(negative.values())
-            ]
+            positive = [data.requires_grad_() for data in list(positive.values())]
+            negative = [data.requires_grad_() for data in list(negative.values())]
 
             # concatenate multiomic layers of each list element
             # then stack the anchor/positive/negative
             # the purpose is to get a single tensor
             input_data = torch.stack(
-                [
-                    torch.cat(sublist, dim=1)
-                    for sublist in [anchor, positive, negative]
-                ]
+                [torch.cat(sublist, dim=1) for sublist in [anchor, positive, negative]]
             ).unsqueeze(0)
 
             # layer sizes will be needed to revert the concatenated tensor
@@ -573,14 +555,9 @@ class MultiTripletNetwork(pl.LightningModule):
             # Define a baseline
             if method == "IntegratedGradients":
                 baseline = torch.zeros_like(input_data)
-            elif (
-                method == "GradientShap"
-            ):  # provide multiple baselines for Gr.Shap
+            elif method == "GradientShap":  # provide multiple baselines for Gr.Shap
                 baseline = torch.cat(
-                    [
-                        torch.zeros_like(input_data)
-                        for _ in range(steps_or_samples)
-                    ],
+                    [torch.zeros_like(input_data) for _ in range(steps_or_samples)],
                     dim=0,
                 )
 
@@ -652,9 +629,7 @@ class MultiTripletNetwork(pl.LightningModule):
             # Process each layer within the class
             for layer_idx in range(num_layers):
                 # Extract all batch tensors for this layer across all batches for the current class
-                layer_tensors = [
-                    batch_attr[layer_idx] for batch_attr in class_attr
-                ]
+                layer_tensors = [batch_attr[layer_idx] for batch_attr in class_attr]
                 # Concatenate tensors along the batch dimension
                 attr_concat = torch.cat(layer_tensors, dim=2)
                 layer_attributions.append(attr_concat)

@@ -46,9 +46,7 @@ class CrossModalPred(pl.LightningModule):
         # both surv event and time variables are assumed to be numerical variables
         # we create only one survival variable for the pair (surv_time_var and surv_event_var)
         if self.surv_event_var is not None and self.surv_time_var is not None:
-            self.target_variables = self.target_variables + [
-                self.surv_event_var
-            ]
+            self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
         self.variables = (
             self.target_variables + self.batch_variables
@@ -58,9 +56,7 @@ class CrossModalPred(pl.LightningModule):
         self.variable_types = dataset.variable_types
         self.ann = dataset.ann
 
-        self.input_layers = (
-            input_layers if input_layers else list(dataset.dat.keys())
-        )
+        self.input_layers = input_layers if input_layers else list(dataset.dat.keys())
         self.output_layers = (
             output_layers if output_layers else list(dataset.dat.keys())
         )
@@ -178,9 +174,7 @@ class CrossModalPred(pl.LightningModule):
         z = self.reparameterization(mean, log_var)
 
         # decode the latent space to target output layer(s)
-        x_hat_list = [
-            self.decoders[i](z) for i in range(len(self.output_layers))
-        ]
+        x_hat_list = [self.decoders[i](z) for i in range(len(self.output_layers))]
 
         # run the supervisor heads using the latent layer as input
         outputs = {}
@@ -257,9 +251,7 @@ class CrossModalPred(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
             else:
-                loss = torch.tensor(
-                    0.0, device=y_hat.device, requires_grad=True
-                )
+                loss = torch.tensor(0.0, device=y_hat.device, requires_grad=True)
         return loss
 
     def compute_total_loss(self, losses):
@@ -534,9 +526,7 @@ class CrossModalPred(pl.LightningModule):
 
     # Adaptor forward function for captum integrated gradients.
     def forward_target(self, *args):
-        input_data = list(
-            args[:-2]
-        )  # one or more tensors (one per omics layer)
+        input_data = list(args[:-2])  # one or more tensors (one per omics layer)
         target_var = args[-2]  # target variable of interest
         steps = args[-1]  # number of steps for IntegratedGradients().attribute
         outputs_list = []
@@ -616,18 +606,12 @@ class CrossModalPred(pl.LightningModule):
 
         for batch in dataloader:
             dat, _, _ = batch
-            x_list = [
-                to_device_safe(dat[x], device) for x in self.input_layers
-            ]
-            input_data = tuple(
-                [data.unsqueeze(0).requires_grad_() for data in x_list]
-            )
+            x_list = [to_device_safe(dat[x], device) for x in self.input_layers]
+            input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
 
             if method == "IntegratedGradients":
                 baseline = tuple(torch.zeros_like(x) for x in input_data)
-            elif (
-                method == "GradientShap"
-            ):  # provide multiple baselines for Gr.Shap
+            elif method == "GradientShap":  # provide multiple baselines for Gr.Shap
                 baseline = tuple(
                     torch.cat(
                         [torch.zeros_like(x) for _ in range(steps_or_samples)],
@@ -690,9 +674,7 @@ class CrossModalPred(pl.LightningModule):
             # Process each layer within the class
             for layer_idx in range(num_layers):
                 # Extract all batch tensors for this layer across all batches for the current class
-                layer_tensors = [
-                    batch_attr[layer_idx] for batch_attr in class_attr
-                ]
+                layer_tensors = [batch_attr[layer_idx] for batch_attr in class_attr]
                 # Concatenate tensors along the batch dimension
                 attr_concat = torch.cat(layer_tensors, dim=1)
                 layer_attributions.append(attr_concat)

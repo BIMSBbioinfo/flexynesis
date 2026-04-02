@@ -45,9 +45,7 @@ class DirectPred(pl.LightningModule):
         # both surv event and time variables are assumed to be numerical variables
         # we create only one survival variable for the pair (surv_time_var and surv_event_var)
         if self.surv_event_var is not None and self.surv_time_var is not None:
-            self.target_variables = self.target_variables + [
-                self.surv_event_var
-            ]
+            self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
         self.variables = (
             self.target_variables + batch_variables
@@ -68,8 +66,7 @@ class DirectPred(pl.LightningModule):
         self.ann = dataset.ann
         self.layers = list(dataset.dat.keys())
         self.input_dims = [
-            len(dataset.features[self.layers[i]])
-            for i in range(len(self.layers))
+            len(dataset.features[self.layers[i]]) for i in range(len(self.layers))
         ]
 
         self.encoders = nn.ModuleList(
@@ -187,9 +184,7 @@ class DirectPred(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
             else:
-                loss = torch.tensor(
-                    0.0, device=y_hat.device, requires_grad=True
-                )
+                loss = torch.tensor(0.0, device=y_hat.device, requires_grad=True)
         return loss
 
     def compute_total_loss(self, losses):
@@ -337,9 +332,7 @@ class DirectPred(pl.LightningModule):
 
             # Collect predictions for each variable
             for var in self.variables:
-                logits = (
-                    outputs[var].detach().cpu()
-                )  # Raw model outputs (logits)
+                logits = outputs[var].detach().cpu()  # Raw model outputs (logits)
 
                 if dataset.variable_types[var] == "categorical":
                     probs = torch.softmax(
@@ -379,9 +372,7 @@ class DirectPred(pl.LightningModule):
             dataset, batch_size=64, shuffle=False
         )  # Adjust the batch size as needed
 
-        embeddings_list = (
-            []
-        )  # Initialize a list to collect all batch embeddings
+        embeddings_list = []  # Initialize a list to collect all batch embeddings
         sample_names = []  # List to collect sample names
 
         # Process each batch
@@ -423,9 +414,7 @@ class DirectPred(pl.LightningModule):
 
     # Adaptor forward function for captum integrated gradients or gradient shap
     def forward_target(self, *args):
-        input_data = list(
-            args[:-2]
-        )  # one or more tensors (one per omics layer)
+        input_data = list(args[:-2])  # one or more tensors (one per omics layer)
         target_var = args[-2]  # target variable of interest
         steps = args[
             -1
@@ -500,15 +489,11 @@ class DirectPred(pl.LightningModule):
         for batch in dataloader:
             dat, _, _ = batch
             x_list = [to_device_safe(dat[x], device) for x in dat.keys()]
-            input_data = tuple(
-                [data.unsqueeze(0).requires_grad_() for data in x_list]
-            )
+            input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
 
             if method == "IntegratedGradients":
                 baseline = tuple(torch.zeros_like(x) for x in input_data)
-            elif (
-                method == "GradientShap"
-            ):  # provide multiple baselines for Gr.Shap
+            elif method == "GradientShap":  # provide multiple baselines for Gr.Shap
                 baseline = tuple(
                     torch.cat(
                         [torch.zeros_like(x) for _ in range(steps_or_samples)],
@@ -567,9 +552,7 @@ class DirectPred(pl.LightningModule):
             class_attr = aggregated_attributions[class_idx]
             layer_attributions = []
             for layer_idx in range(num_layers):
-                layer_tensors = [
-                    batch_attr[layer_idx] for batch_attr in class_attr
-                ]
+                layer_tensors = [batch_attr[layer_idx] for batch_attr in class_attr]
                 attr_concat = torch.cat(layer_tensors, dim=1)
                 layer_attributions.append(attr_concat)
             processed_attributions.append(layer_attributions)

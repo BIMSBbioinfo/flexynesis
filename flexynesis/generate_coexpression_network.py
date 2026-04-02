@@ -79,9 +79,7 @@ def build_network(
                 pbar.update(end_i - i)
         data = ranks
     elif method != "pearson":
-        raise ValueError(
-            f"Unknown method: {method}. Use 'spearman' or 'pearson'"
-        )
+        raise ValueError(f"Unknown method: {method}. Use 'spearman' or 'pearson'")
 
     # Standardize for correlation computation
     print("Standardizing data...")
@@ -188,17 +186,13 @@ def generate_coexpression_network(
             print(f"[ERROR] Failed to load file: {e2}")
             sys.exit(1)
 
-    print(
-        f"  Expression matrix: {expr_df.shape[0]} genes × {expr_df.shape[1]} samples"
-    )
+    print(f"  Expression matrix: {expr_df.shape[0]} genes × {expr_df.shape[1]} samples")
 
     # Check for missing values
     na_count = expr_df.isna().sum().sum()
     if na_count > 0:
         genes_with_na = expr_df.isna().any(axis=1).sum()
-        print(
-            f"  [WARNING] Found {na_count} missing values in {genes_with_na} genes"
-        )
+        print(f"  [WARNING] Found {na_count} missing values in {genes_with_na} genes")
         print(f"  [INFO] Removing genes with missing data.")
         expr_df = expr_df.dropna()
         print(
@@ -215,9 +209,7 @@ def generate_coexpression_network(
     network_df = pd.DataFrame(edges)
 
     if len(network_df) == 0:
-        print(
-            "[WARNING] No edges found! Try lowering min_correlation threshold."
-        )
+        print("[WARNING] No edges found! Try lowering min_correlation threshold.")
         print("[ERROR] No edges in network! Exiting.")
         sys.exit(1)
 
@@ -228,9 +220,7 @@ def generate_coexpression_network(
             lambda row: tuple(sorted([row["GeneA"], row["GeneB"]])), axis=1
         )
         original_len = len(network_df)
-        network_df = network_df.drop_duplicates(subset="pair").drop(
-            columns="pair"
-        )
+        network_df = network_df.drop_duplicates(subset="pair").drop(columns="pair")
         print(f"  Removed {original_len - len(network_df)} duplicate edges")
 
     # Save network (auto-detect format from extension)

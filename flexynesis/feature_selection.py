@@ -150,9 +150,7 @@ def remove_redundant_features(X, laplacian_scores, threshold, topN=None):
                     "correlated_with": X.columns[
                         redundant_features[idx]["correlated_with"]
                     ],
-                    "correlation_score": redundant_features[idx][
-                        "correlation_score"
-                    ],
+                    "correlation_score": redundant_features[idx]["correlation_score"],
                 }
                 for idx in redundant_features
             ]
@@ -162,9 +160,7 @@ def remove_redundant_features(X, laplacian_scores, threshold, topN=None):
         return X.columns[selected_features], pd.DataFrame()
 
 
-def filter_by_laplacian(
-    X, layer, k=5, t=None, topN=100, correlation_threshold=0.9
-):
+def filter_by_laplacian(X, layer, k=5, t=None, topN=100, correlation_threshold=0.9):
     """
     Filters features in a dataset based on Laplacian scores and removes highly correlated features,
     retaining only the top N features with the lowest scores and optionally considering correlation.
@@ -224,9 +220,7 @@ def filter_by_laplacian(
         " samples ",
     )
 
-    feature_log = pd.DataFrame(
-        {"feature": X.columns, "laplacian_score": np.nan}
-    )
+    feature_log = pd.DataFrame({"feature": X.columns, "laplacian_score": np.nan})
     # only apply filtering if topN < n_features
     if topN >= X.shape[1]:
         print(
@@ -238,9 +232,7 @@ def filter_by_laplacian(
     # compute laplacian scores
     scores = laplacian_score(X.values, k, t)
 
-    feature_log = pd.DataFrame(
-        {"feature": X.columns, "laplacian_score": scores}
-    )
+    feature_log = pd.DataFrame({"feature": X.columns, "laplacian_score": scores})
 
     # Sort the features based on their Laplacian Scores
     sorted_indices = np.argsort(scores)
@@ -277,8 +269,6 @@ def filter_by_laplacian(
     X_selected = X[selected_features]
 
     feature_log["selected"] = False
-    feature_log.loc[
-        feature_log["feature"].isin(selected_features), "selected"
-    ] = True
+    feature_log.loc[feature_log["feature"].isin(selected_features), "selected"] = True
 
     return X_selected, feature_log
