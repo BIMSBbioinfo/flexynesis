@@ -2062,8 +2062,6 @@ class CBioPortalData:
         print(df.to_string(index=False))
 
     def get_cbioportal_data(self, study_id, files=None):
-        archive_path = self.download_study_archive()
-        study_dir = self.extract_archive(archive_path)
 
         if files is None:
             self.print_data_files()

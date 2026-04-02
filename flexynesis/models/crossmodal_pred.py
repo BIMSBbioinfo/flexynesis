@@ -464,7 +464,6 @@ class CrossModalPred(pl.LightningModule):
         """
         self.eval()
         x_list_input = [dataset.dat[x] for x in self.input_layers]
-        x_list_output = [dataset.dat[x] for x in self.output_layers]
         x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input)
         X = {}
         for i in range(len(self.output_layers)):

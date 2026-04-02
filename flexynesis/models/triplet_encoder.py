@@ -533,11 +533,10 @@ class MultiTripletNetwork(pl.LightningModule):
         aggregated_attributions = [[] for _ in range(num_class)]
         for batch in dataloader:
             # see training_step to see how elements are accessed in batches
-            anchor, positive, negative, y_dict = (
+            anchor, positive, negative= (
                 batch[0],
                 batch[1],
                 batch[2],
-                batch[3],
             )
 
             # Move tensors to the specified device using MPS-safe method

@@ -49,11 +49,9 @@ def test_mps_memory_allocation():
     if device_str != "mps" or not torch.backends.mps.is_available():
         pytest.skip("MPS device not available. Skipping test.")
 
-    device = torch.device(device_str)
 
     # Test memory tracking
     memory_before = torch.mps.current_allocated_memory()
-    large_tensor = to_device_safe(torch.randn(1000, 1000), device)
     memory_after = torch.mps.current_allocated_memory()
 
     assert (

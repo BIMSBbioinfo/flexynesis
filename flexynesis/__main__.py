@@ -1079,12 +1079,7 @@ def main():
 
         # import data
         tracemalloc.start()
-        process = psutil.Process(os.getpid())
-        t1 = time.time()
         train_dataset, test_dataset = data_importer.import_data()
-
-        data_import_time = time.time() - t1
-        data_import_ram = process.memory_info().rss
 
         # classical ML baselines
         if args.model_class == "XGBoost":
@@ -1245,12 +1240,9 @@ def main():
         )
 
         # do a hyperparameter search training multiple models and get the best configuration
-        t1 = time.time()
         model, best_params = tuner.perform_tuning(
             hpo_patience=args.hpo_patience
         )
-        hpo_time = time.time() - t1
-        hpo_system_ram = process.memory_info().rss
 
         # if fine-tuning is enabled; fine tune the model on a portion of test samples
         if args.finetuning_samples > 0:

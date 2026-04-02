@@ -125,7 +125,6 @@ def remove_redundant_features(X, laplacian_scores, threshold, topN=None):
 
     # Topping up from redundant features if fewer than topN features are selected
     if topN is not None and len(selected_features) < topN:
-        shortfall = topN - len(selected_features)
         # Sort redundant features by their laplacian score, prioritizing lower scores
         sorted_redundant_indices = sorted(
             redundant_features.keys(), key=lambda x: laplacian_scores[x]

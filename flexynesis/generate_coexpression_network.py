@@ -179,6 +179,7 @@ def generate_coexpression_network(
         sep = "\t" if input_file.endswith(".tsv") else ","
         expr_df = pd.read_csv(input_file, sep=sep, index_col=0)
     except Exception as e:
+        print(f"[ERROR] Failed to load file: {e}")
         # Fallback: try the other separator
         try:
             sep = "," if sep == "\t" else "\t"
