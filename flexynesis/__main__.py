@@ -871,14 +871,10 @@ def main():
         # Continue to evaluation section (skip training)
 
     # ------------- Heavy imports only when training -------------
-    from .utils import (
-        evaluate_baseline_performance,
-        evaluate_baseline_survival_performance,
-        evaluate_wrapper,
-        get_device_memory_info,
-        get_optimal_device,
-        get_predicted_labels,
-    )
+    from .utils import (evaluate_baseline_performance,
+                        evaluate_baseline_survival_performance,
+                        evaluate_wrapper, get_device_memory_info,
+                        get_optimal_device, get_predicted_labels)
 
     if not (args.pretrained_model and args.artifacts and args.data_path_test):
         import json
@@ -893,7 +889,6 @@ def main():
         from .data import STRING, DataImporter, MultiOmicDatasetNW
         from .main import FineTuner, HyperparameterTuning
         from .models.crossmodal_pred import CrossModalPred
-
         # models
         from .models.direct_pred import DirectPred
         from .models.gnn_early import GNN
@@ -1510,11 +1505,9 @@ def main():
 
             elif args.safetensors:
                 import numpy as np
-                from sklearn.preprocessing import (
-                    LabelEncoder,
-                    OrdinalEncoder,
-                    StandardScaler,
-                )
+                from sklearn.preprocessing import (LabelEncoder,
+                                                   OrdinalEncoder,
+                                                   StandardScaler)
 
                 json_ready = {
                     "schema_version": artifacts["schema_version"],

@@ -11,22 +11,12 @@ import torch
 from scipy.stats import linregress, pearsonr
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.feature_selection import (
-    SelectFromModel,
-    mutual_info_classif,
-    mutual_info_regression,
-)
-from sklearn.metrics import (
-    adjusted_mutual_info_score,
-    adjusted_rand_score,
-    average_precision_score,
-    balanced_accuracy_score,
-    classification_report,
-    cohen_kappa_score,
-    f1_score,
-    mean_squared_error,
-    roc_auc_score,
-)
+from sklearn.feature_selection import (SelectFromModel, mutual_info_classif,
+                                       mutual_info_regression)
+from sklearn.metrics import (adjusted_mutual_info_score, adjusted_rand_score,
+                             average_precision_score, balanced_accuracy_score,
+                             classification_report, cohen_kappa_score,
+                             f1_score, mean_squared_error, roc_auc_score)
 from sklearn.model_selection import GridSearchCV, KFold
 from sklearn.svm import SVC, SVR
 from sksurv.metrics import cumulative_dynamic_auc
@@ -42,7 +32,6 @@ except Exception:
 import community as community_louvain
 import matplotlib.pyplot as plt
 import networkx as nx
-
 # imports
 import numpy as np
 import ot
@@ -50,26 +39,10 @@ import pandas as pd
 from lifelines import CoxPHFitter, KaplanMeierFitter
 from lifelines.statistics import logrank_test, multivariate_logrank_test
 from lifelines.utils import concordance_index
-from plotnine import (
-    aes,
-    annotate,
-    element_text,
-    geom_abline,
-    geom_errorbarh,
-    geom_line,
-    geom_point,
-    geom_smooth,
-    geom_step,
-    geom_text,
-    ggplot,
-    ggtitle,
-    labs,
-    scale_color_gradient,
-    scale_color_manual,
-    theme,
-    theme_bw,
-    theme_minimal,
-)
+from plotnine import (aes, annotate, element_text, geom_abline, geom_errorbarh,
+                      geom_line, geom_point, geom_smooth, geom_step, geom_text,
+                      ggplot, ggtitle, labs, scale_color_gradient,
+                      scale_color_manual, theme, theme_bw, theme_minimal)
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
@@ -509,12 +482,8 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     }
 
 
-from sklearn.metrics import (
-    average_precision_score,
-    precision_recall_curve,
-    roc_auc_score,
-    roc_curve,
-)
+from sklearn.metrics import (average_precision_score, precision_recall_curve,
+                             roc_auc_score, roc_curve)
 from sklearn.preprocessing import label_binarize
 
 

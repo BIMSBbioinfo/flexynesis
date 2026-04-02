@@ -9,9 +9,8 @@ import numpy as np
 import torch
 import yaml
 from lightning.pytorch.callbacks import EarlyStopping, RichProgressBar
-from lightning.pytorch.callbacks.progress.rich_progress import (
-    RichProgressBarTheme,
-)
+from lightning.pytorch.callbacks.progress.rich_progress import \
+    RichProgressBarTheme
 from skopt import Optimizer
 from skopt.space import Categorical, Integer, Real
 from torch.utils.data import DataLoader, random_split

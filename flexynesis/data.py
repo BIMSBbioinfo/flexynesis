@@ -798,10 +798,8 @@ class DataImporterInference:
 
         # Create covariates matrix if needed
         if "covariates" in self.modalities and labels_df is not None:
-            from flexynesis.utils import (
-                create_covariate_matrix,
-                get_variable_types,
-            )
+            from flexynesis.utils import (create_covariate_matrix,
+                                          get_variable_types)
 
             covariate_vars = self.artifacts.get("covariate_vars", [])
             if covariate_vars:
