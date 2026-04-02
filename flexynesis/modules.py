@@ -224,7 +224,8 @@ class flexGCN(nn.Module):
         }
         if conv not in conv_options:
             raise ValueError(
-                "Unknown convolution type. Choose one of: ", list(conv_options.keys())
+                "Unknown convolution type. Choose one of: ",
+                list(conv_options.keys()),
             )
 
         self.act = act_options[act]
@@ -233,7 +234,9 @@ class flexGCN(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
 
         # Initialize the first convolution layer separately if different input size
-        self.convs.append(conv_options[conv](node_feature_count, node_embedding_dim))
+        self.convs.append(
+            conv_options[conv](node_feature_count, node_embedding_dim)
+        )
         self.bns.append(nn.BatchNorm1d(node_embedding_dim))
 
         # Loop to create the remaining convolution and BN layers
@@ -284,7 +287,9 @@ def cox_ph_loss(outputs, durations, events):
             hazards = hazards.unsqueeze(0)  # Make hazards 1D if it's a scalar
         # Calculate the risk set sum
         log_risk_set_sum = torch.log(
-            torch.cumsum(hazards[torch.argsort(durations, descending=True)], dim=0)
+            torch.cumsum(
+                hazards[torch.argsort(durations, descending=True)], dim=0
+            )
         )
         # Get the indices that sort the durations in descending order
         sorted_indices = torch.argsort(durations, descending=True)
@@ -296,7 +301,9 @@ def cox_ph_loss(outputs, durations, events):
         ) - torch.sum(log_risk_set_sum[events_sorted == 1])
         total_loss = -uncensored_loss / torch.sum(events)
     else:
-        total_loss = torch.tensor(0.0, device=outputs.device, requires_grad=True)
+        total_loss = torch.tensor(
+            0.0, device=outputs.device, requires_grad=True
+        )
     if not torch.isfinite(total_loss):
         return torch.tensor(0.0, device=outputs.device, requires_grad=True)
     return total_loss

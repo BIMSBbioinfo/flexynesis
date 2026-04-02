@@ -190,7 +190,9 @@ def plot_dim_reduced(
             + theme_minimal()
         )
     else:
-        raise ValueError("Invalid color_type. Choose 'categorical' or 'numerical'.")
+        raise ValueError(
+            "Invalid color_type. Choose 'categorical' or 'numerical'."
+        )
 
     return p
 
@@ -305,7 +307,11 @@ def plot_scatter(true_values, predicted_values):
             va="top",
             size=10,
         )
-        + labs(title="True vs Predicted Values", x="True Values", y="Predicted Values")
+        + labs(
+            title="True vs Predicted Values",
+            x="True Values",
+            y="Predicted Values",
+        )
         + theme_minimal()
     )
 
@@ -369,7 +375,9 @@ def plot_boxplot(
         verticalalignment="top",
         horizontalalignment="left",
         fontsize=12,
-        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="gray"),
+        bbox=dict(
+            boxstyle="round,pad=0.3", facecolor="white", edgecolor="gray"
+        ),
     )
 
     plt.tight_layout()
@@ -559,7 +567,9 @@ def plot_roc_curves(y_true, y_probs):
         ggplot(all_data, aes(x="fpr", y="tpr", color="label"))
         + geom_line(size=1.2)
         + geom_abline(intercept=0, slope=1, linetype="dashed", color="gray")
-        + labs(title="ROC Curve", x="False Positive Rate", y="True Positive Rate")
+        + labs(
+            title="ROC Curve", x="False Positive Rate", y="True Positive Rate"
+        )
         + theme_minimal()
     )
 
@@ -676,7 +686,9 @@ def evaluate_wrapper(
             if var == surv_event_var:
                 events = dataset.ann[surv_event_var]
                 durations = dataset.ann[surv_time_var]
-                metrics = evaluate_survival(y_pred_dict[var], durations, events)
+                metrics = evaluate_survival(
+                    y_pred_dict[var], durations, events
+                )
             else:
                 ind = ~torch.isnan(dataset.ann[var])
                 metrics = evaluate_regressor(
@@ -684,7 +696,9 @@ def evaluate_wrapper(
                 )
         else:
             ind = ~torch.isnan(dataset.ann[var])
-            metrics = evaluate_classifier(dataset.ann[var][ind], y_pred_dict[var][ind])
+            metrics = evaluate_classifier(
+                dataset.ann[var][ind], y_pred_dict[var][ind]
+            )
 
         for metric, value in metrics.items():
             metrics_list.append(
@@ -735,13 +749,16 @@ def get_predicted_labels(y_pred_dict, dataset, split, method_name):
                     for idx in range(probabilities.shape[1])
                 ]
             else:
-                class_labels = [f"class_{i}" for i in range(probabilities.shape[1])]
+                class_labels = [
+                    f"class_{i}" for i in range(probabilities.shape[1])
+                ]
 
             # Get true labels (y_true)
             y_true = [
                 (
                     dataset.label_mappings[var][int(x.item())]
-                    if var in dataset.label_mappings.keys() and not np.isnan(x.item())
+                    if var in dataset.label_mappings.keys()
+                    and not np.isnan(x.item())
                     else np.nan
                 )
                 for x in dataset.ann[var]
@@ -824,7 +841,9 @@ def evaluate_baseline_performance(
 
     def prepare_data(data_object, pca_model=None, fit_pca=False):
         # Concatenate Data Matrices
-        X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=1)
+        X = np.concatenate(
+            [tensor for tensor in data_object.dat.values()], axis=1
+        )
         y = np.array(data_object.ann[variable_name])
 
         # Filter out samples without a valid label
@@ -865,7 +884,10 @@ def evaluate_baseline_performance(
         if variable_type == "categorical":
             if method == "RandomForest":
                 model = RandomForestClassifier(random_state=42)
-                params = {"n_estimators": [100, 200, 300], "max_depth": [10, 20, None]}
+                params = {
+                    "n_estimators": [100, 200, 300],
+                    "max_depth": [10, 20, None],
+                }
             elif method == "SVM":
                 model = SVC(probability=True, random_state=42)
                 params = {"C": [0.1, 1, 10], "kernel": ["rbf", "poly"]}
@@ -884,7 +906,10 @@ def evaluate_baseline_performance(
         elif variable_type == "numerical":
             if method == "RandomForest":
                 model = RandomForestRegressor(random_state=42)
-                params = {"n_estimators": [100, 200, 300], "max_depth": [10, 20, None]}
+                params = {
+                    "n_estimators": [100, 200, 300],
+                    "max_depth": [10, 20, None],
+                }
             elif method == "SVM":
                 model = SVR()
                 params = {"C": [0.1, 1, 10], "kernel": ["rbf", "poly"]}
@@ -926,7 +951,11 @@ def evaluate_baseline_performance(
             metrics_list.append(
                 {
                     "method": method
-                    + ("Classifier" if variable_type == "categorical" else "Regressor"),
+                    + (
+                        "Classifier"
+                        if variable_type == "categorical"
+                        else "Regressor"
+                    ),
                     "var": variable_name,
                     "variable_type": variable_type,
                     "metric": metric,
@@ -966,7 +995,9 @@ def evaluate_baseline_survival_performance(
 
     def prepare_data(data_object, duration_col, event_col):
         # Concatenate Data Matrices
-        X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=1)
+        X = np.concatenate(
+            [tensor for tensor in data_object.dat.values()], axis=1
+        )
 
         # Prepare Survival Data (Durations and Events)
         durations = np.array(data_object.ann[duration_col])
@@ -986,7 +1017,9 @@ def evaluate_baseline_survival_performance(
     X_train, y_train, train_indices = prepare_data(
         train_dataset, duration_col, event_col
     )
-    X_test, y_test, test_indices = prepare_data(test_dataset, duration_col, event_col)
+    X_test, y_test, test_indices = prepare_data(
+        test_dataset, duration_col, event_col
+    )
 
     # Initialize Random Survival Forest
     rsf = RandomSurvivalForest(
@@ -1137,7 +1170,9 @@ def subset_assays_by_features(dataset, features_dict):
     # data matrix for each key in features_dict
     subset_dat = {}
     for layer in features_dict.keys():
-        indices = [dataset.features[layer].get_loc(x) for x in features_dict[layer]]
+        indices = [
+            dataset.features[layer].get_loc(x) for x in features_dict[layer]
+        ]
         subset_dat[layer] = dataset.dat[layer][:, indices]
     # Convert subset_dat to pandas DataFrame and prepend feature names with layer names
     df_list = []
@@ -1146,7 +1181,9 @@ def subset_assays_by_features(dataset, features_dict):
         df_temp = pd.DataFrame(data)
 
         # Rename columns to prepend with layer name
-        df_temp.columns = [f"{layer}_{feature}" for feature in features_dict[layer]]
+        df_temp.columns = [
+            f"{layer}_{feature}" for feature in features_dict[layer]
+        ]
         df_list.append(df_temp)
     # Concatenate dataframes horizontally
     concatenated_df = pd.concat(df_list, axis=1)
@@ -1248,7 +1285,9 @@ def recursive_binary_split_minN(
             continue
 
         try:
-            cutoff, pval = find_optimal_cutoff(node[score], node[time], node[event])
+            cutoff, pval = find_optimal_cutoff(
+                node[score], node[time], node[event]
+            )
         except Exception:
             cutoff, pval = None, 1.0
 
@@ -1262,7 +1301,10 @@ def recursive_binary_split_minN(
         right = node[node[score] > cutoff]
 
         # if either resulting child is smaller than required, reject split
-        if len(left) < min_samples_per_group or len(right) < min_samples_per_group:
+        if (
+            len(left) < min_samples_per_group
+            or len(right) < min_samples_per_group
+        ):
             groups.update({i: next_gid for i in node.index})
             next_gid += 1
             continue
@@ -1321,7 +1363,9 @@ def plot_hazard_ratios(cox_model):
     p = (
         ggplot(coef_summary_sorted, aes(x="coef", y="variable"))
         + geom_errorbarh(
-            aes(xmin="coef_lower_95", xmax="coef_upper_95"), height=0.2, color="skyblue"
+            aes(xmin="coef_lower_95", xmax="coef_upper_95"),
+            height=0.2,
+            color="skyblue",
         )
         + geom_point(color="skyblue", size=3)
         + geom_text(aes(label="stars"), nudge_y=0.1, size=10)
@@ -1347,7 +1391,9 @@ def build_cox_model(
     event_col: str,
     n_splits: int = 5,
     random_state: int = 42,
-    eval_time: float | None = None,  # single horizon, same units as duration_col
+    eval_time: (
+        float | None
+    ) = None,  # single horizon, same units as duration_col
     low_variance_threshold: float = 0.01,
     cox_penalizer=0.05,
     return_metrics: bool = True,
@@ -1365,7 +1411,9 @@ def build_cox_model(
         }
     """
 
-    def remove_low_variance_survival_features(df, duration_col, event_col, threshold):
+    def remove_low_variance_survival_features(
+        df, duration_col, event_col, threshold
+    ):
         events = df[event_col].astype(bool)
         low_var = []
         for feature in df.drop(columns=[duration_col, event_col]).columns:
@@ -1425,13 +1473,20 @@ def build_cox_model(
             eps = 1e-8
             if (test_min + eps) < float(eval_time) < (test_max - eps):
                 _, auc_val = cumulative_dynamic_auc(
-                    y_train, y_test, risk_scores, np.asarray([float(eval_time)])
+                    y_train,
+                    y_test,
+                    risk_scores,
+                    np.asarray([float(eval_time)]),
                 )
                 auc_val = float(np.atleast_1d(auc_val)[0])
                 auc_per_fold.append(auc_val)
     # Aggregate CV metrics
-    metrics["cv_cindex_mean"] = float(np.mean(c_indices)) if c_indices else None
-    metrics["cv_auc_mean"] = float(np.mean(auc_per_fold)) if auc_per_fold else None
+    metrics["cv_cindex_mean"] = (
+        float(np.mean(c_indices)) if c_indices else None
+    )
+    metrics["cv_auc_mean"] = (
+        float(np.mean(auc_per_fold)) if auc_per_fold else None
+    )
 
     # Fit final model on full data for downstream use (forest plots, HRs, etc.)
     final_model = CoxPHFitter(penalizer=cox_penalizer)
@@ -1493,7 +1548,9 @@ def louvain_clustering(X, threshold=None, k=None):
     cluster_labels = np.full(len(X), np.nan, dtype=float)
     # Fill the array with the cluster labels from the partition dictionary
     for node_id, cluster_label in partition.items():
-        if node_id in range(len(X)):  # Check if the node_id is a valid index in X
+        if node_id in range(
+            len(X)
+        ):  # Check if the node_id is a valid index in X
             cluster_labels[node_id] = cluster_label
         else:
             # If node_id is not a valid index in X, it's already set to NaN
@@ -1566,7 +1623,8 @@ def plot_label_concordance_heatmap(labels1, labels2, figsize=(12, 10)):
     """
     # Compute the cross-tabulation
     ct = pd.crosstab(
-        pd.Series(labels1, name="Labels Set 1"), pd.Series(labels2, name="Labels Set 2")
+        pd.Series(labels1, name="Labels Set 1"),
+        pd.Series(labels2, name="Labels Set 2"),
     )
     # Normalize the cross-tabulation matrix column-wise
     ct_normalized = ct.div(ct.sum(axis=1), axis=0)
@@ -1654,7 +1712,9 @@ def create_covariate_matrix(covariates, variable_types, ann):
         if variable_types.get(var) == "categorical":
             # One-hot-encode categorical variables with 0/1 encoding
             one_hot = pd.get_dummies(ann[var], prefix=var).astype(int)
-            covariate_features.append(one_hot.T)  # Transpose to make features rows
+            covariate_features.append(
+                one_hot.T
+            )  # Transpose to make features rows
             feature_names.extend(one_hot.columns.tolist())
         elif variable_types.get(var) == "numerical":
             # Handle numerical variables with missing values
@@ -1705,7 +1765,9 @@ def generate_synthetic_batches(n_samples_per_batch=150, n_features=50):
     return synthetic_data, batch_labels
 
 
-def optimal_transport_align(embeddings, batch_labels, standardize_by_labels=False):
+def optimal_transport_align(
+    embeddings, batch_labels, standardize_by_labels=False
+):
     """
     Align embeddings from two batches using Optimal Transport, preserving the order of samples.
 
@@ -1723,7 +1785,9 @@ def optimal_transport_align(embeddings, batch_labels, standardize_by_labels=Fals
     # Identify unique batches
     unique_batches = np.unique(batch_labels_np)
     if len(unique_batches) != 2:
-        raise ValueError("Optimal transport supports aligning exactly two batches.")
+        raise ValueError(
+            "Optimal transport supports aligning exactly two batches."
+        )
 
     # Split embeddings by batch, preserving the original indices
     batch1_indices = np.where(batch_labels_np == unique_batches[0])[0]
@@ -1733,7 +1797,9 @@ def optimal_transport_align(embeddings, batch_labels, standardize_by_labels=Fals
     batch2_embeddings = embeddings.iloc[batch2_indices].to_numpy()
 
     # Compute the cost matrix (e.g., Euclidean distances)
-    cost_matrix = ot.dist(batch1_embeddings, batch2_embeddings, metric="euclidean")
+    cost_matrix = ot.dist(
+        batch1_embeddings, batch2_embeddings, metric="euclidean"
+    )
 
     # Solve the optimal transport problem
     n_samples_1 = batch1_embeddings.shape[0]
@@ -1805,7 +1871,9 @@ def reciprocal_pca_mnn(
     # Identify unique batches
     unique_batches = np.unique(batch_labels_np)
     if len(unique_batches) != 2:
-        raise ValueError("Reciprocal PCA supports aligning exactly two batches.")
+        raise ValueError(
+            "Reciprocal PCA supports aligning exactly two batches."
+        )
 
     # Split embeddings by batch, preserving the original indices
     batch1_indices = np.where(batch_labels_np == unique_batches[0])[0]
@@ -1835,8 +1903,12 @@ def reciprocal_pca_mnn(
     batch2_to_batch1 = pca1.transform(batch2_embeddings)
 
     # Use MNN to identify anchors
-    neighbors1 = NearestNeighbors(n_neighbors=n_neighbors).fit(batch2_to_batch1)
-    neighbors2 = NearestNeighbors(n_neighbors=n_neighbors).fit(batch1_to_batch2)
+    neighbors1 = NearestNeighbors(n_neighbors=n_neighbors).fit(
+        batch2_to_batch1
+    )
+    neighbors2 = NearestNeighbors(n_neighbors=n_neighbors).fit(
+        batch1_to_batch2
+    )
 
     distances1, indices1 = neighbors1.kneighbors(batch1_pca)
     distances2, indices2 = neighbors2.kneighbors(batch2_pca)
@@ -1849,7 +1921,9 @@ def reciprocal_pca_mnn(
                 mutual_anchors.append((i, neighbor))
 
     if not mutual_anchors:
-        raise ValueError("No mutual nearest neighbors (MNN) found between the batches.")
+        raise ValueError(
+            "No mutual nearest neighbors (MNN) found between the batches."
+        )
 
     # Align the datasets using anchors
     mutual_anchors = np.array(mutual_anchors)
@@ -1887,7 +1961,9 @@ import requests
 
 
 class CBioPortalData:
-    def __init__(self, study_id, base_url="https://datahub.assets.cbioportal.org"):
+    def __init__(
+        self, study_id, base_url="https://datahub.assets.cbioportal.org"
+    ):
         self.base_url = base_url
         self.study_id = study_id
         self.data_files = None
@@ -1901,7 +1977,9 @@ class CBioPortalData:
             return dest_file
 
         print(f"Downloading {url}...")
-        r = requests.get(url, stream=True, allow_redirects=True, timeout=timeout)
+        r = requests.get(
+            url, stream=True, allow_redirects=True, timeout=timeout
+        )
         r.raise_for_status()  # <-- key: fail fast on 404/403/etc.
 
         with open(dest_file, "wb") as f:
@@ -1920,7 +1998,9 @@ class CBioPortalData:
                 tar.extractall()
 
         self.data_files = [
-            f for f in os.listdir(base) if f.startswith("data_") and f.endswith(".txt")
+            f
+            for f in os.listdir(base)
+            if f.startswith("data_") and f.endswith(".txt")
         ]
         return base
 
@@ -1932,7 +2012,9 @@ class CBioPortalData:
         for datatype, file in files.items():
             print(f"Importing {file}...")
             file_path = os.path.join(self.study_id, file)
-            df = pd.read_csv(file_path, sep="\t", comment="#", low_memory=False)
+            df = pd.read_csv(
+                file_path, sep="\t", comment="#", low_memory=False
+            )
 
             if "mutations" in file:
                 print(f"Binarizing and converting {file} to matrix...")
@@ -2005,7 +2087,9 @@ class CBioPortalData:
         if samples is None:
             samples = self.data["clin"].index.tolist()
 
-        train_samples = list(pd.Series(samples).sample(frac=ratio, random_state=42))
+        train_samples = list(
+            pd.Series(samples).sample(frac=ratio, random_state=42)
+        )
         test_samples = list(set(samples) - set(train_samples))
 
         train_data = {}
@@ -2048,13 +2132,17 @@ def compute_correlation_loss(embeddings, batch_labels):
     )
 
     # Normalize batch labels
-    batch_labels = (batch_labels - batch_labels.mean()) / (batch_labels.std() + 1e-8)
+    batch_labels = (batch_labels - batch_labels.mean()) / (
+        batch_labels.std() + 1e-8
+    )
 
     # Reshape batch_labels to (num_samples, 1) for broadcasting
     batch_labels = batch_labels.unsqueeze(1)
 
     # Compute covariance (dot product of batch_labels and embeddings)
-    covariance = torch.matmul(batch_labels.T, embeddings) / (embeddings.shape[0] - 1)
+    covariance = torch.matmul(batch_labels.T, embeddings) / (
+        embeddings.shape[0] - 1
+    )
 
     # Compute sum of squared correlations
     loss = torch.sum(torch.abs(covariance))
@@ -2168,7 +2256,8 @@ def get_device_memory_info(device_str):
         return {
             "allocated": torch.cuda.memory_allocated() / (1024**2),  # MB
             "reserved": torch.cuda.memory_reserved() / (1024**2),  # MB
-            "max_allocated": torch.cuda.max_memory_allocated() / (1024**2),  # MB
+            "max_allocated": torch.cuda.max_memory_allocated()
+            / (1024**2),  # MB
             "device_name": torch.cuda.get_device_name(0),
             "device_count": torch.cuda.device_count(),
         }

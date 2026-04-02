@@ -17,7 +17,9 @@ def print_test_installation():
     )
     print("  tar -xzvf dataset1.tgz")
     print()
-    print("  # Test the installation (should finish within a minute on a typical CPU)")
+    print(
+        "  # Test the installation (should finish within a minute on a typical CPU)"
+    )
     print(
         "  flexynesis --data_path dataset1 --model_class DirectPred --target_variables Erlotinib --hpo_iter 1 --features_top_percentile 5 --data_types gex,cnv"
     )
@@ -39,7 +41,9 @@ def print_help():
     print(
         "  --model_class {DirectPred,supervised_vae,MultiTripletNetwork,CrossModalPred,GNN,RandomForest,SVM,XGBoost,RandomSurvivalForest}"
     )
-    print("                        (Required) The kind of model class to instantiate")
+    print(
+        "                        (Required) The kind of model class to instantiate"
+    )
     print("  --data_types DATA_TYPES")
     print(
         "                        (Required) Which omic data matrices to work on, comma-separated: e.g. 'gex,cnv'"
@@ -85,9 +89,13 @@ def print_full_help():
         "                        Use a saved .pth/.safetensors model for inference (skip training)"
     )
     print("  --artifacts ARTIFACTS")
-    print("                        Path to training-time artifacts .joblib or .json")
+    print(
+        "                        Path to training-time artifacts .joblib or .json"
+    )
     print("  --data_path_test DATA_PATH_TEST")
-    print("                        Folder with test-only dataset for inference")
+    print(
+        "                        Folder with test-only dataset for inference"
+    )
     print("  --join_key JOIN_KEY   Column name in 'clin.csv' for sample IDs")
 
     # --- existing flags (keep full list) ---
@@ -99,7 +107,9 @@ def print_full_help():
     print(
         "  --model_class {DirectPred,supervised_vae,MultiTripletNetwork,CrossModalPred,GNN,RandomForest,SVM,XGBoost,RandomSurvivalForest}"
     )
-    print("                        (Required) The kind of model class to instantiate")
+    print(
+        "                        (Required) The kind of model class to instantiate"
+    )
     print("  --gnn_conv_type {GC,GCN,SAGE}")
     print(
         "                        If model_class is set to GNN, choose which graph convolution type to use"
@@ -174,7 +184,9 @@ def print_full_help():
     print(
         "  --outdir OUTDIR       Path to the output folder to save the model outputs (default: current working directory)"
     )
-    print("  --prefix PREFIX       Job prefix to use for output files (default: 'job')")
+    print(
+        "  --prefix PREFIX       Job prefix to use for output files (default: 'job')"
+    )
     print("  --log_transform {True,False}")
     print(
         "                        whether to apply log-transformation to input data matrices (default: False)"
@@ -215,7 +227,9 @@ def print_full_help():
     print(
         "  --use_gpu             (Optional) DEPRECATED: Use --device instead. If set, attempts to use CUDA/GPU if available."
     )
-    print("  --feature_importance_method {IntegratedGradients,GradientShap,Both}")
+    print(
+        "  --feature_importance_method {IntegratedGradients,GradientShap,Both}"
+    )
     print(
         "                        Choose feature importance score method (default: IntegratedGradients)"
     )
@@ -231,7 +245,9 @@ def print_full_help():
     print(
         "                        Path to user-provided gene-gene interaction network file."
     )
-    print("                        Must have at least 3 columns: GeneA, GeneB, Score.")
+    print(
+        "                        Must have at least 3 columns: GeneA, GeneB, Score."
+    )
     print(
         "                        If provided, this will be used instead of STRING DB."
     )
@@ -576,7 +592,10 @@ def main():
         help="Path to the output folder to save the model outputs",
     )
     parser.add_argument(
-        "--prefix", type=str, default="job", help="Job prefix to use for output files"
+        "--prefix",
+        type=str,
+        default="job",
+        help="Job prefix to use for output files",
     )
     parser.add_argument(
         "--log_transform",
@@ -658,7 +677,10 @@ def main():
     )
     # GNN args.
     parser.add_argument(
-        "--string_organism", type=int, default=9606, help="STRING DB organism id."
+        "--string_organism",
+        type=int,
+        default=9606,
+        help="STRING DB organism id.",
     )
     parser.add_argument(
         "--string_node_name",
@@ -746,7 +768,8 @@ def main():
         # Handle device selection for inference (same logic as training)
         if args.use_gpu:
             warnings.warn(
-                "--use_gpu is deprecated. Use --device instead.", DeprecationWarning
+                "--use_gpu is deprecated. Use --device instead.",
+                DeprecationWarning,
             )
             if args.device != "auto":
                 device_preference = args.device
@@ -782,7 +805,9 @@ def main():
             config_path = model_base + "_config.json"
             if not os.path.exists(config_path):
                 # Try alongside the safetensors file with standard naming
-                base = args.pretrained_model.replace(".final_model.safetensors", "")
+                base = args.pretrained_model.replace(
+                    ".final_model.safetensors", ""
+                )
                 config_path = base + ".final_model_config.json"
             if not os.path.exists(config_path):
                 raise FileNotFoundError(
@@ -799,17 +824,23 @@ def main():
             # Standard .pth load — robust across PyTorch versions
             try:
                 model = torch.load(
-                    args.pretrained_model, map_location=device, weights_only=False
+                    args.pretrained_model,
+                    map_location=device,
+                    weights_only=False,
                 )
             except TypeError:
                 model = torch.load(args.pretrained_model, map_location=device)
             except Exception:
                 try:
                     model = torch.load(
-                        args.pretrained_model, map_location=device, weights_only=True
+                        args.pretrained_model,
+                        map_location=device,
+                        weights_only=True,
                     )
                 except TypeError:
-                    model = torch.load(args.pretrained_model, map_location=device)
+                    model = torch.load(
+                        args.pretrained_model, map_location=device
+                    )
 
         # Extract model class name for metrics
         args.model_class = model.__class__.__name__
@@ -829,7 +860,9 @@ def main():
 
         # Convert to GNN dataset if needed
         if args.model_class == "GNN":
-            print("[INFO] Overlaying the dataset with network data from STRINGDB")
+            print(
+                "[INFO] Overlaying the dataset with network data from STRINGDB"
+            )
             from .data import MultiOmicDatasetNW
             from .main import STRING
 
@@ -837,10 +870,14 @@ def main():
             string_organism = importer.artifacts.get(
                 "string_organism", 9606
             )  # default human
-            string_node_name = importer.artifacts.get("string_node_name", "HGNC")
+            string_node_name = importer.artifacts.get(
+                "string_node_name", "HGNC"
+            )
             # Load STRING network
             obj = STRING(
-                os.path.join(args.data_path_test, "_".join(["processed", args.prefix])),
+                os.path.join(
+                    args.data_path_test, "_".join(["processed", args.prefix])
+                ),
                 string_organism,
                 string_node_name,
             )
@@ -856,7 +893,9 @@ def main():
         # Move dataset to same device as model
         if hasattr(test_dataset, "to_device"):
             test_dataset.to_device(device)
-        print(f"[INFO] Test dataset loaded: {len(test_dataset.samples)} samples")
+        print(
+            f"[INFO] Test dataset loaded: {len(test_dataset.samples)} samples"
+        )
         # Continue to evaluation section (skip training)
 
     # ------------- Heavy imports only when training -------------
@@ -915,7 +954,8 @@ def main():
         # Support legacy --use_gpu flag for backward compatibility
         if args.use_gpu:
             warnings.warn(
-                "--use_gpu is deprecated. Use --device instead.", DeprecationWarning
+                "--use_gpu is deprecated. Use --device instead.",
+                DeprecationWarning,
             )
             # If --device is not explicitly set (still at default auto), let auto-detection handle it
             if args.device != "auto":
@@ -939,7 +979,9 @@ def main():
             memory_info = get_device_memory_info(device_str)
             print(f"[INFO] Device name: {memory_info['device_name']}")
             if device_str == "cuda":
-                print(f"[INFO] Available CUDA devices: {memory_info['device_count']}")
+                print(
+                    f"[INFO] Available CUDA devices: {memory_info['device_count']}"
+                )
 
         # gnn
         if args.model_class == "GNN":
@@ -978,12 +1020,17 @@ def main():
                 f"Input --data_path doesn't exist at: {args.data_path}"
             )
         if not os.path.exists(args.outdir):
-            raise FileNotFoundError(f"Path to --outdir doesn't exist at: {args.outdir}")
+            raise FileNotFoundError(
+                f"Path to --outdir doesn't exist at: {args.outdir}"
+            )
 
         available_models = {
             "DirectPred": (DirectPred, "DirectPred"),
             "supervised_vae": (supervised_vae, "supervised_vae"),
-            "MultiTripletNetwork": (MultiTripletNetwork, "MultiTripletNetwork"),
+            "MultiTripletNetwork": (
+                MultiTripletNetwork,
+                "MultiTripletNetwork",
+            ),
             "CrossModalPred": (CrossModalPred, "CrossModalPred"),
             "GNN": (GNN, "GNN"),
             "RandomForest": ("RandomForest", None),
@@ -1002,7 +1049,9 @@ def main():
 
         # covariates
         if args.covariates:
-            if args.model_class == "GNN":  # Covariates not yet supported for GNNs
+            if (
+                args.model_class == "GNN"
+            ):  # Covariates not yet supported for GNNs
                 warnings.warn(
                     "\n\n!!! Covariates are currently not supported for GNN models, they will be ignored. !!!\n"
                 )
@@ -1058,18 +1107,23 @@ def main():
                     n_jobs=args.threads,
                 )
                 metrics.to_csv(
-                    os.path.join(args.outdir, ".".join([args.prefix, "stats.csv"])),
+                    os.path.join(
+                        args.outdir, ".".join([args.prefix, "stats.csv"])
+                    ),
                     header=True,
                     index=False,
                 )
                 predictions.to_csv(
                     os.path.join(
-                        args.outdir, ".".join([args.prefix, "predicted_labels.csv"])
+                        args.outdir,
+                        ".".join([args.prefix, "predicted_labels.csv"]),
                     ),
                     header=True,
                     index=False,
                 )
-                print(f"{args.model_class} evaluation complete. Results saved.")
+                print(
+                    f"{args.model_class} evaluation complete. Results saved."
+                )
                 sys.exit(0)
             else:
                 raise ValueError(
@@ -1090,18 +1144,23 @@ def main():
                     n_jobs=int(args.threads),
                 )
                 metrics.to_csv(
-                    os.path.join(args.outdir, ".".join([args.prefix, "stats.csv"])),
+                    os.path.join(
+                        args.outdir, ".".join([args.prefix, "stats.csv"])
+                    ),
                     header=True,
                     index=False,
                 )
                 predictions.to_csv(
                     os.path.join(
-                        args.outdir, ".".join([args.prefix, "predicted_labels.csv"])
+                        args.outdir,
+                        ".".join([args.prefix, "predicted_labels.csv"]),
                     ),
                     header=True,
                     index=False,
                 )
-                print(f"{args.model_class} evaluation complete. Results saved.")
+                print(
+                    f"{args.model_class} evaluation complete. Results saved."
+                )
                 sys.exit(0)
             else:
                 raise ValueError(
@@ -1111,16 +1170,24 @@ def main():
     if args.model_class == "GNN" and train_dataset is not None:
         # Check if user provided a custom graph
         if args.user_graph is not None:
-            print(f"[INFO] Using user-provided network from: {args.user_graph}")
+            print(
+                f"[INFO] Using user-provided network from: {args.user_graph}"
+            )
             from flexynesis.data import read_user_graph
 
             graph_df = read_user_graph(args.user_graph)
-            print(f"[INFO] Loaded {len(graph_df)} interactions from user graph")
+            print(
+                f"[INFO] Loaded {len(graph_df)} interactions from user graph"
+            )
         else:
             # Fallback to STRING DB (default behavior)
-            print("[INFO] No user graph provided. Using STRING DB network (default)")
+            print(
+                "[INFO] No user graph provided. Using STRING DB network (default)"
+            )
             obj = STRING(
-                os.path.join(args.data_path, "_".join(["processed", args.prefix])),
+                os.path.join(
+                    args.data_path, "_".join(["processed", args.prefix])
+                ),
                 args.string_organism,
                 args.string_node_name,
             )
@@ -1144,7 +1211,8 @@ def main():
         for key in feature_logs.keys():
             feature_logs[key].to_csv(
                 os.path.join(
-                    args.outdir, ".".join([args.prefix, "feature_logs", key, "csv"])
+                    args.outdir,
+                    ".".join([args.prefix, "feature_logs", key, "csv"]),
                 ),
                 header=True,
                 index=False,
@@ -1178,19 +1246,27 @@ def main():
 
         # do a hyperparameter search training multiple models and get the best configuration
         t1 = time.time()
-        model, best_params = tuner.perform_tuning(hpo_patience=args.hpo_patience)
+        model, best_params = tuner.perform_tuning(
+            hpo_patience=args.hpo_patience
+        )
         hpo_time = time.time() - t1
         hpo_system_ram = process.memory_info().rss
 
         # if fine-tuning is enabled; fine tune the model on a portion of test samples
         if args.finetuning_samples > 0:
             finetuneSampleN = args.finetuning_samples
-            print("[INFO] Finetuning the model on ", finetuneSampleN, "test samples")
+            print(
+                "[INFO] Finetuning the model on ",
+                finetuneSampleN,
+                "test samples",
+            )
             # split test dataset into finetuning and holdout datasets
             all_indices = range(len(test_dataset))
             import random as _random
 
-            finetune_indices = _random.sample(list(all_indices), finetuneSampleN)
+            finetune_indices = _random.sample(
+                list(all_indices), finetuneSampleN
+            )
             holdout_indices = list(set(all_indices) - set(finetune_indices))
             finetune_dataset = test_dataset.subset(finetune_indices)
             holdout_dataset = test_dataset.subset(holdout_indices)
@@ -1209,12 +1285,16 @@ def main():
     if train_dataset is not None:
         embeddings_train = model.transform(train_dataset)
         embeddings_train.to_csv(
-            os.path.join(args.outdir, ".".join([args.prefix, "embeddings_train.csv"])),
+            os.path.join(
+                args.outdir, ".".join([args.prefix, "embeddings_train.csv"])
+            ),
             header=True,
         )
     embeddings_test = model.transform(test_dataset)
     embeddings_test.to_csv(
-        os.path.join(args.outdir, ".".join([args.prefix, "embeddings_test.csv"])),
+        os.path.join(
+            args.outdir, ".".join([args.prefix, "embeddings_test.csv"])
+        ),
         header=True,
     )
 
@@ -1236,19 +1316,32 @@ def main():
                 )
                 for var in model.target_variables:
                     model.compute_feature_importance(
-                        train_dataset, var, steps_or_samples=25, method=explainer
+                        train_dataset,
+                        var,
+                        steps_or_samples=25,
+                        method=explainer,
                     )
                 import pandas as pd
 
                 df_imp = pd.concat(
-                    [model.feature_importances[x] for x in model.target_variables],
+                    [
+                        model.feature_importances[x]
+                        for x in model.target_variables
+                    ],
                     ignore_index=True,
                 )
                 df_imp["explainer"] = explainer
                 df_imp.to_csv(
                     os.path.join(
                         args.outdir,
-                        ".".join([args.prefix, "feature_importance", explainer, "csv"]),
+                        ".".join(
+                            [
+                                args.prefix,
+                                "feature_importance",
+                                explainer,
+                                "csv",
+                            ]
+                        ),
                     ),
                     header=True,
                     index=False,
@@ -1275,10 +1368,15 @@ def main():
             )
         else:
             predicted_labels = get_predicted_labels(
-                model.predict(test_dataset), test_dataset, "test", args.model_class
+                model.predict(test_dataset),
+                test_dataset,
+                "test",
+                args.model_class,
             )
         predicted_labels.to_csv(
-            os.path.join(args.outdir, ".".join([args.prefix, "predicted_labels.csv"])),
+            os.path.join(
+                args.outdir, ".".join([args.prefix, "predicted_labels.csv"])
+            ),
             header=True,
             index=False,
         )
@@ -1315,7 +1413,8 @@ def main():
         for layer in output_layers_test.keys():
             output_layers_test[layer].to_csv(
                 os.path.join(
-                    args.outdir, ".".join([args.prefix, "test_decoded", layer, "csv"])
+                    args.outdir,
+                    ".".join([args.prefix, "test_decoded", layer, "csv"]),
                 ),
                 header=True,
             )
@@ -1387,13 +1486,16 @@ def main():
         if not args.safetensors:
             torch.save(
                 model,
-                os.path.join(args.outdir, ".".join([args.prefix, "final_model.pth"])),
+                os.path.join(
+                    args.outdir, ".".join([args.prefix, "final_model.pth"])
+                ),
             )
         else:
             save_file(
                 model.state_dict(),
                 os.path.join(
-                    args.outdir, ".".join([args.prefix, "final_model.safetensors"])
+                    args.outdir,
+                    ".".join([args.prefix, "final_model.safetensors"]),
                 ),
             )
         # save model config as JSON
@@ -1449,7 +1551,9 @@ def main():
                     ","
                 ),  # Original modalities from CLI before concatenation
                 "target_variables": (
-                    args.target_variables.split(",") if args.target_variables else []
+                    args.target_variables.split(",")
+                    if args.target_variables
+                    else []
                 ),
                 "feature_lists": (
                     data_importer.train_features
@@ -1457,7 +1561,9 @@ def main():
                     else {}
                 ),
                 "transforms": (
-                    data_importer.scalers if hasattr(data_importer, "scalers") else {}
+                    data_importer.scalers
+                    if hasattr(data_importer, "scalers")
+                    else {}
                 ),
                 "label_encoders": (
                     data_importer.label_encoders
@@ -1498,7 +1604,9 @@ def main():
                     "string_node_name": artifacts["string_node_name"],
                     "feature_lists": {
                         modality: list(features)
-                        for modality, features in artifacts["feature_lists"].items()
+                        for modality, features in artifacts[
+                            "feature_lists"
+                        ].items()
                     },
                     "transforms": {},
                     "label_encoders": {},
@@ -1525,7 +1633,9 @@ def main():
                     if hasattr(scaler, "var_"):
                         scaler_dict["var"] = scaler.var_.tolist()
                     if hasattr(scaler, "n_features_in_"):
-                        scaler_dict["n_features_in"] = int(scaler.n_features_in_)
+                        scaler_dict["n_features_in"] = int(
+                            scaler.n_features_in_
+                        )
                     if hasattr(scaler, "feature_names_in_"):
                         scaler_dict["feature_names_in"] = (
                             scaler.feature_names_in_.tolist()
@@ -1552,7 +1662,9 @@ def main():
                     elif isinstance(encoder, OrdinalEncoder):
                         encoder_dict = {
                             "type": "OrdinalEncoder",
-                            "categories": [cat.tolist() for cat in encoder.categories_],
+                            "categories": [
+                                cat.tolist() for cat in encoder.categories_
+                            ],
                             "handle_unknown": encoder.handle_unknown,
                             "unknown_value": encoder.unknown_value,
                         }
@@ -1564,7 +1676,9 @@ def main():
                                 else val
                             )
                         if hasattr(encoder, "n_features_in_"):
-                            encoder_dict["n_features_in"] = int(encoder.n_features_in_)
+                            encoder_dict["n_features_in"] = int(
+                                encoder.n_features_in_
+                            )
                         if hasattr(encoder, "feature_names_in_"):
                             encoder_dict["feature_names_in"] = (
                                 encoder.feature_names_in_.tolist()

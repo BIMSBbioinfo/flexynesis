@@ -58,7 +58,9 @@ class supervised_vae(pl.LightningModule):
         # both surv event and time variables are assumed to be numerical variables
         # we create only one survival variable for the pair (surv_time_var and surv_event_var)
         if self.surv_event_var is not None and self.surv_time_var is not None:
-            self.target_variables = self.target_variables + [self.surv_event_var]
+            self.target_variables = self.target_variables + [
+                self.surv_event_var
+            ]
         self.batch_variables = batch_variables
         self.variables = (
             self.target_variables + batch_variables
@@ -81,7 +83,9 @@ class supervised_vae(pl.LightningModule):
                 self.log_vars[loss_type] = nn.Parameter(torch.zeros(1))
 
         layers = list(dataset.dat.keys())
-        input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
+        input_dims = [
+            len(dataset.features[layers[i]]) for i in range(len(layers))
+        ]
         # create a list of Encoder instances for separately encoding each omics layer
         self.encoders = nn.ModuleList(
             [
@@ -251,7 +255,9 @@ class supervised_vae(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
             else:
-                loss = torch.tensor(0.0, device=y_hat.device, requires_grad=True)
+                loss = torch.tensor(
+                    0.0, device=y_hat.device, requires_grad=True
+                )
         return loss
 
     def compute_total_loss(self, losses):
@@ -425,7 +431,9 @@ class supervised_vae(pl.LightningModule):
             sample_names.extend(samples)  # Collect sample names for this batch
 
         # Concatenate all batch latent representations into one array
-        concatenated_latents = np.concatenate(all_latent_representations, axis=0)
+        concatenated_latents = np.concatenate(
+            all_latent_representations, axis=0
+        )
 
         # Convert the array to a DataFrame
         z = pd.DataFrame(concatenated_latents)
@@ -474,7 +482,9 @@ class supervised_vae(pl.LightningModule):
 
             # Collect predictions for each variable
             for var in self.variables:
-                logits = outputs[var].detach().cpu()  # Raw model outputs (logits)
+                logits = (
+                    outputs[var].detach().cpu()
+                )  # Raw model outputs (logits)
 
                 if dataset.variable_types[var] == "categorical":
                     probs = torch.softmax(
@@ -550,7 +560,9 @@ class supervised_vae(pl.LightningModule):
 
     # Adaptor forward function for captum integrated gradients.
     def forward_target(self, *args):
-        input_data = list(args[:-2])  # one or more tensors (one per omics layer)
+        input_data = list(
+            args[:-2]
+        )  # one or more tensors (one per omics layer)
         target_var = args[-2]  # target variable of interest
         steps = args[-1]  # number of steps for IntegratedGradients().attribute
         outputs_list = []
@@ -630,14 +642,19 @@ class supervised_vae(pl.LightningModule):
         for batch in dataloader:
             dat, _, _ = batch
             x_list = [to_device_safe(dat[x], device) for x in dat.keys()]
-            input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
+            input_data = tuple(
+                [data.unsqueeze(0).requires_grad_() for data in x_list]
+            )
 
             if method == "IntegratedGradients":
                 baseline = tuple(torch.zeros_like(x) for x in input_data)
-            elif method == "GradientShap":  # provide multiple baselines for Gr.Shap
+            elif (
+                method == "GradientShap"
+            ):  # provide multiple baselines for Gr.Shap
                 baseline = tuple(
                     torch.cat(
-                        [torch.zeros_like(x) for _ in range(steps_or_samples)], dim=0
+                        [torch.zeros_like(x) for _ in range(steps_or_samples)],
+                        dim=0,
                     )
                     for x in input_data
                 )
@@ -664,7 +681,10 @@ class supervised_vae(pl.LightningModule):
                         attributions = explainer.attribute(
                             input_data,
                             baseline,
-                            additional_forward_args=(target_var, steps_or_samples),
+                            additional_forward_args=(
+                                target_var,
+                                steps_or_samples,
+                            ),
                             target=target_class,
                             n_steps=steps_or_samples,
                         )
@@ -672,7 +692,10 @@ class supervised_vae(pl.LightningModule):
                         attributions = explainer.attribute(
                             input_data,
                             baseline,
-                            additional_forward_args=(target_var, steps_or_samples),
+                            additional_forward_args=(
+                                target_var,
+                                steps_or_samples,
+                            ),
                             target=target_class,
                             n_samples=steps_or_samples,
                         )
@@ -689,7 +712,9 @@ class supervised_vae(pl.LightningModule):
             # Process each layer within the class
             for layer_idx in range(num_layers):
                 # Extract all batch tensors for this layer across all batches for the current class
-                layer_tensors = [batch_attr[layer_idx] for batch_attr in class_attr]
+                layer_tensors = [
+                    batch_attr[layer_idx] for batch_attr in class_attr
+                ]
                 # Concatenate tensors along the batch dimension
                 attr_concat = torch.cat(layer_tensors, dim=1)
                 layer_attributions.append(attr_concat)

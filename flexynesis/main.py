@@ -9,7 +9,9 @@ import numpy as np
 import torch
 import yaml
 from lightning.pytorch.callbacks import EarlyStopping, RichProgressBar
-from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBarTheme
+from lightning.pytorch.callbacks.progress.rich_progress import (
+    RichProgressBarTheme,
+)
 from skopt import Optimizer
 from skopt.space import Categorical, Integer, Real
 from torch.utils.data import DataLoader, random_split
@@ -94,9 +96,7 @@ class HyperparameterTuning:
         num_workers=2,
     ):
         self.dataset = dataset  # dataset for model initiation
-        self.loader_dataset = (
-            dataset  # dataset for defining data loaders (this can be model specific)
-        )
+        self.loader_dataset = dataset  # dataset for defining data loaders (this can be model specific)
         self.model_class = model_class
         self.target_variables = target_variables
         self.device_type = device_type
@@ -110,9 +110,7 @@ class HyperparameterTuning:
         self.batch_variables = batch_variables
         self.config_name = config_name
         self.n_iter = n_iter
-        self.plot_losses = (
-            plot_losses  # Whether to show live loss plots (useful in interactive mode)
-        )
+        self.plot_losses = plot_losses  # Whether to show live loss plots (useful in interactive mode)
         self.val_size = val_size
         self.use_cv = use_cv
         self.n_splits = cv_splits
@@ -182,10 +180,14 @@ class HyperparameterTuning:
         end = int(np.log2(max_size))
         if m < end:
             end = m
-        s = Categorical([np.power(2, x) for x in range(st, end + 1)], name="batch_size")
+        s = Categorical(
+            [np.power(2, x) for x in range(st, end + 1)], name="batch_size"
+        )
         return s
 
-    def setup_trainer(self, params, current_step, total_steps, full_train=False):
+    def setup_trainer(
+        self, params, current_step, total_steps, full_train=False
+    ):
         # Configure callbacks and trainer for the current fold
         mycallbacks = []
         if self.plot_losses:
@@ -280,8 +282,12 @@ class HyperparameterTuning:
                 print(
                     f"[INFO] {'training cross-validation fold' if self.use_cv else 'training validation split'} {i}"
                 )
-                train_subset = torch.utils.data.Subset(self.loader_dataset, train_index)
-                val_subset = torch.utils.data.Subset(self.loader_dataset, val_index)
+                train_subset = torch.utils.data.Subset(
+                    self.loader_dataset, train_index
+                )
+                val_subset = torch.utils.data.Subset(
+                    self.loader_dataset, val_index
+                )
                 train_loader = self.DataLoader(
                     train_subset,
                     batch_size=int(params["batch_size"]),
@@ -308,13 +314,17 @@ class HyperparameterTuning:
                 )
                 print(f"[INFO] hpo config:{params}")
                 trainer.fit(
-                    model, train_dataloaders=train_loader, val_dataloaders=val_loader
+                    model,
+                    train_dataloaders=train_loader,
+                    val_dataloaders=val_loader,
                 )
                 if early_stop_callback.stopped_epoch:
                     epochs.append(early_stop_callback.stopped_epoch)
                 else:
                     epochs.append(int(params["epochs"]))
-                validation_result = trainer.validate(model, dataloaders=val_loader)
+                validation_result = trainer.validate(
+                    model, dataloaders=val_loader
+                )
                 val_loss = validation_result[0]["val_loss"]
                 validation_losses.append(val_loss)
                 i += 1
@@ -351,7 +361,9 @@ class HyperparameterTuning:
                     for param, value in zip(self.space, suggested_params_list)
                 }
                 loss, avg_epochs, model = self.objective(
-                    suggested_params_dict, current_step=i + 1, total_steps=self.n_iter
+                    suggested_params_dict,
+                    current_step=i + 1,
+                    total_steps=self.n_iter,
                 )
                 if self.use_cv:
                     print(
@@ -364,9 +376,13 @@ class HyperparameterTuning:
                     best_params = suggested_params_list
                     best_epochs = avg_epochs
                     best_model = model
-                    no_improvement_count = 0  # Reset the no improvement counter
+                    no_improvement_count = (
+                        0  # Reset the no improvement counter
+                    )
                 else:
-                    no_improvement_count += 1  # Increment the no improvement counter
+                    no_improvement_count += (
+                        1  # Increment the no improvement counter
+                    )
 
                 # Print result of each iteration
                 pbar.set_postfix({"Iteration": i + 1, "Best Loss": best_loss})
@@ -379,7 +395,10 @@ class HyperparameterTuning:
                     )
                     break  # Break out of the loop
                 best_params_dict = (
-                    {param.name: value for param, value in zip(self.space, best_params)}
+                    {
+                        param.name: value
+                        for param, value in zip(self.space, best_params)
+                    }
                     if best_params
                     else None
                 )
@@ -399,7 +418,10 @@ class HyperparameterTuning:
                 f"[INFO] Building a final model using best params: {best_params_dict}"
             )
             best_model = self.objective(
-                best_params_dict, current_step=0, total_steps=1, full_train=True
+                best_params_dict,
+                current_step=0,
+                total_steps=1,
+                full_train=True,
             )
 
         return best_model, best_params_dict
@@ -500,7 +522,11 @@ class FineTuner(pl.LightningModule):
         self.learning_rates = (
             learning_rates
             if learning_rates
-            else [model.config["lr"], model.config["lr"] / 10, model.config["lr"] / 100]
+            else [
+                model.config["lr"],
+                model.config["lr"] / 10,
+                model.config["lr"] / 100,
+            ]
         )
         self.folds_data = list(self.kfold.split(np.arange(len(self.dataset))))
         self.max_epoch = max_epoch
@@ -533,7 +559,9 @@ class FineTuner(pl.LightningModule):
         # Override to load data for the current fold
         train_idx, val_idx = self.folds_data[self.current_fold]
         train_subset = torch.utils.data.Subset(self.dataset, train_idx)
-        return DataLoader(train_subset, batch_size=self.batch_size, shuffle=True)
+        return DataLoader(
+            train_subset, batch_size=self.batch_size, shuffle=True
+        )
 
     def val_dataloader(self):
         # Override to load validation data for the current fold
@@ -573,7 +601,10 @@ class FineTuner(pl.LightningModule):
                     self.current_fold = fold
                     self.learning_rate = lr
                     early_stopping = EarlyStopping(
-                        monitor="val_loss", patience=3, verbose=False, mode="min"
+                        monitor="val_loss",
+                        patience=3,
+                        verbose=False,
+                        mode="min",
                     )
                     trainer = pl.Trainer(
                         max_epochs=self.max_epoch,
@@ -614,7 +645,9 @@ class FineTuner(pl.LightningModule):
                 )
 
         # Find the best configuration based on validation loss
-        best_config = min(val_loss_results, key=lambda x: x["average_val_loss"])
+        best_config = min(
+            val_loss_results, key=lambda x: x["average_val_loss"]
+        )
         print(
             f"Best learning rate: {best_config['learning_rate']} and freeze {best_config['freeze']}",
             f"with average validation loss: {best_config['average_val_loss']} and average epochs: {best_config['epochs']}",

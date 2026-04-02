@@ -70,7 +70,9 @@ class GNN(pl.LightningModule):
         # both surv event and time variables are assumed to be numerical variables
         # we create only one survival variable for the pair (surv_time_var and surv_event_var)
         if self.surv_event_var is not None and self.surv_time_var is not None:
-            self.target_variables = self.target_variables + [self.surv_event_var]
+            self.target_variables = self.target_variables + [
+                self.surv_event_var
+            ]
         self.batch_variables = batch_variables
         self.variables = (
             self.target_variables + self.batch_variables
@@ -283,7 +285,9 @@ class GNN(pl.LightningModule):
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
             else:
-                loss = torch.tensor(0.0, device=y_hat.device, requires_grad=True)
+                loss = torch.tensor(
+                    0.0, device=y_hat.device, requires_grad=True
+                )
         return loss
 
     def compute_total_loss(self, losses):
@@ -355,7 +359,9 @@ class GNN(pl.LightningModule):
 
             outputs = self.forward(x, edge_index)
             for var in self.variables:
-                logits = outputs[var].detach().cpu()  # Raw model outputs (logits)
+                logits = (
+                    outputs[var].detach().cpu()
+                )  # Raw model outputs (logits)
 
                 if dataset.variable_types[var] == "categorical":
                     probs = torch.softmax(
@@ -422,7 +428,9 @@ class GNN(pl.LightningModule):
 
     # Adaptor forward function for captum integrated gradients.
     def forward_target(self, *args):
-        input_data = list(args[:-2])  # expect a single tensor (early integration)
+        input_data = list(
+            args[:-2]
+        )  # expect a single tensor (early integration)
         target_var = args[-2]  # target variable of interest
         steps = args[-1]  # number of steps for IntegratedGradients().attribute
         outputs_list = []
@@ -519,9 +527,14 @@ class GNN(pl.LightningModule):
 
             if method == "IntegratedGradients":
                 baseline = torch.zeros_like(input_data)
-            elif method == "GradientShap":  # provide multiple baselines for Gr.Shap
+            elif (
+                method == "GradientShap"
+            ):  # provide multiple baselines for Gr.Shap
                 baseline = torch.cat(
-                    [torch.zeros_like(input_data) for _ in range(steps_or_samples)],
+                    [
+                        torch.zeros_like(input_data)
+                        for _ in range(steps_or_samples)
+                    ],
                     dim=0,
                 )
 
@@ -548,7 +561,10 @@ class GNN(pl.LightningModule):
                         attributions = explainer.attribute(
                             input_data,
                             baseline,
-                            additional_forward_args=(target_var, steps_or_samples),
+                            additional_forward_args=(
+                                target_var,
+                                steps_or_samples,
+                            ),
                             target=target_class,
                             n_steps=steps_or_samples,
                         )
@@ -556,7 +572,10 @@ class GNN(pl.LightningModule):
                         attributions = explainer.attribute(
                             input_data,
                             baseline,
-                            additional_forward_args=(target_var, steps_or_samples),
+                            additional_forward_args=(
+                                target_var,
+                                steps_or_samples,
+                            ),
                             target=target_class,
                             n_samples=steps_or_samples,
                         )
@@ -567,12 +586,15 @@ class GNN(pl.LightningModule):
         for class_idx in range(len(aggregated_attributions)):
             class_attr = aggregated_attributions[class_idx]
             # Concatenate tensors along the batch dimension
-            attr_concat = torch.cat([batch_attr for batch_attr in class_attr], dim=1)
+            attr_concat = torch.cat(
+                [batch_attr for batch_attr in class_attr], dim=1
+            )
             processed_attributions.append(attr_concat)
 
         # compute absolute importance and move to cpu
         abs_attr = [
-            torch.abs(attr_class).cpu() for attr_class in processed_attributions
+            torch.abs(attr_class).cpu()
+            for attr_class in processed_attributions
         ]
         # average over samples
         imp = [a.mean(dim=1) for a in abs_attr]
@@ -590,7 +612,9 @@ class GNN(pl.LightningModule):
         # MPS and CPU don't have detailed memory tracking like CUDA
 
         df_list = []
-        layers = list(getattr(dataset, "multiomic_dataset", dataset).dat.keys())
+        layers = list(
+            getattr(dataset, "multiomic_dataset", dataset).dat.keys()
+        )
         for i in range(num_class):
             features = dataset.common_features
             target_class_label = (
@@ -602,9 +626,7 @@ class GNN(pl.LightningModule):
                 # Extracting node feature attributes coming from different omic layers
                 importances_array = imp[i].squeeze().detach().numpy()
                 if importances_array.ndim == 1:
-                    importances = (
-                        importances_array  # Use the array as is if it is 1-dimensional
-                    )
+                    importances = importances_array  # Use the array as is if it is 1-dimensional
                 else:
                     importances = importances_array[
                         :, l
