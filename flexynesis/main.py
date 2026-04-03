@@ -10,7 +10,8 @@ import yaml
 from IPython.display import display
 from lightning import Callback, seed_everything
 from lightning.pytorch.callbacks import EarlyStopping, RichProgressBar
-from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBarTheme
+from lightning.pytorch.callbacks.progress.rich_progress import \
+    RichProgressBarTheme
 from sklearn.model_selection import KFold
 from skopt import Optimizer
 from skopt.space import Categorical, Integer, Real
