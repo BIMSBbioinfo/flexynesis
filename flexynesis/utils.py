@@ -106,6 +106,7 @@ def get_color_mapping(labels):
             int(c[1] * 255),
             int(c[2] * 255),
         )
+
     color_hex = [to_hex(c) for c in colors]
     return dict(zip(unique_labels, color_hex))
 

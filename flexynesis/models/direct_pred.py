@@ -7,7 +7,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
-from ..modules import *
+from ..modules import MLP, cox_ph_loss
 from ..utils import to_device_safe
 
 

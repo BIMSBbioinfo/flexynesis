@@ -10,7 +10,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
-from ..modules import *
+from ..modules import MLP, Decoder, Encoder, cox_ph_loss
 
 
 # Supervised Variational Auto-encoder that can train one or more layers of omics datasets

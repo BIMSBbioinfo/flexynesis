@@ -11,7 +11,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 from ..data import TripletMultiOmicDataset
-from ..modules import *
+from ..modules import MLP, cox_ph_loss
 
 
 class MultiTripletNetwork(pl.LightningModule):
