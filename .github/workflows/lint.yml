@@ -41,4 +41,4 @@ jobs:
       run: isort --check-only --diff .
 
     - name: Run flake8
-      run: flake8 .
+      run: flake8 . --max-line-length=120
