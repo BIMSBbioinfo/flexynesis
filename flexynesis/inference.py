@@ -181,8 +181,7 @@ def load_and_sniff_artifacts(artifacts_path):
 
 def _deserialize_json_artifacts(artifacts):
     import numpy as np
-    from sklearn.preprocessing import (LabelEncoder, OrdinalEncoder,
-                                       StandardScaler)
+    from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, StandardScaler
 
     # Rebuild sklearn objects expected by inference code.
     deserialized = dict(artifacts)

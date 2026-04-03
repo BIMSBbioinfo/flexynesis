@@ -10,8 +10,7 @@ import yaml
 from IPython.display import display
 from lightning import Callback, seed_everything
 from lightning.pytorch.callbacks import EarlyStopping, RichProgressBar
-from lightning.pytorch.callbacks.progress.rich_progress import \
-    RichProgressBarTheme
+from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBarTheme
 from sklearn.model_selection import KFold
 from skopt import Optimizer
 from skopt.space import Categorical, Integer, Real
@@ -23,6 +22,7 @@ from .data import TripletMultiOmicDataset
 
 torch.set_float32_matmul_precision("medium")
 seed_everything(42, workers=True)
+
 
 class HyperparameterTuning:
     """
