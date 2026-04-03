@@ -173,11 +173,14 @@ class flexGCN(nn.Module):
         output_dim (int): The size of the output vector, which is the final feature vector for the whole graph.
         num_convs (int, optional): Number of convolutional layers in the network. Defaults to 2.
         dropout_rate (float, optional): The dropout probability used for regularization. Defaults to 0.2.
-        conv (str, optional): Type of convolution layer to use. Supported types include 'GCN' for Graph Convolution Network,
-                              'GAT' for Graph Attention Network, 'SAGE' for GraphSAGE, and 'GC' for generic Graph Convolution.
+        conv (str, optional): Type of convolution layer to use. Supported types
+                              include 'GCN' for Graph Convolution Network,
+                              'GAT' for Graph Attention Network, 'SAGE' for
+                              GraphSAGE, and 'GC' for generic Graph Convolution.
                               Defaults to 'GC'.
-        act (str, optional): Type of activation function to use. Supported types include 'relu', 'sigmoid',
-                             'leakyrelu', 'tanh', and 'gelu'. Defaults to 'relu'.
+        act (str, optional): Type of activation function to use. Supported types
+                             include 'relu', 'sigmoid', 'leakyrelu', 'tanh',
+                             and 'gelu'. Defaults to 'relu'.
 
     Raises:
         ValueError: If an unsupported activation function or convolution type is specified.

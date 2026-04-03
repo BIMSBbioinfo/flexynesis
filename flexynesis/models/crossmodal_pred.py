@@ -20,8 +20,10 @@ class CrossModalPred(pl.LightningModule):
     The network also can be connected to one or more MLPs for outcome variable prediction.
 
     dataset: dictionary of data matrices
-    input_layers: which data modalities from `dataset` to encode (use a subset of keys from `dataset`)
-    output_layers: which data modalities are aimed to be reconsructed via decoders (use a subset of keys from `dataset`).
+    input_layers: which data modalities from `dataset` to encode (use a
+        subset of keys from `dataset`)
+    output_layers: which data modalities are aimed to be reconsructed via
+        decoders (use a subset of keys from `dataset`).
 
     """
 
@@ -297,14 +299,19 @@ class CrossModalPred(pl.LightningModule):
             log (bool, optional): Flag to determine if logging should occur at each step. Defaults to True.
 
         Returns:
-            torch.Tensor: The total loss for the current training batch, combining MMD loss for latent space regularization,
-                          reconstruction losses for each output layer, and losses from supervisor heads for specified target variables.
+            torch.Tensor: The total loss for the current training batch,
+                combining MMD loss for latent space regularization,
+                reconstruction losses for each output layer, and losses from
+                supervisor heads for specified target variables.
 
-        This method processes the batch by encoding input features from specified layers, decoding them to reconstruct the
-        output layers, and calculating the Maximum Mean Discrepancy (MMD) loss for latent space regularization. It computes
-        the reconstruction loss for each target/output layer. Additional losses are computed for other target variables in the
-        dataset, particularly handling survival analysis if applicable. All losses are aggregated to compute a total loss,
-        which is logged and returned.
+        This method processes the batch by encoding input features from
+        specified layers, decoding them to reconstruct the output layers, and
+        calculating the Maximum Mean Discrepancy (MMD) loss for latent space
+        regularization. It computes the reconstruction loss for each
+        target/output layer. Additional losses are computed for other target
+        variables in the dataset, particularly handling survival analysis if
+        applicable. All losses are aggregated to compute a total loss, which is
+        logged and returned.
         """
         dat, y_dict, samples = train_batch
 
@@ -344,23 +351,29 @@ class CrossModalPred(pl.LightningModule):
 
     def validation_step(self, val_batch, batch_idx, log=True):
         """
-        Executes one validation step using a single batch of data, assessing the model's performance on the validation set.
+        Executes one validation step using a single batch of data, assessing
+        the model's performance on the validation set.
 
         Args:
-            val_batch (tuple): The batch data containing input features and target labels for validation.
+            val_batch (tuple): The batch data containing input features and
+                target labels for validation.
             batch_idx (int): The index of the current batch in the validation process.
             log (bool, optional): Indicates whether to log the validation losses during this step. Defaults to True.
 
         Returns:
-            torch.Tensor: The total loss for the current validation batch, calculated by combining MMD loss, reconstruction
-                          losses, and losses from supervisor heads for specified target variables.
+            torch.Tensor: The total loss for the current validation batch,
+                calculated by combining MMD loss, reconstruction losses, and
+                losses from supervisor heads for specified target variables.
 
-        In this method, the model processes input data by encoding it through specified input layers and decoding it to
-        targeted output layers. It computes the Maximum Mean Discrepancy (MMD) loss to measure the divergence between
-        the model's latent representations and a predefined distribution, along with reconstruction losses for output layers.
-        Additionally, it calculates losses for other target variables in the dataset, handling complex scenarios like survival
-        analysis where applicable. The aggregated losses are then summed up to form the total validation loss, which is logged
-        and returned.
+        In this method, the model processes input data by encoding it through
+        specified input layers and decoding it to targeted output layers. It
+        computes the Maximum Mean Discrepancy (MMD) loss to measure the
+        divergence between the model's latent representations and a predefined
+        distribution, along with reconstruction losses for output layers.
+        Additionally, it calculates losses for other target variables in the
+        dataset, handling complex scenarios like survival analysis if applicable.
+        The aggregated losses are then summed up to form the total validation
+        loss, which is logged and returned.
         """
         dat, y_dict, samples = val_batch
 
@@ -546,7 +559,8 @@ class CrossModalPred(pl.LightningModule):
         batch_size=64,
     ):
         """
-        Computes the feature importance for each variable in the dataset using either Integrated Gradients or Gradient SHAP.
+        Computes the feature importance for each variable in the dataset
+        using either Integrated Gradients or Gradient SHAP.
 
         Args:
             dataset: The dataset object containing the features and data.

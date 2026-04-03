@@ -570,7 +570,8 @@ class supervised_vae(pl.LightningModule):
         batch_size=64,
     ):
         """
-        Computes the feature importance for each variable in the dataset using either Integrated Gradients or Gradient SHAP.
+        Computes feature importance for each variable in the dataset using either
+        Integrated Gradients or Gradient SHAP.
 
         Args:
             dataset: The dataset object containing the features and data.

@@ -277,17 +277,22 @@ class MultiTripletNetwork(pl.LightningModule):
         Perform a training step using a single batch of data, including triplet components and target labels.
 
         Args:
-            train_batch (tuple): The batch containing data tuples (anchor, positive, negative) and a dictionary of labels.
+            train_batch (tuple): The batch containing data tuples (anchor, positive,
+                negative) and a dictionary of labels.
             batch_idx (int): The index of the current batch.
-            log (bool, optional): Flag to determine if logging should occur at each step. Defaults to True.
+            log (bool, optional): Flag to determine if logging should occur at each
+                step. Defaults to True.
 
         Returns:
-            torch.Tensor: The total loss for the current training batch, which includes triplet loss and any additional
-                          losses from supervisor heads.
+            torch.Tensor: The total loss for the current training batch, which
+                includes triplet loss and any additional losses from supervisor
+                heads.
 
-        This method computes the embedding for the anchor, positive, and negative samples and calculates the triplet loss.
-        Additional losses are computed for other target variables in the dataset, particularly handling survival analysis
-        if applicable. All losses are combined to compute a total loss, which is logged and returned.
+        This method computes the embedding for the anchor, positive, and negative
+        samples and calculates the triplet loss. Additional losses are computed for
+        other target variables in the dataset, particularly handling survival
+        analysis if applicable. All losses are combined to compute a total loss,
+        which is logged and returned.
         """
         anchor, positive, negative, y_dict = (
             train_batch[0],
@@ -328,17 +333,22 @@ class MultiTripletNetwork(pl.LightningModule):
         Perform a validation step using a single batch of data, including triplet components and target labels.
 
         Args:
-            val_batch (tuple): The batch containing data tuples (anchor, positive, negative) and a dictionary of labels.
+            val_batch (tuple): The batch containing data tuples (anchor, positive,
+                negative) and a dictionary of labels.
             batch_idx (int): The index of the current batch.
-            log (bool, optional): Flag to determine if logging should occur at each step. Defaults to True.
+            log (bool, optional): Flag to determine if logging should occur at each
+                step. Defaults to True.
 
         Returns:
-            torch.Tensor: The total loss for the current validation batch, which includes triplet loss and any additional
-                          losses from supervisor heads.
+            torch.Tensor: The total loss for the current validation batch, which
+                includes triplet loss and any additional losses from supervisor
+                heads.
 
-        Similar to the training step, this method computes the embedding for the anchor, positive, and negative samples
-        and calculates the triplet loss. It computes additional losses for other target variables in the dataset, aggregates
-        all losses, and returns the total loss. The losses are logged if specified.
+        Similar to the training step, this method computes the embedding for the
+        anchor, positive, and negative samples and calculates the triplet loss. It
+        computes additional losses for other target variables in the dataset,
+        aggregates all losses, and returns the total loss. The losses are logged if
+        specified.
         """
         anchor, positive, negative, y_dict = (
             val_batch[0],
@@ -400,7 +410,8 @@ class MultiTripletNetwork(pl.LightningModule):
             dataset: The dataset to evaluate the model on.
 
         Returns:
-            A dictionary where each key is a target variable and the corresponding value is the predicted output for that variable.
+            A dictionary where each key is a target variable and the corresponding
+            value is the predicted output for that variable.
         """
         self.eval()
         # get anchor embedding
@@ -465,7 +476,8 @@ class MultiTripletNetwork(pl.LightningModule):
         batch_size=64,
     ):
         """
-        Computes the feature importance for each variable in the dataset using either Integrated Gradients or Gradient SHAP.
+        Computes the feature importance for each variable in the dataset using
+        either Integrated Gradients or Gradient SHAP.
 
         Args:
             dataset: The dataset object containing the features and data.

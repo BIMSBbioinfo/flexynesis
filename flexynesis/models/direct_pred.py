@@ -111,7 +111,8 @@ class DirectPred(pl.LightningModule):
             x_list (list of torch.Tensor): A list of input matrices (omics layers), one for each layer.
 
         Returns:
-            dict: A dictionary where each key-value pair corresponds to the target variable name and its predicted output respectively.
+            dict: A dictionary where each key-value pair corresponds to the
+                  target variable name and its predicted output respectively.
         """
         embeddings_list = []
         # Process each input matrix with its corresponding Encoder
@@ -436,7 +437,8 @@ class DirectPred(pl.LightningModule):
         batch_size=64,
     ):
         """
-        Computes the feature importance for each variable in the dataset using either Integrated Gradients or Gradient SHAP.
+        Computes feature importance for each variable in the dataset using either
+        Integrated Gradients or Gradient SHAP.
 
         Args:
             dataset: The dataset object containing the features and data.

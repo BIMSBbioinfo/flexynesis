@@ -58,8 +58,8 @@ class HyperparameterTuning:
 
         get_batch_space(min_size=16, max_size=128): Determines the batch size search space based on the dataset size.
 
-        setup_trainer(params, current_step, total_steps, full_train=False): Sets up the trainer with appropriate callbacks
-            and configurations for either full training or validation based training.
+        setup_trainer(params, current_step, total_steps, full_train=False): Sets up the trainer
+            with appropriate callbacks and configurations for either full training or validation based training.
 
         objective(params, current_step, total_steps, full_train=False): Evaluates a set of parameters to determine the
             performance of the model using the specified parameters.
@@ -383,7 +383,8 @@ class HyperparameterTuning:
                 # Early stopping condition
                 if no_improvement_count >= hpo_patience & hpo_patience > 0:
                     print(
-                        f"No improvement in best loss for {hpo_patience} iterations, stopping hyperparameter optimisation early."
+                        f"No improvement in best loss for {hpo_patience} iterations, "
+                        "stopping hyperparameter optimisation early."
                     )
                     break  # Break out of the loop
                 best_params_dict = (
@@ -392,7 +393,8 @@ class HyperparameterTuning:
                     else None
                 )
                 print(
-                    f"[INFO] current best val loss: {best_loss}; best params: {best_params_dict} since {no_improvement_count} hpo iterations"
+                    f"[INFO] current best val loss: {best_loss}; best params: "
+                    f"{best_params_dict} since {no_improvement_count} hpo iterations"
                 )
 
         # Convert best parameters from list to dictionary and include epochs
@@ -608,11 +610,16 @@ class FineTuner(pl.LightningModule):
                         val_loss[0]["val_loss"]
                     )  # Adjust based on your validation output format
                     epochs.append(stopped_epoch)
-                    # print(f"[INFO] Finetuning ... training fold: {fold}, learning rate: {lr}, val_loss: {val_loss}, freeze {config}")
+                    # print(
+                    #     f"[INFO] Finetuning ... training fold: {fold}, learning rate: {lr}, "
+                    #     f"val_loss: {val_loss}, freeze {config}"
+                    # )
                 avg_val_loss = np.mean(fold_losses)
                 avg_epochs = int(np.mean(epochs))
                 print(
-                    f"[INFO] average 5-fold cross-validation loss {avg_val_loss} for learning rate: {lr} freeze {config}, average epochs {avg_epochs}"
+                    f"[INFO] average 5-fold cross-validation loss {avg_val_loss} "
+                    f"for learning rate: {lr} freeze {config}, "
+                    f"average epochs {avg_epochs}"
                 )
                 val_loss_results.append(
                     {
@@ -627,7 +634,8 @@ class FineTuner(pl.LightningModule):
         best_config = min(val_loss_results, key=lambda x: x["average_val_loss"])
         print(
             f"Best learning rate: {best_config['learning_rate']} and freeze {best_config['freeze']}",
-            f"with average validation loss: {best_config['average_val_loss']} and average epochs: {best_config['epochs']}",
+            f"with average validation loss: {best_config['average_val_loss']} "
+            f"and average epochs: {best_config['epochs']}",
         )
 
         # build a final model using the best setup on all samples

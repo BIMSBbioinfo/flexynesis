@@ -245,7 +245,8 @@ def plot_kaplan_meier_curves(durations, events, categorical_variable):
 
 def plot_scatter(true_values, predicted_values):
     """
-    Plots a scatterplot of true vs predicted values, with a regression line and annotated with the Pearson correlation coefficient.
+    Plots a scatterplot of true vs predicted values, with a regression line and
+    annotated with the Pearson correlation coefficient.
 
     Args:
         true_values (list or np.array): True values
@@ -414,10 +415,12 @@ def bootstrap_metric(y_true, y_pred, indices_list, metric_fn, ci=95, **kwargs):
 
 def evaluate_classifier(y_true, y_probs, print_report=False):
     """
-    Evaluate the performance of a classifier using multiple metrics and optionally print a detailed classification report.
+    Evaluate the performance of a classifier using multiple metrics and optionally
+    print a detailed classification report.
 
-    This function computes balanced accuracy, F1 score (weighted), Cohen's Kappa score, average AUROC score, and
-    weighted-average AUC-PR score for the given true labels and predicted probabilities.
+    This function computes balanced accuracy, F1 score (weighted), Cohen's Kappa
+    score, average AUROC score, and weighted-average AUC-PR score for the given
+    true labels and predicted probabilities.
     If `print_report` is set to True, it prints a detailed classification report.
 
     Args:
@@ -596,21 +599,28 @@ def plot_pr_curves(y_true, y_probs):
 
 def evaluate_regressor(y_true, y_pred):
     """
-    Evaluate the performance of a regression model using mean squared error, R-squared, and Pearson correlation coefficient.
+    Evaluate the performance of a regression model using mean squared error,
+    R-squared, and Pearson correlation coefficient.
 
-    This function computes the mean squared error (MSE) between true and predicted values as a measure of prediction accuracy.
-    It also performs a linear regression analysis between the true and predicted values to obtain the R-squared value, which
-    explains the variance ratio, and the Pearson correlation coefficient, providing insight into the linear relationship strength.
+    This function computes the mean squared error (MSE) between true and predicted
+    values as a measure of prediction accuracy. It also performs a linear regression
+    analysis between the true and predicted values to obtain the R-squared value,
+    which explains the variance ratio, and the Pearson correlation coefficient,
+    providing insight into the linear relationship strength.
 
     Args:
-        y_true (array-like): True values of the dependent variable, must be a 1D list or array.
-        y_pred (array-like): Predicted values as returned by a regressor, must match the dimensions of y_true.
+        y_true (array-like): True values of the dependent variable, must be a 1D
+            list or array.
+        y_pred (array-like): Predicted values as returned by a regressor, must
+            match the dimensions of y_true.
 
     Returns:
         dict: A dictionary containing:
               - 'mse': The mean squared error between the true and predicted values.
-              - 'r2': The R-squared value indicating the proportion of variance in the dependent variable predictable from the independent variable.
-              - 'pearson_corr': The Pearson correlation coefficient indicating the linear relationship strength between the true and predicted values.
+              - 'r2': The R-squared value indicating the proportion of variance in
+                the dependent variable predictable from the independent variable.
+              - 'pearson_corr': The Pearson correlation coefficient indicating the
+                linear relationship strength between the true and predicted values.
     """
     mse = mean_squared_error(y_true, y_pred)
     slope, intercept, r_value, p_value, std_err = linregress(y_true, y_pred)
@@ -622,22 +632,30 @@ def evaluate_wrapper(
     method, y_pred_dict, dataset, surv_event_var=None, surv_time_var=None
 ):
     """
-    Evaluates predictions for different variables within a dataset using appropriate metrics based on the variable type.
-    Supports evaluation for numerical, categorical, and survival data.
+    Evaluates predictions for different variables within a dataset using
+    appropriate metrics based on the variable type. Supports evaluation for
+    numerical, categorical, and survival data.
 
-    This function loops through each variable in the predictions dictionary, determines the type of the variable,
-    and evaluates the predictions using the appropriate method: regression, classification, or survival analysis.
-    It compiles the metrics into a list of dictionaries, which is then converted into a pandas DataFrame.
+    This function loops through each variable in the predictions dictionary,
+    determines the type of the variable, and evaluates the predictions using the
+    appropriate method: regression, classification, or survival analysis. It
+    compiles the metrics into a list of dictionaries, which is then converted into
+    a pandas DataFrame.
 
     Args:
         method (str): Identifier for the prediction method or model used.
-        y_pred_dict (dict): A dictionary where keys are variable names and values are arrays of predicted values.
-        dataset (Dataset): A dataset object containing actual values and metadata such as variable types.
-        surv_event_var (str, optional): The name of the survival event variable. Required if survival analysis is performed.
-        surv_time_var (str, optional): The name of the survival time variable. Required if survival analysis is performed.
+        y_pred_dict (dict): A dictionary where keys are variable names and values
+            are arrays of predicted values.
+        dataset (Dataset): A dataset object containing actual values and metadata
+            such as variable types.
+        surv_event_var (str, optional): The name of the survival event variable.
+            Required if survival analysis is performed.
+        surv_time_var (str, optional): The name of the survival time variable.
+            Required if survival analysis is performed.
 
     Returns:
-        pd.DataFrame: A DataFrame where each row contains the method, variable name, variable type, metric name, and metric value.
+        pd.DataFrame: A DataFrame where each row contains the method, variable
+            name, variable type, metric name, and metric value.
 
     """
     metrics_list = []
@@ -776,7 +794,8 @@ def evaluate_baseline_performance(
     n_components=100,
 ):
     """
-    Evaluates the performance of machine learning models on a given variable with optional PCA for dimensionality reduction.
+    Evaluates the performance of machine learning models on a given variable with
+    optional PCA for dimensionality reduction.
 
     Args:
         train_dataset (Dataset): A MultiOmicDataset object containing training data and metadata.
@@ -919,23 +938,29 @@ def evaluate_baseline_survival_performance(
     train_dataset, test_dataset, duration_col, event_col, n_folds=5, n_jobs=4
 ):
     """
-    Evaluates the baseline performance of a Random Survival Forest model on survival data using the Concordance Index.
+    Evaluates the baseline performance of a Random Survival Forest model on
+    survival data using the Concordance Index.
 
-    The function preprocesses both training and testing datasets to prepare appropriate survival data (comprising durations
-    and event occurrences), performs cross-validation to assess model robustness, and then calculates the Concordance Index on
-    the test data. It uses a Random Survival Forest (RSF) as the predictive model.
+    The function preprocesses both training and testing datasets to prepare
+    appropriate survival data (comprising durations and event occurrences), performs
+    cross-validation to assess model robustness, and then calculates the Concordance
+    Index on the test data. It uses a Random Survival Forest (RSF) as the
+    predictive model.
 
     Args:
         train_dataset (Dataset): The training dataset (a MultiOmicDataset object) containing features and survival data.
         test_dataset (Dataset): The testing dataset  (a MultiOmicDataset object) containing features and survival data.
         duration_col (str): Column name in the dataset for survival time.
         event_col (str): Column name in the dataset for the event occurrence (1 if event occurred, 0 otherwise).
-        n_folds (int, optional): Number of folds for K-fold cross-validation. Defaults to 5.
-        n_jobs (int, optional): Number of parallel jobs to run for Random Survival Forest training. Defaults to 4.
+        n_folds (int, optional): Number of folds for K-fold cross-validation.
+            Defaults to 5.
+        n_jobs (int, optional): Number of parallel jobs to run for Random Survival
+            Forest training. Defaults to 4.
 
     Returns:
-        pd.DataFrame: A DataFrame containing the performance metrics of the RSF model, specifically the Concordance Index,
-                      listed along with the method name and variable details.
+        pd.DataFrame: A DataFrame containing the performance metrics of the RSF
+            model, specifically the Concordance Index, listed along with the method
+            name and variable details.
 
     """
     print("[INFO] Evaluating baseline survival prediction performance")
@@ -1618,13 +1643,16 @@ def create_covariate_matrix(covariates, variable_types, ann):
     Missing values in numerical variables are imputed using the median.
 
     Args:
-        covariates (list of str): List of variable names that must exist in the "clin.csv".
-        variable_types (dict): Dictionary mapping variable names to their types ('categorical' or 'numerical').
+        covariates (list of str): List of variable names that must exist in the
+            "clin.csv".
+        variable_types (dict): Dictionary mapping variable names to their types
+            ('categorical' or 'numerical').
         ann (pd.DataFrame): Annotation DataFrame containing batch variable values.
 
     Returns:
-        pd.DataFrame: A covariate matrix DataFrame where categorical variables are one-hot-encoded as 0/1 and numerical variables are imputed,
-                      with features as rows and samples as columns.
+        pd.DataFrame: A covariate matrix DataFrame where categorical variables are
+            one-hot-encoded as 0/1 and numerical variables are imputed, with
+            features as rows and samples as columns.
     """
     covariate_features = []
     feature_names = []
@@ -1693,8 +1721,10 @@ def optimal_transport_align(embeddings, batch_labels, standardize_by_labels=Fals
     - batch_labels (np.ndarray or pd.Series): Batch labels corresponding to the rows of embeddings.
 
     Returns:
-    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned embeddings for all samples, with original indices preserved.
-    - aligned_batch_labels (pd.Series): A Series containing the corresponding batch labels for the aligned embeddings.
+    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned
+        embeddings for all samples, with original indices preserved.
+    - aligned_batch_labels (pd.Series): A Series containing the corresponding
+        batch labels for the aligned embeddings.
     """
     # Ensure batch labels are a NumPy array
     batch_labels_np = np.array(batch_labels)
@@ -1772,8 +1802,10 @@ def reciprocal_pca_mnn(
     - random_state (int, optional): Random seed for reproducibility.
 
     Returns:
-    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned embeddings for all samples, with original indices preserved.
-    - aligned_batch_labels (pd.Series): A Series containing the corresponding batch labels for the aligned embeddings.
+    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned
+        embeddings for all samples, with original indices preserved.
+    - aligned_batch_labels (pd.Series): A Series containing the corresponding
+        batch labels for the aligned embeddings.
     """
     # Ensure batch labels are a NumPy array
     batch_labels_np = np.array(batch_labels)
@@ -1955,7 +1987,9 @@ class CBioPortalData:
         if files is None:
             self.print_data_files()
             print(
-                "\n\nPlease select a list of files to import. Example:\n get_cbioportal_data('study_id', files={'mut': 'data_mutations.txt', 'clin': 'data_clinical_patient.txt'})"
+                "\n\nPlease select a list of files to import. Example:\n "
+                "get_cbioportal_data('study_id', files={'mut': 'data_mutations.txt', "
+                "'clin': 'data_clinical_patient.txt'})"
             )
             return
 

@@ -36,7 +36,8 @@ class DataImporter:
         variance_threshold (float): The variance threshold for removing low-variance features.
         na_threshold (float): The threshold for removing features with too many NA values.
         string_organism (int): STRING organism (species) id (default: 9606 (human)).
-        string_node_name (str): The type of node names used in the graph. Available options: "gene_name", "gene_id" (default: "gene_name").
+        string_node_name (str): The type of node names used in the graph.
+            Available options: "gene_name", "gene_id" (default: "gene_name").
     Methods:
         import_data():
             The primary method to orchestrate the data import and preprocessing workflow. It follows these steps:
@@ -64,9 +65,10 @@ class DataImporter:
             Prepares the data for model input by cleaning, filtering, and selecting features and samples.
 
         select_features(dat):
-            Implements an unsupervised feature selection by ranking features by the Laplacian score, keeping the features at
-            the top percentile range and removing highly redundant features (optional) based on a correlation threshold,
-            while keeping a minimum number of top features as requested by the user.
+            Implements an unsupervised feature selection by ranking features by the Laplacian
+            score, keeping the features at the top percentile range and removing highly
+            redundant features (optional) based on a correlation threshold, while keeping a
+            minimum number of top features as requested by the user.
 
         harmonize(dat1, dat2):
             Aligns the feature sets of two datasets (e.g., training and testing) to have the same features.
@@ -439,8 +441,12 @@ class DataImporter:
             original_samples_count = cleaned_dfs[key].shape[1]
             cleaned_dfs[key] = cleaned_dfs[key].loc[:, common_mask]
             removed_samples_count = original_samples_count - cleaned_dfs[key].shape[1]
+            removed_samples_pct = (
+                removed_samples_count / original_samples_count * 100
+            )
             print(
-                f"[INFO] DataFrame {key} - Removed {removed_samples_count} samples ({removed_samples_count / original_samples_count * 100:.2f}%)."
+                f"[INFO] DataFrame {key} - Removed {removed_samples_count} samples "
+                f"({removed_samples_pct:.2f}%)."
             )
 
         # update feature logs from this process
@@ -621,12 +627,14 @@ class DataImporter:
                     matching_samples = clin_samples.intersection(omics_samples)
                     if not matching_samples:
                         errors.append(
-                            f"Error: No matching sample labels found between {split}/clin.csv and {split}/{file_name}.csv."
+                            f"Error: No matching sample labels found between "
+                            f"{split}/clin.csv and {split}/{file_name}.csv."
                         )
                     elif len(matching_samples) < len(clin_samples):
                         missing_samples = clin_samples - matching_samples
                         warnings.append(
-                            f"Warning: Some sample labels in {split}/clin.csv are missing in {split}/{file_name}.csv: {missing_samples}"
+                            f"Warning: Some sample labels in {split}/clin.csv are "
+                            f"missing in {split}/{file_name}.csv: {missing_samples}"
                         )
 
         def check_common_features(train_dat, test_dat):
@@ -928,9 +936,12 @@ class MultiOmicDataset(Dataset):
     """A PyTorch dataset for multiomic data.
 
     Args:
-        dat (dict): A dictionary with keys corresponding to different types of data and values corresponding to matrices of the same shape. All matrices must have the same number of samples (rows).
+        dat (dict): A dictionary with keys corresponding to different types of data and values
+            corresponding to matrices of the same shape. All matrices must have the same number
+            of samples (rows).
         ann (data.frame): Data frame with samples on the rows, sample annotations on the columns
-        features (list or np.array): A 1D array of feature names with length equal to the number of columns in each matrix.
+        features (list or np.array): A 1D array of feature names with length equal to the
+            number of columns in each matrix.
         samples (list or np.array): A 1D array of sample names with length equal to the number of rows in each matrix.
 
     Returns:
@@ -964,7 +975,9 @@ class MultiOmicDataset(Dataset):
 
         Returns:
             A tuple of two elements:
-                1. A dictionary with keys corresponding to the different types of data in the input dictionary `dat`, and values corresponding to the data for the given sample.
+                1. A dictionary with keys corresponding to the different
+                   types of data in the input dictionary `dat`, and values
+                   corresponding to the data for the given sample.
                 2. The label for the given sample.
         """
         subset_dat = {x: self.dat[x][index] for x in self.dat.keys()}
@@ -1004,10 +1017,12 @@ class MultiOmicDataset(Dataset):
         )
 
     def get_feature_subset(self, feature_df):
-        """Get a subset of data matrices corresponding to specified features and concatenate them into a pandas DataFrame.
+        """Get a subset of data matrices corresponding to specified features and
+        concatenate them into a pandas DataFrame.
 
         Args:
-            feature_df (pandas.DataFrame): A DataFrame which contains at least two columns: 'layer' and 'name'.
+            feature_df (pandas.DataFrame): A DataFrame which contains at least
+                two columns: 'layer' and 'name'.
 
         Returns:
             A pandas DataFrame that concatenates the data matrices for the specified features from all layers.

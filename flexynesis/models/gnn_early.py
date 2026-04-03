@@ -46,7 +46,8 @@ class GNN(pl.LightningModule):
         surv_event_var (str, optional): The variable name representing survival events.
         surv_time_var (str, optional): The variable name representing survival times.
         use_loss_weighting (bool, optional): Whether to use uncertainty weighting in loss calculation. Defaults to True.
-        device_type (str, optional): Specifies the computation device ('gpu' or 'cpu'). Default is None, which uses 'cpu' if 'gpu' is not available.
+        device_type (str, optional): Specifies the computation device ('gpu' or 'cpu'). Default is None, which uses
+                                     'cpu' if 'gpu' is not available.
         gnn_conv_type (str, optional): Specifies the type of graph convolutional layer to use.
     """
 
@@ -160,7 +161,8 @@ class GNN(pl.LightningModule):
         Performs a training step including loss calculation and logging.
 
         Args:
-            batch (tuple): A batch of data consisting of features, target labels as a dictionary of tensors, and sample ids.
+            batch (tuple): A batch of data consisting of features, target labels
+                           as a dictionary of tensors, and sample ids.
 
         Returns:
             float: Total loss for the batch.
@@ -198,7 +200,8 @@ class GNN(pl.LightningModule):
         Performs a validation step, computing losses for a batch of data.
 
         Args:
-            batch (tuple): A batch of data consisting of features, target labels as a dictionary of tensors, and sample ids.
+            batch (tuple): A batch of data consisting of features, target labels as a
+                           dictionary of tensors, and sample ids.
 
         Returns:
             float: Total validation loss for the batch.
@@ -442,7 +445,8 @@ class GNN(pl.LightningModule):
         batch_size=64,
     ):
         """
-        Computes the feature importance for each variable in the dataset using either Integrated Gradients or Gradient SHAP.
+        Computes the feature importance for each variable in the dataset
+        using either Integrated Gradients or Gradient SHAP.
 
         Args:
             dataset: The dataset object containing the features and data.
