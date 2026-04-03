@@ -205,7 +205,7 @@ class HyperparameterTuning:
         # when training on a full dataset; no cross-validation or no validation splits;
         # we don't do early stopping
         early_stop_callback = None
-        if self.early_stop_patience > 0 and full_train == False:
+        if self.early_stop_patience > 0 and not full_train:
             early_stop_callback = self.init_early_stopping()
             mycallbacks.append(early_stop_callback)
 

@@ -130,7 +130,11 @@ def _resolve_input_dims(config, artifacts):
     )
     input_dims = config.get("input_dims")
     if not input_dims:
-        input_dims = [len(feature_lists[l]) for l in layers if l in feature_lists]
+        input_dims = [
+            len(feature_lists[layer_name])
+            for layer_name in layers
+            if layer_name in feature_lists
+        ]
         config["input_dims"] = input_dims
     return config
 

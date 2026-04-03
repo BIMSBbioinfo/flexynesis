@@ -552,7 +552,6 @@ class DataImporter:
         label_mappings = {}
 
         def encode_column(series):
-            nonlocal label_mappings  # Declare as nonlocal so that we can modify it
             # Fill NA values with 'missing'
             # series = series.fillna('missing')
             if series.name not in self.encoders:
@@ -1111,7 +1110,7 @@ class TripletMultiOmicDataset(Dataset):
 
     def get_label_indices(self, labels_array):
         # Filter out NaNs for a clean set of valid classes
-        valid_labels = [l for l in labels_array if not np.isnan(l)]
+        valid_labels = [label for label in labels_array if not np.isnan(label)]
         labels_set = set(valid_labels)
 
         label_to_indices = {

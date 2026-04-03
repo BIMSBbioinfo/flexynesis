@@ -1247,8 +1247,6 @@ def main():
                         steps_or_samples=25,
                         method=explainer,
                     )
-                import pandas as pd
-
                 df_imp = pd.concat(
                     [model.feature_importances[x] for x in model.target_variables],
                     ignore_index=True,

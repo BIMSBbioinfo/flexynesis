@@ -604,7 +604,7 @@ class GNN(pl.LightningModule):
                 if target_var in dataset.label_mappings
                 else ""
             )
-            for l in range(len(layers)):
+            for layer_idx, layer_name in enumerate(layers):
                 # Extracting node feature attributes coming from different omic layers
                 importances_array = imp[i].squeeze().detach().numpy()
                 if importances_array.ndim == 1:
@@ -613,7 +613,7 @@ class GNN(pl.LightningModule):
                     )
                 else:
                     importances = importances_array[
-                        :, l
+                        :, layer_idx
                     ]  # Use the original indexing for 2D arrays
                 df_list.append(
                     pd.DataFrame(
@@ -621,7 +621,7 @@ class GNN(pl.LightningModule):
                             "target_variable": target_var,
                             "target_class": i,
                             "target_class_label": target_class_label,
-                            "layer": layers[l],
+                            "layer": layer_name,
                             "name": features,
                             "importance": importances,
                         }
