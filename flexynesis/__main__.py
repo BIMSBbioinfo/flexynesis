@@ -879,7 +879,6 @@ def main():
         import tracemalloc
 
         import pandas as pd
-        import psutil
         import torch
         from safetensors.torch import save_file
 
