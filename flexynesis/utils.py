@@ -100,11 +100,12 @@ def get_color_mapping(labels):
             colors.extend(colors)
         colors = colors[:n]
 
-    to_hex = lambda c: "#%02x%02x%02x" % (
-        int(c[0] * 255),
-        int(c[1] * 255),
-        int(c[2] * 255),
-    )
+    def to_hex(c):
+        return "#%02x%02x%02x" % (
+            int(c[0] * 255),
+            int(c[1] * 255),
+            int(c[2] * 255),
+        )
     color_hex = [to_hex(c) for c in colors]
     return dict(zip(unique_labels, color_hex))
 
