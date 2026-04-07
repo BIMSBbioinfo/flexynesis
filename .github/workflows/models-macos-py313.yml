@@ -4,12 +4,14 @@ on:
     branches: [main]
     paths:
       - 'flexynesis/**'
+      - '.github/workflows/models-macos-py313.yml'
       - '.github/workflows/models-template.yml'
       - 'pyproject.toml'
   pull_request:
     branches: [main]
     paths:
       - 'flexynesis/**'
+      - '.github/workflows/models-macos-py313.yml'
       - '.github/workflows/models-template.yml'
       - 'pyproject.toml'
 
