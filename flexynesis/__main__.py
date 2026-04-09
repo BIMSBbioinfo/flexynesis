@@ -929,8 +929,7 @@ def main():
         # Convert to GNN dataset if needed
         if args.model_class == "GNN":
             print("[INFO] Overlaying the dataset with network data from STRINGDB")
-            from .data import MultiOmicDatasetNW
-            from .main import STRING
+            from .data import MultiOmicDatasetNW, STRING
 
             # Get STRING organism from artifacts
             string_organism = importer.artifacts.get(
