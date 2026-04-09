@@ -956,14 +956,19 @@ def main():
         if hasattr(test_dataset, "to_device"):
             test_dataset.to_device(device)
         print(f"[INFO] Test dataset loaded: {len(test_dataset.samples)} samples")
-        # Continue to evaluation section (skip training)
+
+    # Import evaluation utilities needed in the shared evaluation section below
+    import pandas as pd  # noqa: F401
+
+    from .utils import evaluate_wrapper, get_predicted_labels  # noqa: F401
+
+    # Continue to evaluation section (skip training)
 
     # ------------- Heavy imports only when training or in inference with evaluation ---
     if not (args.pretrained_model and args.artifacts and args.data_path_test):
         import json  # noqa: F401
         import tracemalloc  # noqa: F401
 
-        import pandas as pd  # noqa: F401
         import torch  # noqa: F401
         from safetensors.torch import save_file  # noqa: F401
 
@@ -979,8 +984,7 @@ def main():
         from .models.triplet_encoder import MultiTripletNetwork  # noqa: F401
         from .utils import evaluate_baseline_performance  # noqa: F401
         from .utils import (evaluate_baseline_survival_performance,
-                            evaluate_wrapper, get_device_memory_info,
-                            get_optimal_device, get_predicted_labels)
+                            get_device_memory_info, get_optimal_device)
 
         # --------- Sanity checks on args ---------
         # 1. survival variables consistency
