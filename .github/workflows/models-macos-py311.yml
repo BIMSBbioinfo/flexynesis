@@ -1,0 +1,23 @@
+name: Models macOS Py3.11
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'flexynesis/**'
+      - '.github/workflows/models-macos-py311.yml'
+      - '.github/workflows/models-template.yml'
+      - 'pyproject.toml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'flexynesis/**'
+      - '.github/workflows/models-macos-py311.yml'
+      - '.github/workflows/models-template.yml'
+      - 'pyproject.toml'
+
+jobs:
+  call-template:
+    uses: ./.github/workflows/models-template.yml
+    with:
+      os: macos-latest
+      python-version: "3.11"

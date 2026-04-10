@@ -29,30 +29,30 @@
     <!-- Tutorials Ubuntu -->
     <td align="center">
       <b>Ubuntu</b><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.11%20on%20ubuntu-latest&label=Py3.11"/><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.12%20on%20ubuntu-latest&label=Py3.12"/><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.13%20on%20ubuntu-latest&label=Py3.13"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials-ubuntu-py311.yml?branch=main&label=Py3.11"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials-ubuntu-py312.yml?branch=main&label=Py3.12"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials-ubuntu-py313.yml?branch=main&label=Py3.13"/><br>
     </td>
     <!-- Tutorials macOS -->
     <td align="center">
       <b>macOS</b><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.11%20on%20macos-latest&label=Py3.11"/><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.12%20on%20macos-latest&label=Py3.12"/><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials.yml?branch=main&job=Tutorials%20Python%203.13%20on%20macos-latest&label=Py3.13"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials-macos-py311.yml?branch=main&label=Py3.11"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials-macos-py312.yml?branch=main&label=Py3.12"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/tutorials-macos-py313.yml?branch=main&label=Py3.13"/><br>
     </td>
     <!-- Models Ubuntu -->
     <td align="center">
       <b>Ubuntu</b><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.11%20on%20ubuntu-latest&label=Py3.11"/><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.12%20on%20ubuntu-latest&label=Py3.12"/><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.13%20on%20ubuntu-latest&label=Py3.13"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models-ubuntu-py311.yml?branch=main&label=Py3.11"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models-ubuntu-py312.yml?branch=main&label=Py3.12"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models-ubuntu-py313.yml?branch=main&label=Py3.13"/><br>
     </td>
     <!-- Models macOS -->
     <td align="center">
       <b>macOS</b><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.11%20on%20macos-latest&label=Py3.11"/><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.12%20on%20macos-latest&label=Py3.12"/><br>
-      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models.yml?branch=main&job=Python%203.13%20on%20macos-latest&label=Py3.13"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models-macos-py311.yml?branch=main&label=Py3.11"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models-macos-py312.yml?branch=main&label=Py3.12"/><br>
+      <img src="https://img.shields.io/github/actions/workflow/status/BIMSBbioinfo/flexynesis/models-macos-py313.yml?branch=main&label=Py3.13"/><br>
     </td>
   </tr>
 </table>

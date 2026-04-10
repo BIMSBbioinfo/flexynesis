@@ -1,0 +1,26 @@
+name: Tutorials Ubuntu Py3.13
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'flexynesis/**'
+      - 'examples/tutorials/**'
+      - '.github/workflows/tutorials-ubuntu-py313.yml'
+      - '.github/workflows/tutorials-template.yml'
+      - 'pyproject.toml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'flexynesis/**'
+      - 'examples/tutorials/**'
+      - '.github/workflows/tutorials-ubuntu-py313.yml'
+      - '.github/workflows/tutorials-template.yml'
+      - 'pyproject.toml'
+
+jobs:
+  call-template:
+    uses: ./.github/workflows/tutorials-template.yml
+    with:
+      os: ubuntu-latest
+      python-version: "3.13"

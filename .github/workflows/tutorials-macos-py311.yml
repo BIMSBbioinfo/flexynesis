@@ -1,0 +1,26 @@
+name: Tutorials macOS Py3.11
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'flexynesis/**'
+      - 'examples/tutorials/**'
+      - '.github/workflows/tutorials-macos-py311.yml'
+      - '.github/workflows/tutorials-template.yml'
+      - 'pyproject.toml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'flexynesis/**'
+      - 'examples/tutorials/**'
+      - '.github/workflows/tutorials-macos-py311.yml'
+      - '.github/workflows/tutorials-template.yml'
+      - 'pyproject.toml'
+
+jobs:
+  call-template:
+    uses: ./.github/workflows/tutorials-template.yml
+    with:
+      os: macos-latest
+      python-version: "3.11"

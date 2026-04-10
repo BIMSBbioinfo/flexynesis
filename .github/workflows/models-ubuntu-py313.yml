@@ -1,0 +1,23 @@
+name: Models Ubuntu Py3.13
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'flexynesis/**'
+      - '.github/workflows/models-ubuntu-py313.yml'
+      - '.github/workflows/models-template.yml'
+      - 'pyproject.toml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'flexynesis/**'
+      - '.github/workflows/models-ubuntu-py313.yml'
+      - '.github/workflows/models-template.yml'
+      - 'pyproject.toml'
+
+jobs:
+  call-template:
+    uses: ./.github/workflows/models-template.yml
+    with:
+      os: ubuntu-latest
+      python-version: "3.13"

@@ -1,38 +1,27 @@
-name: Check Tutorials
-
+name: Tutorials Template
 on:
-  workflow_dispatch: # allow manual runs
-  schedule:
-    # Runs at 00:00 UTC every Sunday
-    - cron: '0 0 * * 0'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'flexynesis/**'
-      - '.github/workflows/models.yml'
-      - 'pyproject.toml'
-      - 'manifest.scm'
-      - 'guix.scm'
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+      python-version:
+        required: true
+        type: string
 
 jobs:
   check_tutorials:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        python-version: ["3.11", "3.12", "3.13"]
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-    name: Tutorials Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ inputs.os }}
+    name: Tutorials Python ${{ inputs.python-version }} on ${{ inputs.os }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python ${{ inputs.python-version }}
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ inputs.python-version }}
 
       - name: Install OpenMP (macOS only)
         if: runner.os == 'macOS'

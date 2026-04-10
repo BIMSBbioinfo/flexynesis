@@ -1,41 +1,27 @@
-name: Check Models
+name: Models Template
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'flexynesis/**'
-      - '.github/workflows/models.yml'
-      - './pyproject.toml'
-      - './manifest.scm'
-      - './guix.scm'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'flexynesis/**'
-      - '.github/workflows/models.yml'
-      - 'pyproject.toml'
-      - 'manifest.scm'
-      - 'guix.scm'
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+      python-version:
+        required: true
+        type: string
 
 jobs:
   run_package:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        python-version: ["3.11", "3.12", "3.13"]  # Exclude 3.14 due to qdldl build failure
-    runs-on: ${{ matrix.os }}
-    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ inputs.os }}
+    name: Python ${{ inputs.python-version }} on ${{ inputs.os }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python ${{ inputs.python-version }}
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ inputs.python-version }}
 
       - name: Install OpenMP (macOS only)
         if: runner.os == 'macOS'
@@ -46,7 +32,7 @@ jobs:
 
       - name: Download dataset1
         run: |
-          curl -L -o dataset1.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz 
+          curl -L -o dataset1.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1.tgz
           tar -xzvf dataset1.tgz
 
       - name: Download dataset2
@@ -75,14 +61,13 @@ jobs:
         shell: bash -l {0}
         run: |
           flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --covariates BCR_STATUS
-          flexynesis --pretrained_model lgg_surv.final_model.pth --artifacts lgg_surv.artifacts.joblib  --data_path_test lgggbm_tcga_pub_processed/test --target_variables STUDY 
+          flexynesis --pretrained_model lgg_surv.final_model.pth --artifacts lgg_surv.artifacts.joblib  --data_path_test lgggbm_tcga_pub_processed/test --target_variables STUDY
 
       - name: Run DirectPred_Test_Explainers
         shell: bash -l {0}
         run: |
           flexynesis --data_path lgggbm_tcga_pub_processed --model_class DirectPred --target_variables STUDY --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types mut --outdir . --prefix lgg_surv --early_stop_patience 3 --use_loss_weighting False --feature_importance_method Both
           flexynesis --pretrained_model lgg_surv.final_model.pth --artifacts lgg_surv.artifacts.joblib  --data_path_test lgggbm_tcga_pub_processed/test --target_variables STUDY
- 
 
       - name: Run supervised_vae
         shell: bash -l {0}
@@ -90,22 +75,21 @@ jobs:
           flexynesis --data_path dataset1 --model_class supervised_vae --target_variables Erlotinib,Crizotinib --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --outdir . --prefix erlotinib_svae --early_stop_patience 3 --use_loss_weighting True
           flexynesis --pretrained_model erlotinib_svae.final_model.pth --artifacts erlotinib_svae.artifacts.joblib --data_path_test dataset1/test --target_variables Erlotinib,Crizotinib
 
-      - name: Run CrossModalPred 
+      - name: Run CrossModalPred
         shell: bash -l {0}
         run: |
-          flexynesis --data_path dataset1 --model_class CrossModalPred --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --input_layers gex --output_layers cnv --outdir . --prefix erlotinib_crossmodal --early_stop_patience 3 --use_loss_weighting True 
+          flexynesis --data_path dataset1 --model_class CrossModalPred --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,cnv --input_layers gex --output_layers cnv --outdir . --prefix erlotinib_crossmodal --early_stop_patience 3 --use_loss_weighting True
           flexynesis --pretrained_model erlotinib_crossmodal.final_model.pth --artifacts erlotinib_crossmodal.artifacts.joblib --data_path_test dataset1/test --target_variables Erlotinib
 
       - name: Run MultiTripletNetwork
         shell: bash -l {0}
         run: |
-          flexynesis --data_path dataset2 --model_class MultiTripletNetwork --target_variables y --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,meth --outdir . --prefix msi_triplet --early_stop_patience 3 
-          flexynesis --pretrained_model msi_triplet.final_model.pth --artifacts msi_triplet.artifacts.joblib --data_path_test dataset2/test --target_variables y 
+          flexynesis --data_path dataset2 --model_class MultiTripletNetwork --target_variables y --fusion_type early --hpo_iter 1 --features_min 50 --features_top_percentile 5 --log_transform False --data_types gex,meth --outdir . --prefix msi_triplet --early_stop_patience 3
+          flexynesis --pretrained_model msi_triplet.final_model.pth --artifacts msi_triplet.artifacts.joblib --data_path_test dataset2/test --target_variables y
 
       - name: Run GNN
         shell: bash -l {0}
         run: |
           export FLEXYNESIS_CACHE=./dataset1
-          flexynesis --data_path dataset1 --model_class GNN --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_top_percentile 10 --log_transform False --data_types gex --outdir . --prefix erlotinib_gnn --early_stop_patience 3 --use_loss_weighting False --subsample 50 
+          flexynesis --data_path dataset1 --model_class GNN --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_top_percentile 10 --log_transform False --data_types gex --outdir . --prefix erlotinib_gnn --early_stop_patience 3 --use_loss_weighting False --subsample 50
           flexynesis --pretrained_model erlotinib_gnn.final_model.pth --artifacts erlotinib_gnn.artifacts.joblib --data_path_test dataset1/test --target_variables Erlotinib
-
