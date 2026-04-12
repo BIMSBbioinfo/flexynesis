@@ -1896,7 +1896,7 @@ class CBioPortalData:
         self.data_files = None
         self.data = None
 
-    def download_study_archive(self, force=False, timeout=60):
+    def download_study_archive(self, force=False, timeout=120):
         url = f"{self.base_url}/{self.study_id}.tar.gz"
         dest_file = f"{self.study_id}.tar.gz"
 
