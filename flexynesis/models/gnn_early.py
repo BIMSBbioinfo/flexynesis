@@ -462,7 +462,7 @@ class GNN(pl.LightningModule):
         """
 
         def bytes_to_gb(bytes):
-            return bytes / 1024**2
+            return bytes / 1024**3
 
         from ..utils import create_device_from_string, to_device_safe
 
