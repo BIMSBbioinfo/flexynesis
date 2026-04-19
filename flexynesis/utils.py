@@ -41,9 +41,9 @@ from lifelines.statistics import logrank_test, multivariate_logrank_test
 from lifelines.utils import concordance_index
 from plotnine import (aes, annotate, element_blank, element_line, element_text,
                       geom_abline, geom_errorbarh, geom_line, geom_point,
-                      geom_smooth, geom_step, geom_text, ggplot, ggtitle, labs,
-                      scale_color_gradient, scale_color_manual, theme, theme_bw,
-                      theme_minimal)
+                      geom_smooth, geom_step, geom_text, ggplot, labs,
+                      scale_color_gradient, scale_color_manual, theme,
+                      theme_bw, theme_minimal)
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import euclidean_distances
