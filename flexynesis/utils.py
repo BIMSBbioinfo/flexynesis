@@ -39,10 +39,11 @@ import ot
 from lifelines import CoxPHFitter, KaplanMeierFitter
 from lifelines.statistics import logrank_test, multivariate_logrank_test
 from lifelines.utils import concordance_index
-from plotnine import (aes, annotate, element_text, geom_abline, geom_errorbarh,
-                      geom_line, geom_point, geom_smooth, geom_step, geom_text,
-                      ggplot, ggtitle, labs, scale_color_gradient,
-                      scale_color_manual, theme, theme_bw, theme_minimal)
+from plotnine import (aes, annotate, element_blank, element_line, element_text,
+                      geom_abline, geom_errorbarh, geom_line, geom_point,
+                      geom_smooth, geom_step, geom_text, ggplot, ggtitle, labs,
+                      scale_color_gradient, scale_color_manual, theme, theme_bw,
+                      theme_minimal)
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import euclidean_distances
@@ -173,9 +174,19 @@ def plot_dim_reduced(
     return p
 
 
-def plot_kaplan_meier_curves(durations, events, categorical_variable):
+def plot_kaplan_meier_curves(durations, events, categorical_variable, title=None):
     """
-    Kaplan–Meier curves with alphabetical label ordering + shared palette.
+    Kaplan–Meier curves; groups are colored by increasing risk using the same
+    discrete palette as ``get_color_mapping`` (lowest risk → first tab10 color).
+
+    Risk is the fraction in each group with an observed event on or before the
+    pooled median follow-up time; ties break alphabetically by group name.
+
+    Args:
+        durations: follow-up times
+        events: event indicators
+        categorical_variable: group labels
+        title: plot title; default ``Kaplan-Meier Survival Curves by Group``
     """
     data = pd.DataFrame(
         {
@@ -187,14 +198,35 @@ def plot_kaplan_meier_curves(durations, events, categorical_variable):
         }
     )
 
-    # shared palette + fixed legend order
-    color_mapping = get_color_mapping(data["Group"])
-    order = list(color_mapping.keys())  # alphabetical order
+    d = pd.to_numeric(data["Duration"], errors="coerce")
+    ev = pd.to_numeric(data["Event"], errors="coerce")
+    grp = data["Group"].astype(str)
+    ok = d.notna() & ev.notna()
+    if not ok.any():
+        order = sorted(pd.unique(grp))
+    else:
+        d0, ev0, g0 = d[ok], ev[ok], grp[ok]
+        t_cut = float(np.nanpercentile(d0.to_numpy(dtype=float), 50))
+        da = d0.to_numpy(dtype=float)
+        early = (ev0.to_numpy(dtype=float) > 0) & (da <= t_cut)
+        risks = {}
+        for g in pd.unique(g0):
+            m = (g0 == g).to_numpy()
+            k = int(m.sum())
+            risks[g] = float(early[m].sum() / k) if k else 0.0
+        order = sorted(risks.keys(), key=lambda x: (risks[x], x))
+
+    # Reuse get_color_mapping palette order via zero-padded placeholders (sort order = 0..n-1)
+    n = len(order)
+    ph = [f"_{i:06d}" for i in range(n)]
+    pal = get_color_mapping(ph)
+    hexes = [pal[k] for k in sorted(pal.keys())]
+    color_mapping = dict(zip(order, hexes))
 
     # compute KM per group
     kmf = KaplanMeierFitter()
     survival_curves = []
-    for g in order:  # iterate in the same alphabetical order
+    for g in order:
         gd = data[data["Group"] == g]
         if len(gd) == 0:
             continue
@@ -230,14 +262,33 @@ def plot_kaplan_meier_curves(durations, events, categorical_variable):
     else:
         p_text = "Only one group — log-rank test not applicable"
 
+    if title is None:
+        title = "Kaplan-Meier Survival Curves by Group"
+
     p = (
         ggplot(plot_data, aes(x="Time", y="Survival", color="Group"))
-        + geom_step()
-        + labs(x="Time", y="Survival Probability", color="Group")
-        + ggtitle("Kaplan-Meier Survival Curves by Group")
-        + annotate("text", x=0.1, y=0.1, label=p_text, size=10, ha="left")
+        + geom_step(size=1.15)
+        + labs(title=title, x="Time", y="Survival probability", color="Group")
+        + annotate(
+            "text",
+            x=0.1,
+            y=0.1,
+            label=p_text,
+            size=10,
+            ha="left",
+            alpha=0.85,
+        )
         + theme_minimal()
-        + theme(legend_title=element_text(size=10, weight="bold"))
+        + theme(
+            plot_title=element_text(size=13, weight="bold"),
+            axis_title=element_text(size=11),
+            axis_text=element_text(size=10),
+            legend_title=element_text(size=10, weight="bold"),
+            legend_text=element_text(size=10),
+            legend_position="right",
+            panel_grid_major=element_line(color="#e0e0e0", size=0.55),
+            panel_grid_minor=element_blank(),
+        )
         + scale_color_manual(values=color_mapping)
     )
     return p
@@ -1229,13 +1280,15 @@ def recursive_binary_split_minN(
     """
     Recursively split df by optimal cutoff from flexynesis.utils.find_optimal_cutoff.
     Stop splitting when pval >= alpha or resulting child would have < min_samples_per_group.
-    Returns df.copy() with 'auto_group' integer labels.
+    Returns df.copy() with ``auto_group`` string labels ``G1``, ``G2``, ... ordered by
+    increasing risk (mean ``score`` among rows with follow-up time at or below the
+    pooled median follow-up time; if a group has no such rows, the group's overall
+    mean ``score`` is used).
     """
     df = df.copy()
     groups = {}
     next_gid = 0
     queue = deque([df])
-
     while queue:
         node = queue.popleft()
         n = len(node)
@@ -1270,6 +1323,28 @@ def recursive_binary_split_minN(
         queue.append(right)
 
     df["auto_group"] = df.index.map(groups)
+
+    # Relabel G1, G2, ... by increasing risk (early-window mean pred score)
+    t_series = pd.to_numeric(df[time], errors="coerce")
+    t_cut = t_series.median()
+    early = t_series <= t_cut
+    uids = sorted(df["auto_group"].unique())
+    risk_by_gid = {}
+    for g in uids:
+        in_g = df["auto_group"] == g
+        early_in_g = in_g & early
+        if early_in_g.any():
+            risk_by_gid[g] = float(
+                pd.to_numeric(df.loc[early_in_g, score], errors="coerce").mean()
+            )
+        else:
+            risk_by_gid[g] = float(
+                pd.to_numeric(df.loc[in_g, score], errors="coerce").mean()
+            )
+    ordered = sorted(uids, key=lambda x: (risk_by_gid[x], x))
+    gid_to_label = {old: f"G{i + 1}" for i, old in enumerate(ordered)}
+    df["auto_group"] = df["auto_group"].map(gid_to_label)
+
     return df
 
 
