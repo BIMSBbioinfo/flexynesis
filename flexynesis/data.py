@@ -1,26 +1,21 @@
-from torch.utils.data import Dataset, DataLoader
-from torch_geometric.data import download_url, extract_gz
-from torch_geometric.data import Dataset as PYGDataset
+import os
+import tempfile
+from functools import reduce
+from itertools import chain
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from functools import reduce
 import torch
-import os
-import shutil
-
-from pathlib import Path
 from filelock import FileLock
 from platformdirs import user_cache_dir
+from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder, StandardScaler
+from torch.utils.data import Dataset
+from torch_geometric.data import Dataset as PYGDataset
+from torch_geometric.data import download_url, extract_gz
 
-from tqdm import tqdm
-
-
-from sklearn.preprocessing import OrdinalEncoder, StandardScaler, MinMaxScaler, PowerTransformer
 from .feature_selection import filter_by_laplacian
-from .utils import get_variable_types, create_covariate_matrix
-
-from itertools import chain
+from .utils import create_covariate_matrix, get_variable_types
 
 
 # convert_to_labels: if true, given a numeric list, convert to binary labels by median value
@@ -41,7 +36,8 @@ class DataImporter:
         variance_threshold (float): The variance threshold for removing low-variance features.
         na_threshold (float): The threshold for removing features with too many NA values.
         string_organism (int): STRING organism (species) id (default: 9606 (human)).
-        string_node_name (str): The type of node names used in the graph. Available options: "gene_name", "gene_id" (default: "gene_name").
+        string_node_name (str): The type of node names used in the graph.
+            Available options: "gene_name", "gene_id" (default: "gene_name").
     Methods:
         import_data():
             The primary method to orchestrate the data import and preprocessing workflow. It follows these steps:
@@ -69,9 +65,10 @@ class DataImporter:
             Prepares the data for model input by cleaning, filtering, and selecting features and samples.
 
         select_features(dat):
-            Implements an unsupervised feature selection by ranking features by the Laplacian score, keeping the features at
-            the top percentile range and removing highly redundant features (optional) based on a correlation threshold,
-            while keeping a minimum number of top features as requested by the user.
+            Implements an unsupervised feature selection by ranking features by the Laplacian
+            score, keeping the features at the top percentile range and removing highly
+            redundant features (optional) based on a correlation threshold, while keeping a
+            minimum number of top features as requested by the user.
 
         harmonize(dat1, dat2):
             Aligns the feature sets of two datasets (e.g., training and testing) to have the same features.
@@ -92,8 +89,22 @@ class DataImporter:
             Encodes categorical labels in the annotation dataframe.
     """
 
-    def __init__(self, path, data_types, covariates = None, processed_dir="processed", log_transform = False, concatenate = False, restrict_to_features = None, min_features=None,
-                 top_percentile=20, correlation_threshold = 0.9, variance_threshold=0.01, na_threshold=0.1, downsample=0):
+    def __init__(
+        self,
+        path,
+        data_types,
+        covariates=None,
+        processed_dir="processed",
+        log_transform=False,
+        concatenate=False,
+        restrict_to_features=None,
+        min_features=None,
+        top_percentile=20,
+        correlation_threshold=0.9,
+        variance_threshold=0.01,
+        na_threshold=0.1,
+        downsample=0,
+    ):
         self.path = path
         self.data_types = data_types
         self.processed_dir = os.path.join(self.path, processed_dir)
@@ -105,7 +116,7 @@ class DataImporter:
         self.na_threshold = na_threshold
         self.log_transform = log_transform
         # Initialize a dictionary to store the label encoders
-        self.encoders = {} # used if labels are categorical
+        self.encoders = {}  # used if labels are categorical
         # initialize data scalers
         self.scalers = None
         # initialize data transformers
@@ -124,8 +135,12 @@ class DataImporter:
         self.feature_logs = {}
 
         # NEW: Storage for inference mode artifacts
-        self.train_features = {}      # Stores final feature names per modality after selection
-        self.label_encoders = {}      # Stores fitted label encoders for categorical variables
+        self.train_features = (
+            {}
+        )  # Stores final feature names per modality after selection
+        self.label_encoders = (
+            {}
+        )  # Stores fitted label encoders for categorical variables
         # Note: self.scalers already exists, so we'll use that!
 
     def get_user_features(self):
@@ -136,9 +151,11 @@ class DataImporter:
             if not os.path.isfile(self.restrict_to_features):
                 raise FileNotFoundError(f"File not found: {self.restrict_to_features}")
             try:
-                with open(self.restrict_to_features, 'r') as fp:
+                with open(self.restrict_to_features, "r") as fp:
                     # Read and process the file
-                    feature_list = [x.strip() for x in fp.read().splitlines() if x.strip()]
+                    feature_list = [
+                        x.strip() for x in fp.read().splitlines() if x.strip()
+                    ]
                     # Ensure uniqueness and assign
                     self.restrict_to_features = np.unique(feature_list)
             except Exception as e:
@@ -148,8 +165,8 @@ class DataImporter:
 
     def import_data(self):
         print("\n[INFO] ================= Importing Data =================")
-        training_path = os.path.join(self.path, 'train')
-        testing_path = os.path.join(self.path, 'test')
+        training_path = os.path.join(self.path, "train")
+        testing_path = os.path.join(self.path, "test")
 
         self.validate_data_folders(training_path, testing_path)
 
@@ -158,7 +175,11 @@ class DataImporter:
         test_dat = self.read_data(testing_path)
 
         if self.downsample > 0:
-            print("[INFO] Randomly drawing",self.downsample,"samples for training")
+            print(
+                "[INFO] Randomly drawing",
+                self.downsample,
+                "samples for training",
+            )
             train_dat = self.subsample(train_dat, self.downsample)
 
         if self.restrict_to_features is not None:
@@ -169,8 +190,12 @@ class DataImporter:
         self.validate_input_data(train_dat, test_dat)
 
         # cleanup uninformative features/samples, subset annotation data, do feature selection on training data
-        train_dat, train_ann, train_samples, train_features = self.process_data(train_dat, split = 'train')
-        test_dat, test_ann, test_samples, test_features = self.process_data(test_dat, split = 'test')
+        train_dat, train_ann, train_samples, train_features = self.process_data(
+            train_dat, split="train"
+        )
+        test_dat, test_ann, test_samples, test_features = self.process_data(
+            test_dat, split="test"
+        )
 
         # harmonize feature sets in train/test
         train_dat, test_dat = self.harmonize(train_dat, test_dat)
@@ -188,9 +213,16 @@ class DataImporter:
 
         # if covariates are defined, create a covariate matrix and add to the dictionary of data matrices
         if self.covariates:
-            print("[INFO] Attempting to create a covariate matrix for the covariates:",self.covariates)
-            train_dat['covariates'] = create_covariate_matrix(self.covariates, get_variable_types(train_ann), train_ann)
-            test_dat['covariates'] = create_covariate_matrix(self.covariates, get_variable_types(test_ann), test_ann)
+            print(
+                "[INFO] Attempting to create a covariate matrix for the covariates:",
+                self.covariates,
+            )
+            train_dat["covariates"] = create_covariate_matrix(
+                self.covariates, get_variable_types(train_ann), train_ann
+            )
+            test_dat["covariates"] = create_covariate_matrix(
+                self.covariates, get_variable_types(test_ann), test_ann
+            )
             # harmonize again to match the covariate features
             train_dat, test_dat = self.harmonize(train_dat, test_dat)
 
@@ -202,27 +234,51 @@ class DataImporter:
         if self.concatenate:
             # Use data_types order for consistent concatenation
             modality_order = self.data_types
-            training_dataset.dat = {'all': torch.cat([training_dataset.dat[x] for x in modality_order], dim = 1)}
-            training_dataset.features = {'all': list(chain(*[training_dataset.features[x] for x in modality_order]))}
+            training_dataset.dat = {
+                "all": torch.cat(
+                    [training_dataset.dat[x] for x in modality_order], dim=1
+                )
+            }
+            training_dataset.features = {
+                "all": list(
+                    chain(*[training_dataset.features[x] for x in modality_order])
+                )
+            }
 
-            testing_dataset.dat = {'all': torch.cat([testing_dataset.dat[x] for x in modality_order], dim = 1)}
-            testing_dataset.features = {'all': list(chain(*[testing_dataset.features[x] for x in modality_order]))}
+            testing_dataset.dat = {
+                "all": torch.cat(
+                    [testing_dataset.dat[x] for x in modality_order], dim=1
+                )
+            }
+            testing_dataset.features = {
+                "all": list(
+                    chain(*[testing_dataset.features[x] for x in modality_order])
+                )
+            }
         # Save final feature lists AFTER concatenation (for inference mode)
         self.train_features = training_dataset.features.copy()
 
-
-        print("[INFO] Training Data Stats: ", training_dataset.get_dataset_stats())
+        print(
+            "[INFO] Training Data Stats: ",
+            training_dataset.get_dataset_stats(),
+        )
         print("[INFO] Test Data Stats: ", testing_dataset.get_dataset_stats())
         print("[INFO] Merging Feature Logs...")
         logs = self.feature_logs
-        if 'select_features' in logs:
-            self.feature_logs = {x: pd.merge(logs['cleanup'][x],
-                                             logs['select_features'][x],
-                                             on = 'feature', how = 'outer',
-                                             suffixes=['_cleanup', '_laplacian']) for x in self.data_types}
+        if "select_features" in logs:
+            self.feature_logs = {
+                x: pd.merge(
+                    logs["cleanup"][x],
+                    logs["select_features"][x],
+                    on="feature",
+                    how="outer",
+                    suffixes=["_cleanup", "_laplacian"],
+                )
+                for x in self.data_types
+            }
         else:
             # Feature selection was skipped (top_percentile=0), so just use cleanup logs
-            self.feature_logs = logs['cleanup']
+            self.feature_logs = logs["cleanup"]
         print("[INFO] Data import successful.")
 
         return training_dataset, testing_dataset
@@ -232,19 +288,23 @@ class DataImporter:
         training_files = set(os.listdir(training_path))
         testing_files = set(os.listdir(testing_path))
 
-        required_files = {'clin.csv'} | {f"{dt}.csv" for dt in self.data_types}
+        required_files = {"clin.csv"} | {f"{dt}.csv" for dt in self.data_types}
 
         if not required_files.issubset(training_files):
             missing_files = required_files - training_files
-            raise ValueError(f"Missing files in training folder: {', '.join(missing_files)}")
+            raise ValueError(
+                f"Missing files in training folder: {', '.join(missing_files)}"
+            )
 
         if not required_files.issubset(testing_files):
             missing_files = required_files - testing_files
-            raise ValueError(f"Missing files in testing folder: {', '.join(missing_files)}")
+            raise ValueError(
+                f"Missing files in testing folder: {', '.join(missing_files)}"
+            )
 
     def read_data(self, folder_path):
         data = {}
-        required_files = {'clin.csv'} | {f"{dt}.csv" for dt in self.data_types}
+        required_files = {"clin.csv"} | {f"{dt}.csv" for dt in self.data_types}
         print("\n[INFO] ----------------- Reading Data ----------------- ")
         for file in required_files:
             file_path = os.path.join(folder_path, file)
@@ -255,11 +315,10 @@ class DataImporter:
 
     # randomly draw N samples; return subset of dat (output of read_data)
     def subsample(self, dat, N):
-        clin = dat['clin'].sample(N)
+        clin = dat["clin"].sample(N)
         dat_sub = {x: dat[x][clin.index] for x in self.data_types}
-        dat_sub['clin'] = clin
+        dat_sub["clin"] = clin
         return dat_sub
-
 
     def filter_by_features(self, dat, features):
         """
@@ -267,24 +326,30 @@ class DataImporter:
         subset train/test data to only include those features
         """
         dat_filtered = {
-            key: df if key == "clin" else df.loc[df.index.intersection(features)]
+            key: (df if key == "clin" else df.loc[df.index.intersection(features)])
             for key, df in dat.items()
         }
 
-        print("[INFO] The initial features are filtered to include user-provided features only")
+        print(
+            "[INFO] The initial features are filtered to include user-provided features only"
+        )
         for key, df in dat_filtered.items():
             remaining_features = len(df.index)
-            print(f"In layer '{key}', {remaining_features} features are remaining after filtering.")
+            print(
+                f"In layer '{key}', {remaining_features} features are remaining after filtering."
+            )
         return dat_filtered
 
-    def process_data(self, data, split = 'train'):
-        print(f"\n[INFO] ----------------- Processing Data ({split}) ----------------- ")
+    def process_data(self, data, split="train"):
+        print(
+            f"\n[INFO] ----------------- Processing Data ({split}) ----------------- "
+        )
         # remove uninformative features and samples with no information (from data matrices)
         dat = self.cleanup_data({x: data[x] for x in self.data_types})
-        ann = data['clin']
+        ann = data["clin"]
         dat, ann, samples = self.get_labels(dat, ann)
         # do feature selection: only applied to training data
-        if split == 'train':
+        if split == "train":
             if self.top_percentile:
                 dat = self.select_features(dat)
         features = {x: dat[x].index for x in dat.keys()}
@@ -295,10 +360,10 @@ class DataImporter:
         cleaned_dfs = {}
         sample_masks = []
 
-        feature_logs = {} # keep track of feature variation/NA value scores
+        feature_logs = {}  # keep track of feature variation/NA value scores
         # First pass: remove near-zero-variation features and create masks for informative samples
         for key, df in df_dict.items():
-            print("\n[INFO] working on layer: ",key)
+            print("\n[INFO] working on layer: ", key)
             original_features_count = df.shape[0]
 
             # Compute variances and NA percentages for each feature in the DataFrame
@@ -306,13 +371,29 @@ class DataImporter:
             na_percentages = df.isna().mean(axis=1)
 
             # Combine variances and NA percentages into a single DataFrame for logging
-            log_df = pd.DataFrame({ 'feature': df.index, 'na_percent': na_percentages, 'variance': feature_variances, 'selected': False})
+            log_df = pd.DataFrame(
+                {
+                    "feature": df.index,
+                    "na_percent": na_percentages,
+                    "variance": feature_variances,
+                    "selected": False,
+                }
+            )
 
             # Filter based on both variance and NA percentage thresholds
             # Identify features that meet both criteria
-            df = df.loc[(feature_variances >= feature_variances.quantile(self.variance_threshold)) & (na_percentages < self.na_threshold)]
+            df = df.loc[
+                (
+                    feature_variances
+                    >= feature_variances.quantile(self.variance_threshold)
+                )
+                & (na_percentages < self.na_threshold)
+            ]
             # set selected features to True
-            log_df['selected'] = (log_df['variance'] >= feature_variances.quantile(self.variance_threshold)) & (log_df['na_percent'] < self.na_threshold)
+            log_df["selected"] = (
+                log_df["variance"]
+                >= feature_variances.quantile(self.variance_threshold)
+            ) & (log_df["na_percent"] < self.na_threshold)
             feature_logs[key] = log_df
 
             # Step 3: Fill NA values with the median of the feature
@@ -320,7 +401,12 @@ class DataImporter:
 
             if np.sum(df.isna().sum()) > 0:
                 missing_rows = df.isna().any(axis=1)
-                print("[INFO] Imputing NA values to median of features, affected # of cells in the matrix", np.sum(df.isna().sum()), " # of rows:",sum(missing_rows))
+                print(
+                    "[INFO] Imputing NA values to median of features, affected # of cells in the matrix",
+                    np.sum(df.isna().sum()),
+                    " # of rows:",
+                    sum(missing_rows),
+                )
 
                 # Calculate medians for each 'column' (originally rows) and fill NAs
                 # Note: After transposition, operations are more efficient
@@ -329,16 +415,20 @@ class DataImporter:
                 df_T.fillna(medians_T, inplace=True)
                 df = df_T.T
 
-            print("[INFO] Number of NA values: ",np.sum(df.isna().sum()))
+            print("[INFO] Number of NA values: ", np.sum(df.isna().sum()))
 
             removed_features_count = original_features_count - df.shape[0]
-            print(f"[INFO] DataFrame {key} - Removed {removed_features_count} features.")
+            print(
+                f"[INFO] DataFrame {key} - Removed {removed_features_count} features."
+            )
 
             # Step 2: Create masks for informative samples
             # Compute standard deviation of samples (along columns)
             sample_stdevs = df.std(axis=0)
             # Create mask for samples that do not have std dev of 0 or NaN
-            mask = np.logical_and(sample_stdevs != 0, np.logical_not(np.isnan(sample_stdevs)))
+            mask = np.logical_and(
+                sample_stdevs != 0, np.logical_not(np.isnan(sample_stdevs))
+            )
             sample_masks.append(mask)
 
             cleaned_dfs[key] = df
@@ -351,15 +441,26 @@ class DataImporter:
             original_samples_count = cleaned_dfs[key].shape[1]
             cleaned_dfs[key] = cleaned_dfs[key].loc[:, common_mask]
             removed_samples_count = original_samples_count - cleaned_dfs[key].shape[1]
-            print(f"[INFO] DataFrame {key} - Removed {removed_samples_count} samples ({removed_samples_count / original_samples_count * 100:.2f}%).")
+            removed_samples_pct = (
+                removed_samples_count / original_samples_count * 100
+            )
+            print(
+                f"[INFO] DataFrame {key} - Removed {removed_samples_count} samples "
+                f"({removed_samples_pct:.2f}%)."
+            )
 
         # update feature logs from this process
-        self.feature_logs['cleanup'] = feature_logs
+        self.feature_logs["cleanup"] = feature_logs
         return cleaned_dfs
 
     def get_labels(self, dat, ann):
         # subset samples and reorder annotations for the samples
-        samples = list(reduce(set.intersection, [set(item) for item in [dat[x].columns for x in dat.keys()]]))
+        samples = list(
+            reduce(
+                set.intersection,
+                [set(item) for item in [dat[x].columns for x in dat.keys()]],
+            )
+        )
         samples = list(set(ann.index).intersection(samples))
         dat = {x: dat[x][samples] for x in dat.keys()}
         ann = ann.loc[samples]
@@ -367,18 +468,28 @@ class DataImporter:
 
     # unsupervised feature selection using laplacian score and correlation filters (optional)
     def select_features(self, dat):
-        counts = {x: max(int(dat[x].shape[0] * self.top_percentile / 100), self.min_features) for x in dat.keys()}
+        counts = {
+            x: max(
+                int(dat[x].shape[0] * self.top_percentile / 100),
+                self.min_features,
+            )
+            for x in dat.keys()
+        }
         dat_filtered = {}
-        feature_logs = {} # feature log for each layer
+        feature_logs = {}  # feature log for each layer
         for layer in dat.keys():
             # filter features in the layer and keep a log of filtering process; notice we provide a transposed matrix
-            X_filt, log_df = filter_by_laplacian(X = dat[layer].T, layer = layer,
-                                                      topN=counts[layer], correlation_threshold = self.correlation_threshold)
-            dat_filtered[layer] = X_filt.T # transpose after laplacian filtering again
+            X_filt, log_df = filter_by_laplacian(
+                X=dat[layer].T,
+                layer=layer,
+                topN=counts[layer],
+                correlation_threshold=self.correlation_threshold,
+            )
+            dat_filtered[layer] = X_filt.T  # transpose after laplacian filtering again
             # Features will be stored after concatenation
             feature_logs[layer] = log_df
         # update main feature logs with events from this function
-        self.feature_logs['select_features'] = feature_logs
+        self.feature_logs["select_features"] = feature_logs
         return dat_filtered
 
     def harmonize(self, dat1, dat2):
@@ -386,7 +497,9 @@ class DataImporter:
         # common data layers
         common_layers = dat1.keys() & dat2.keys()
         # Get common features
-        common_features = {x: dat1[x].index.intersection(dat2[x].index) for x in common_layers}
+        common_features = {
+            x: dat1[x].index.intersection(dat2[x].index) for x in common_layers
+        }
         # Subset both datasets to only include common features
         dat1 = {x: dat1[x].loc[common_features[x]] for x in common_layers}
         dat2 = {x: dat2[x].loc[common_features[x]] for x in common_layers}
@@ -411,10 +524,14 @@ class DataImporter:
             else:
                 raise ValueError("Invalid scaler_type. Choose 'standard' or 'min_max'.")
 
-        normalized_data = {x: pd.DataFrame(self.scalers[x].transform(data[x].T),
-                                           index=data[x].columns,
-                                           columns=data[x].index).T
-                           for x in data.keys()}
+        normalized_data = {
+            x: pd.DataFrame(
+                self.scalers[x].transform(data[x].T),
+                index=data[x].columns,
+                columns=data[x].index,
+            ).T
+            for x in data.keys()
+        }
         return normalized_data
 
     def get_torch_dataset(self, dat, ann, samples):
@@ -425,19 +542,31 @@ class DataImporter:
         ann, variable_types, label_mappings = self.encode_labels(ann)
 
         # Convert DataFrame to tensor with MPS-compatible dtypes
-        ann = {col: torch.from_numpy(ann[col].values.copy()).float() if ann[col].dtype in ['float64', 'float32']
-               else torch.from_numpy(ann[col].values.copy()) for col in ann.columns}
-        return MultiOmicDataset(dat, ann, variable_types, features, samples, label_mappings)
+        ann = {
+            col: (
+                torch.from_numpy(ann[col].values.copy()).float()
+                if ann[col].dtype in ["float64", "float32"]
+                else torch.from_numpy(ann[col].values.copy())
+            )
+            for col in ann.columns
+        }
+        return MultiOmicDataset(
+            dat, ann, variable_types, features, samples, label_mappings
+        )
 
     def encode_labels(self, df):
         label_mappings = {}
+
         def encode_column(series):
-            nonlocal label_mappings  # Declare as nonlocal so that we can modify it
             # Fill NA values with 'missing'
             # series = series.fillna('missing')
             if series.name not in self.encoders:
-                self.encoders[series.name] = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
-                encoded_series = self.encoders[series.name].fit_transform(series.to_frame())
+                self.encoders[series.name] = OrdinalEncoder(
+                    handle_unknown="use_encoded_value", unknown_value=-1
+                )
+                encoded_series = self.encoders[series.name].fit_transform(
+                    series.to_frame()
+                )
                 # NEW: Store encoder for inference mode
                 self.label_encoders[series.name] = self.encoders[series.name]
             else:
@@ -445,60 +574,85 @@ class DataImporter:
 
             # also save label mappings
             label_mappings[series.name] = {
-                    int(code): label for code, label in enumerate(self.encoders[series.name].categories_[0])
-                }
+                int(code): label
+                for code, label in enumerate(self.encoders[series.name].categories_[0])
+            }
             return encoded_series.ravel()
 
         # Select only the categorical columns
-        df_categorical = df.select_dtypes(include=['object', 'category']).apply(encode_column)
+        df_categorical = df.select_dtypes(include=["object", "category"]).apply(
+            encode_column
+        )
 
         # Combine the encoded categorical data with the numerical data
-        df_encoded = pd.concat([df.select_dtypes(exclude=['object', 'category']), df_categorical], axis=1)
+        df_encoded = pd.concat(
+            [df.select_dtypes(exclude=["object", "category"]), df_categorical],
+            axis=1,
+        )
 
         # Store the variable types
-        variable_types = {col: 'categorical' for col in df_categorical.columns}
-        variable_types.update({col: 'numerical' for col in df.select_dtypes(exclude=['object', 'category']).columns})
+        variable_types = {col: "categorical" for col in df_categorical.columns}
+        variable_types.update(
+            {
+                col: "numerical"
+                for col in df.select_dtypes(exclude=["object", "category"]).columns
+            }
+        )
 
         return df_encoded, variable_types, label_mappings
 
-
     def validate_input_data(self, train_dat, test_dat):
-        print("\n[INFO] ----------------- Checking for problems with the input data ----------------- ")
+        print(
+            "\n[INFO] ----------------- Checking for problems with the input data ----------------- "
+        )
         errors = []
         warnings = []
+
         def check_rownames(dat, split):
             # Check 1: Validate first columns are unique
             for file_name, df in dat.items():
                 if not df.index.is_unique:
-                    identifier_type = "Sample labels" if file_name == 'clin' else "Feature names"
-                    errors.append(f"Error in {split}/{file_name}.csv: {identifier_type} in the first column must be unique.")
+                    identifier_type = (
+                        "Sample labels" if file_name == "clin" else "Feature names"
+                    )
+                    errors.append(
+                        f"Error in {split}/{file_name}.csv: {identifier_type} in the first column must be unique."
+                    )
 
         def check_sample_labels(dat, split):
-            clin_samples = set(dat['clin'].index)
+            clin_samples = set(dat["clin"].index)
             for file_name, df in dat.items():
-                if file_name != 'clin':
+                if file_name != "clin":
                     omics_samples = set(df.columns)
                     matching_samples = clin_samples.intersection(omics_samples)
                     if not matching_samples:
-                        errors.append(f"Error: No matching sample labels found between {split}/clin.csv and {split}/{file_name}.csv.")
+                        errors.append(
+                            f"Error: No matching sample labels found between "
+                            f"{split}/clin.csv and {split}/{file_name}.csv."
+                        )
                     elif len(matching_samples) < len(clin_samples):
                         missing_samples = clin_samples - matching_samples
-                        warnings.append(f"Warning: Some sample labels in {split}/clin.csv are missing in {split}/{file_name}.csv: {missing_samples}")
+                        warnings.append(
+                            f"Warning: Some sample labels in {split}/clin.csv are "
+                            f"missing in {split}/{file_name}.csv: {missing_samples}"
+                        )
 
         def check_common_features(train_dat, test_dat):
             for file_name in train_dat:
-                if file_name != 'clin' and file_name in test_dat:
+                if file_name != "clin" and file_name in test_dat:
                     train_features = set(train_dat[file_name].index)
                     test_features = set(test_dat[file_name].index)
                     common_features = train_features.intersection(test_features)
                     if not common_features:
-                        errors.append(f"Error: No common features found between train/{file_name}.csv and test/{file_name}.csv.")
+                        errors.append(
+                            f"Error: No common features found between train/{file_name}.csv and test/{file_name}.csv."
+                        )
 
-        check_rownames(train_dat, 'train')
-        check_rownames(test_dat, 'test')
+        check_rownames(train_dat, "train")
+        check_rownames(test_dat, "test")
 
-        check_sample_labels(train_dat, 'train')
-        check_sample_labels(test_dat, 'test')
+        check_sample_labels(train_dat, "train")
+        check_sample_labels(test_dat, "test")
 
         check_common_features(train_dat, test_dat)
 
@@ -514,20 +668,14 @@ class DataImporter:
                 print(f"[ERROR] {i}. {error}")
             raise Exception("[ERROR] Please correct the above errors and try again.")
 
-
         if not warnings and not errors:
             print("[INFO] Data structure is valid with no errors or warnings.")
-
 
 
 """
 DataImporterInference class for flexynesis inference mode.
 Add this to flexynesis/data.py
 """
-
-import pandas as pd
-import numpy as np
-
 
 
 class DataImporterInference:
@@ -538,21 +686,28 @@ class DataImporterInference:
 
     def __init__(self, test_data_path, artifacts_path, verbose=True):
         from .inference import _load_artifacts
+
         self.test_data_path = test_data_path
         self.verbose = verbose
         self.artifacts = _load_artifacts(artifacts_path)
 
         # Map artifact keys to expected names (compatibility layer)
-        self.feature_names = self.artifacts.get("feature_lists", self.artifacts.get("feature_names", {}))
-        self.scalers = self.artifacts.get("transforms", self.artifacts.get("scalers", {}))
+        self.feature_names = self.artifacts.get(
+            "feature_lists", self.artifacts.get("feature_names", {})
+        )
+        self.scalers = self.artifacts.get(
+            "transforms", self.artifacts.get("scalers", {})
+        )
         self.label_encoders = self.artifacts.get("label_encoders", {})
-        self.modalities = self.artifacts.get("data_types", self.artifacts.get("modalities", []))
+        self.modalities = self.artifacts.get(
+            "data_types", self.artifacts.get("modalities", [])
+        )
         self.target_variables = self.artifacts.get("target_variables", [])
 
         # For early fusion, we need feature lists for original modalities
         # but artifacts only have 'all'. We need to reconstruct from transforms.
-        if self.modalities == ['all']:
-            original_modalities = self.artifacts.get('original_modalities', [])
+        if self.modalities == ["all"]:
+            original_modalities = self.artifacts.get("original_modalities", [])
             # Feature lists for original modalities can be inferred from transforms
             # since transforms are keyed by original modality names
             if original_modalities:
@@ -563,7 +718,6 @@ class DataImporterInference:
         if self.verbose:
             print(f"[INFO] Loaded artifacts for modalities: {self.modalities}")
 
-
     def import_data(self):
         """Returns MultiOmicDataset object"""
         test_data = {}
@@ -571,7 +725,7 @@ class DataImporterInference:
         labels_df = None
 
         # Load clinical data
-        clin_path = os.path.join(self.test_data_path, 'clin.csv')
+        clin_path = os.path.join(self.test_data_path, "clin.csv")
         if os.path.exists(clin_path):
             labels_df = pd.read_csv(clin_path, index_col=0)
 
@@ -579,20 +733,22 @@ class DataImporterInference:
         # For early fusion: load original modalities before concatenation
         # For covariates: load only the omics data (covariates come from clin.csv)
         modalities_to_load = self.modalities
-        if self.modalities == ['all']:
-            modalities_to_load = self.artifacts.get('original_modalities', [])
+        if self.modalities == ["all"]:
+            modalities_to_load = self.artifacts.get("original_modalities", [])
             if not modalities_to_load:
-                raise ValueError('[ERROR] Early fusion mode but original_modalities not found in artifacts')
+                raise ValueError(
+                    "[ERROR] Early fusion mode but original_modalities not found in artifacts"
+                )
         else:
             # Filter out 'covariates' from modalities_to_load
             # Covariates will be created from clinical data later
-            modalities_to_load = [m for m in self.modalities if m != 'covariates']
+            modalities_to_load = [m for m in self.modalities if m != "covariates"]
 
         # Load each modality (skip 'covariates' - it's in clin.csv)
         for modality in modalities_to_load:
-            if modality == 'covariates':
+            if modality == "covariates":
                 continue  # Covariates are in clin.csv, not a separate file
-            file_path = os.path.join(self.test_data_path, f'{modality}.csv')
+            file_path = os.path.join(self.test_data_path, f"{modality}.csv")
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"[ERROR] Required file not found: {file_path}")
 
@@ -610,18 +766,24 @@ class DataImporterInference:
             extra = set(df.columns) - set(expected_features)
 
             if missing:
-                raise ValueError(f"[ERROR] {modality}: Missing {len(missing)} features required by model. "
-                                f"Test data must have same preprocessing as training data.")
+                raise ValueError(
+                    f"[ERROR] {modality}: Missing {len(missing)} features required by model. "
+                    f"Test data must have same preprocessing as training data."
+                )
 
             if extra and self.verbose:
-                print(f"[INFO] {modality}: Ignoring {len(extra)} extra features not in training")
+                print(
+                    f"[INFO] {modality}: Ignoring {len(extra)} extra features not in training"
+                )
 
             # Select only expected features in correct order
             df = df[expected_features]
 
             # Apply scaling
             scaler = self.scalers[modality]
-            df_scaled = pd.DataFrame(scaler.transform(df.values), index=df.index, columns=df.columns)
+            df_scaled = pd.DataFrame(
+                scaler.transform(df.values), index=df.index, columns=df.columns
+            )
 
             # Store as DataFrame for cross-modality intersection
             test_data[modality] = df_scaled
@@ -639,16 +801,22 @@ class DataImporterInference:
                 ).float()
 
         # Create covariates matrix if needed
-        if 'covariates' in self.modalities and labels_df is not None:
-            from flexynesis.utils import create_covariate_matrix, get_variable_types
-            covariate_vars = self.artifacts.get('covariate_vars', [])
+        if "covariates" in self.modalities and labels_df is not None:
+            from flexynesis.utils import (create_covariate_matrix,
+                                          get_variable_types)
+
+            covariate_vars = self.artifacts.get("covariate_vars", [])
             if covariate_vars:
                 if self.verbose:
                     print(f"[INFO] Creating covariate matrix for: {covariate_vars}")
                 variable_types_clin = get_variable_types(labels_df)
-                covariates_df = create_covariate_matrix(covariate_vars, variable_types_clin, labels_df)
+                covariates_df = create_covariate_matrix(
+                    covariate_vars, variable_types_clin, labels_df
+                )
                 # Convert to torch tensor and add to test_data
-                test_data['covariates'] = torch.from_numpy(covariates_df.T.values).float()
+                test_data["covariates"] = torch.from_numpy(
+                    covariates_df.T.values
+                ).float()
                 if samples is None:
                     samples = covariates_df.T.index.tolist()
 
@@ -668,8 +836,7 @@ class DataImporterInference:
                 # Create mapping from old sample order to new order
                 old_samples = samples  # Original order from data CSV
                 df_reordered = pd.DataFrame(
-                    test_data[modality].numpy(),
-                    index=old_samples
+                    test_data[modality].numpy(), index=old_samples
                 ).loc[common_samples]
                 test_data[modality] = torch.from_numpy(df_reordered.values).float()
 
@@ -681,35 +848,50 @@ class DataImporterInference:
                     valid_mask = ~labels_df[col].isna()
                     encoded = np.full(len(labels_df), -1, dtype=np.int64)
 
-                    if hasattr(encoder, 'classes_'):  # LabelEncoder
+                    if hasattr(encoder, "classes_"):  # LabelEncoder
                         if valid_mask.sum() > 0:
-                            encoded[valid_mask] = encoder.transform(labels_df[col][valid_mask].values)
+                            encoded[valid_mask] = encoder.transform(
+                                labels_df[col][valid_mask].values
+                            )
                         ann_dict[col] = torch.from_numpy(encoded)
-                        variable_types[col] = 'categorical'
-                        label_mappings[col] = {int(c): l for c, l in enumerate(encoder.classes_)}
+                        variable_types[col] = "categorical"
+                        label_mappings[col] = {
+                            int(c): l for c, l in enumerate(encoder.classes_)
+                        }
                     else:  # OrdinalEncoder
                         if valid_mask.sum() > 0:
-                            encoded[valid_mask] = encoder.transform(labels_df[col][valid_mask].values.reshape(-1, 1)).ravel()
+                            encoded[valid_mask] = encoder.transform(
+                                labels_df[col][valid_mask].values.reshape(-1, 1)
+                            ).ravel()
                         ann_dict[col] = torch.from_numpy(encoded)
-                        variable_types[col] = 'categorical'
-                        label_mappings[col] = {int(c): l for c, l in enumerate(encoder.categories_[0])}
+                        variable_types[col] = "categorical"
+                        label_mappings[col] = {
+                            int(c): l for c, l in enumerate(encoder.categories_[0])
+                        }
 
-                    label_mappings[col][-1] = 'Unknown'  # For missing values
+                    label_mappings[col][-1] = "Unknown"  # For missing values
                 else:
                     ann_dict[col] = torch.from_numpy(labels_df[col].values).float()
-                    variable_types[col] = 'numerical'
+                    variable_types[col] = "numerical"
 
         # Create features dict
         # For early fusion, get features from scalers since feature_lists only has 'all'
-        if self.modalities == ['all']:
-            modalities_for_features = self.artifacts.get('original_modalities', [])
+        if self.modalities == ["all"]:
+            modalities_for_features = self.artifacts.get("original_modalities", [])
             # Get features from scalers for each modality
-            features = {modality: list(self.scalers[modality].feature_names_in_) for modality in modalities_for_features}
+            features = {
+                modality: list(self.scalers[modality].feature_names_in_)
+                for modality in modalities_for_features
+            }
         else:
-            features = {modality: self.feature_names[modality] for modality in self.modalities}
+            features = {
+                modality: self.feature_names[modality] for modality in self.modalities
+            }
 
         # CRITICAL: Reorder test_data dict to match self.modalities order (model expects specific order)
-        test_data_ordered = {mod: test_data[mod] for mod in self.modalities if mod in test_data}
+        test_data_ordered = {
+            mod: test_data[mod] for mod in self.modalities if mod in test_data
+        }
 
         # Create MultiOmicDataset object
         dataset = MultiOmicDataset(
@@ -718,15 +900,18 @@ class DataImporterInference:
             variable_types=variable_types,
             features=features,
             samples=samples,
-            label_mappings=label_mappings
+            label_mappings=label_mappings,
         )
 
         # Concatenate for early fusion if needed
-        if self.modalities == ['all']:
+        if self.modalities == ["all"]:
             from itertools import chain
+
             # For early fusion, we already loaded original modalities into test_data
             # Now concatenate them in the SAME ORDER as training
-            modality_order = self.artifacts.get('original_modalities', list(test_data.keys()))
+            modality_order = self.artifacts.get(
+                "original_modalities", list(test_data.keys())
+            )
 
             # Concatenate the data tensors
             concatenated_data = torch.cat([test_data[x] for x in modality_order], dim=1)
@@ -735,12 +920,14 @@ class DataImporterInference:
             all_features = list(chain(*[dataset.features[x] for x in modality_order]))
 
             # Filter to expected features from artifacts
-            expected_all_features = self.feature_names['all']
-            feature_indices = [i for i, f in enumerate(all_features) if f in expected_all_features]
+            expected_all_features = self.feature_names["all"]
+            feature_indices = [
+                i for i, f in enumerate(all_features) if f in expected_all_features
+            ]
 
             # Update dataset with concatenated data
-            dataset.dat = {'all': concatenated_data[:, feature_indices]}
-            dataset.features = {'all': [all_features[i] for i in feature_indices]}
+            dataset.dat = {"all": concatenated_data[:, feature_indices]}
+            dataset.features = {"all": [all_features[i] for i in feature_indices]}
 
         return dataset
 
@@ -749,16 +936,28 @@ class MultiOmicDataset(Dataset):
     """A PyTorch dataset for multiomic data.
 
     Args:
-        dat (dict): A dictionary with keys corresponding to different types of data and values corresponding to matrices of the same shape. All matrices must have the same number of samples (rows).
+        dat (dict): A dictionary with keys corresponding to different types of data and values
+            corresponding to matrices of the same shape. All matrices must have the same number
+            of samples (rows).
         ann (data.frame): Data frame with samples on the rows, sample annotations on the columns
-        features (list or np.array): A 1D array of feature names with length equal to the number of columns in each matrix.
+        features (list or np.array): A 1D array of feature names with length equal to the
+            number of columns in each matrix.
         samples (list or np.array): A 1D array of sample names with length equal to the number of rows in each matrix.
 
     Returns:
         A PyTorch dataset that can be used for training or evaluation.
     """
 
-    def __init__(self, dat, ann, variable_types, features, samples, label_mappings, feature_ann=None):
+    def __init__(
+        self,
+        dat,
+        ann,
+        variable_types,
+        features,
+        samples,
+        label_mappings,
+        feature_ann=None,
+    ):
         """Initialize the dataset."""
         self.dat = dat
         self.ann = ann
@@ -776,14 +975,16 @@ class MultiOmicDataset(Dataset):
 
         Returns:
             A tuple of two elements:
-                1. A dictionary with keys corresponding to the different types of data in the input dictionary `dat`, and values corresponding to the data for the given sample.
+                1. A dictionary with keys corresponding to the different
+                   types of data in the input dictionary `dat`, and values
+                   corresponding to the data for the given sample.
                 2. The label for the given sample.
         """
         subset_dat = {x: self.dat[x][index] for x in self.dat.keys()}
         subset_ann = {x: self.ann[x][index] for x in self.ann.keys()}
         return subset_dat, subset_ann, self.samples[index]
 
-    def __len__ (self):
+    def __len__(self):
         """Get the total number of samples in the dataset.
 
         Returns:
@@ -805,32 +1006,54 @@ class MultiOmicDataset(Dataset):
         subset_samples = [self.samples[idx] for idx in indices]
 
         # Create a new dataset object
-        return MultiOmicDataset(subset_dat, subset_ann, self.variable_types, self.features,
-                                subset_samples, self.label_mappings, self.feature_ann)
+        return MultiOmicDataset(
+            subset_dat,
+            subset_ann,
+            self.variable_types,
+            self.features,
+            subset_samples,
+            self.label_mappings,
+            self.feature_ann,
+        )
 
     def get_feature_subset(self, feature_df):
-        """Get a subset of data matrices corresponding to specified features and concatenate them into a pandas DataFrame.
+        """Get a subset of data matrices corresponding to specified features and
+        concatenate them into a pandas DataFrame.
 
         Args:
-            feature_df (pandas.DataFrame): A DataFrame which contains at least two columns: 'layer' and 'name'.
+            feature_df (pandas.DataFrame): A DataFrame which contains at least
+                two columns: 'layer' and 'name'.
 
         Returns:
             A pandas DataFrame that concatenates the data matrices for the specified features from all layers.
         """
         # Convert the DataFrame to a dictionary
-        feature_dict = feature_df.groupby('layer')['name'].apply(list).to_dict()
+        feature_dict = feature_df.groupby("layer")["name"].apply(list).to_dict()
 
         dfs = []
         for layer, features in feature_dict.items():
             if layer in self.dat:
                 # Create a dictionary to look up indices by feature name for each layer
-                feature_index_dict = {feature: i for i, feature in enumerate(self.features[layer])}
+                feature_index_dict = {
+                    feature: i for i, feature in enumerate(self.features[layer])
+                }
                 # Get the indices for the requested features
-                indices = [feature_index_dict[feature] for feature in features if feature in feature_index_dict]
+                indices = [
+                    feature_index_dict[feature]
+                    for feature in features
+                    if feature in feature_index_dict
+                ]
                 # Subset the data matrix for the current layer using the indices
                 subset = self.dat[layer][:, indices]
                 # Convert the subset to a pandas DataFrame, add the layer name as a prefix to each column name
-                df = pd.DataFrame(subset, columns=[f'{layer}_{feature}' for feature in features if feature in feature_index_dict])
+                df = pd.DataFrame(
+                    subset,
+                    columns=[
+                        f"{layer}_{feature}"
+                        for feature in features
+                        if feature in feature_index_dict
+                    ],
+                )
                 dfs.append(df)
             else:
                 print(f"Layer {layer} not found in the dataset.")
@@ -844,9 +1067,12 @@ class MultiOmicDataset(Dataset):
         return result
 
     def get_dataset_stats(self):
-        stats = {': '.join(['feature_count in', x]): self.dat[x].shape[1] for x in self.dat.keys()}
-        stats['sample_count'] = len(self.samples)
-        return(stats)
+        stats = {
+            ": ".join(["feature_count in", x]): self.dat[x].shape[1]
+            for x in self.dat.keys()
+        }
+        stats["sample_count"] = len(self.samples)
+        return stats
 
 
 # given a MultiOmicDataset object, convert to Triplets (anchor,positive,negative)
@@ -863,14 +1089,19 @@ class TripletMultiOmicDataset(Dataset):
         self.labels_set, self.label_to_indices = self.get_label_indices(labels)
 
         # Valid anchor indices are those without NA labels
-        self.valid_indices = [i for i, label in enumerate(labels) if not np.isnan(label)]
+        self.valid_indices = [
+            i for i, label in enumerate(labels) if not np.isnan(label)
+        ]
 
     def __getitem__(self, index):
         # We only use valid non-NA indices for anchors
         real_index = self.valid_indices[index]
 
         # get anchor sample and its label
-        anchor, y_dict = self.dataset[real_index][0], self.dataset[real_index][1]
+        anchor, y_dict = (
+            self.dataset[real_index][0],
+            self.dataset[real_index][1],
+        )
 
         # choose another sample with same label
         label = y_dict[self.main_var].item()
@@ -881,11 +1112,12 @@ class TripletMultiOmicDataset(Dataset):
         # choose another sample with a different label
         # possible negative labels include NA
         import random
+
         negative_label = random.choice(list(self.labels_set - set([label])))
         negative_index = np.random.choice(self.label_to_indices[negative_label])
 
-        pos = self.dataset[positive_index][0] # positive example
-        neg = self.dataset[negative_index][0] # negative example
+        pos = self.dataset[positive_index][0]  # positive example
+        neg = self.dataset[negative_index][0]  # negative example
         return anchor, pos, neg, y_dict
 
     def __len__(self):
@@ -893,11 +1125,12 @@ class TripletMultiOmicDataset(Dataset):
 
     def get_label_indices(self, labels_array):
         # Filter out NaNs for a clean set of valid classes
-        valid_labels = [l for l in labels_array if not np.isnan(l)]
+        valid_labels = [label for label in labels_array if not np.isnan(label)]
         labels_set = set(valid_labels)
 
-        label_to_indices = {label: np.where(labels_array == label)[0]
-                            for label in labels_set}
+        label_to_indices = {
+            label: np.where(labels_array == label)[0] for label in labels_set
+        }
 
         # Handle NA as a single separate group (if any exist)
         na_indices = np.where(np.isnan(labels_array))[0]
@@ -912,11 +1145,15 @@ class MultiOmicDatasetNW(Dataset):
     def __init__(self, multiomic_dataset, interaction_df, modality_order=None):
         self.multiomic_dataset = multiomic_dataset
         self.interaction_df = interaction_df
-        self.modality_order = modality_order if modality_order else sorted(multiomic_dataset.dat.keys())
+        self.modality_order = (
+            modality_order if modality_order else sorted(multiomic_dataset.dat.keys())
+        )
 
         # Compute union of features in the data matrices that also appear in the network
         self.common_features = self.find_union_features()
-        self.gene_to_index = {gene: idx for idx, gene in enumerate(self.common_features)}
+        self.gene_to_index = {
+            gene: idx for idx, gene in enumerate(self.common_features)
+        }
         self.edge_index = self.create_edge_index()
         self.samples = self.multiomic_dataset.samples
         self.variable_types = self.multiomic_dataset.variable_types
@@ -927,30 +1164,47 @@ class MultiOmicDatasetNW(Dataset):
         self.node_features_tensor = self.precompute_node_features()
 
         # Store labels for all samples
-        self.labels = {target_name: labels for target_name, labels in self.multiomic_dataset.ann.items()}
+        self.labels = {
+            target_name: labels
+            for target_name, labels in self.multiomic_dataset.ann.items()
+        }
 
     def find_union_features(self):
         # Find the union of all features in the multiomic dataset
-        all_omic_features = set().union(*(set(features) for features in self.multiomic_dataset.features.values()))
+        all_omic_features = set().union(
+            *(set(features) for features in self.multiomic_dataset.features.values())
+        )
         # Find the union of proteins involved in interactions
-        interaction_genes = set(self.interaction_df['protein1']).union(set(self.interaction_df['protein2']))
+        interaction_genes = set(self.interaction_df["protein1"]).union(
+            set(self.interaction_df["protein2"])
+        )
         # Return the intersection of omic features and interaction genes
         return sorted(list(all_omic_features.intersection(interaction_genes)))
 
     def create_edge_index(self):
         # Create edges only if both proteins are within the available features
         filtered_df = self.interaction_df[
-            (self.interaction_df['protein1'].isin(self.common_features)) &
-            (self.interaction_df['protein2'].isin(self.common_features))
+            (self.interaction_df["protein1"].isin(self.common_features))
+            & (self.interaction_df["protein2"].isin(self.common_features))
         ]
-        edge_list = [(self.gene_to_index[row['protein1']], self.gene_to_index[row['protein2']]) for index, row in filtered_df.iterrows()]
+        edge_list = [
+            (
+                self.gene_to_index[row["protein1"]],
+                self.gene_to_index[row["protein2"]],
+            )
+            for index, row in filtered_df.iterrows()
+        ]
         return torch.tensor(edge_list, dtype=torch.long).t()
 
     def precompute_node_features(self):
         num_samples = len(self.samples)
         num_nodes = len(self.common_features)
         num_data_types = len(self.multiomic_dataset.dat)
-        all_features = torch.full((num_samples, num_nodes, num_data_types), float('nan'), dtype=torch.float)
+        all_features = torch.full(
+            (num_samples, num_nodes, num_data_types),
+            float("nan"),
+            dtype=torch.float,
+        )
 
         # CRITICAL: Use sorted keys to ensure consistent order across training/inference
         data_types_ordered = sorted(self.multiomic_dataset.dat.keys())
@@ -958,16 +1212,24 @@ class MultiOmicDatasetNW(Dataset):
             data_matrix = self.multiomic_dataset.dat[data_type]
             feature_indices = {
                 gene: self.multiomic_dataset.features[data_type].get_loc(gene)
-                for gene in self.common_features if gene in self.multiomic_dataset.features[data_type]
+                for gene in self.common_features
+                if gene in self.multiomic_dataset.features[data_type]
             }
-            valid_indices = torch.tensor(list(feature_indices.values()), dtype=torch.long)
-            feature_positions = torch.tensor([self.gene_to_index[gene] for gene in feature_indices.keys()], dtype=torch.long)
+            valid_indices = torch.tensor(
+                list(feature_indices.values()), dtype=torch.long
+            )
+            feature_positions = torch.tensor(
+                [self.gene_to_index[gene] for gene in feature_indices.keys()],
+                dtype=torch.long,
+            )
 
             # Fill in the available data
             all_features[:, feature_positions, i] = data_matrix[:, valid_indices]
 
         # Precompute medians for all data types, ignoring NaN values
-        medians = torch.nanmedian(all_features, dim=1, keepdim=True).values  # Use .values to get the actual median tensor
+        medians = torch.nanmedian(
+            all_features, dim=1, keepdim=True
+        ).values  # Use .values to get the actual median tensor
 
         # Replace all NaN values in all_features with their corresponding median values
         isnan = torch.isnan(all_features)
@@ -982,10 +1244,11 @@ class MultiOmicDatasetNW(Dataset):
         # Create a new instance of MultiOmicDatasetNW with the subsetted multiomic dataset
         return MultiOmicDatasetNW(dataset_subset, self.interaction_df.copy())
 
-
     def __getitem__(self, idx):
         node_features_tensor = self.node_features_tensor[idx]
-        y_dict = {target_name: self.labels[target_name][idx] for target_name in self.labels}
+        y_dict = {
+            target_name: self.labels[target_name][idx] for target_name in self.labels
+        }
         return node_features_tensor, y_dict, self.samples[idx]
 
     def __len__(self):
@@ -1002,13 +1265,19 @@ class MultiOmicDatasetNW(Dataset):
         # Calculate degree for each node
         degrees = torch.zeros(num_nodes, dtype=torch.long)
         degrees.index_add_(0, self.edge_index[0], torch.ones_like(self.edge_index[0]))
-        degrees.index_add_(0, self.edge_index[1], torch.ones_like(self.edge_index[1]))  # For undirected graphs
+        degrees.index_add_(
+            0, self.edge_index[1], torch.ones_like(self.edge_index[1])
+        )  # For undirected graphs
 
         num_singletons = torch.sum(degrees == 0).item()
         non_singletons = degrees[degrees > 0]
 
-        mean_edges_per_node = non_singletons.float().mean().item() if len(non_singletons) > 0 else 0
-        median_edges_per_node = non_singletons.median().item() if len(non_singletons) > 0 else 0
+        mean_edges_per_node = (
+            non_singletons.float().mean().item() if len(non_singletons) > 0 else 0
+        )
+        median_edges_per_node = (
+            non_singletons.median().item() if len(non_singletons) > 0 else 0
+        )
         max_edges = degrees.max().item()
 
         print("Dataset Statistics:")
@@ -1016,9 +1285,14 @@ class MultiOmicDatasetNW(Dataset):
         print(f"Total number of edges: {num_edges}")
         print(f"Number of node features per node: {num_node_features}")
         print(f"Number of singletons (nodes with no edges): {num_singletons}")
-        print(f"Mean number of edges per node (excluding singletons): {mean_edges_per_node:.2f}")
-        print(f"Median number of edges per node (excluding singletons): {median_edges_per_node}")
+        print(
+            f"Mean number of edges per node (excluding singletons): {mean_edges_per_node:.2f}"
+        )
+        print(
+            f"Median number of edges per node (excluding singletons): {median_edges_per_node}"
+        )
         print(f"Max number of edges per node: {max_edges}")
+
 
 def get_flexynesis_cache_dir() -> Path:
     """Resolve a writable cache directory for Flexynesis."""
@@ -1046,26 +1320,41 @@ class STRING(PYGDataset):
     - Downloads once, processes once per (version, organism, node_name).
     - Safe for concurrent jobs via a file lock.
     """
+
     base_folder = "STRING"
     version = "12.0"
     files = ("links", "aliases")
-    url = ("https://stringdb-downloads.org/download/"
-           "protein.{data}.v{version}/"
-           "{organism}.protein.{data}.v{version}.txt.gz")
+    url = (
+        "https://stringdb-downloads.org/download/"
+        "protein.{data}.v{version}/"
+        "{organism}.protein.{data}.v{version}.txt.gz"
+    )
 
-    def __init__(self, root: str | None = None, organism: int = 9606, node_name: str = "gene_name") -> None:
+    def __init__(
+        self,
+        root: str | None = None,
+        organism: int = 9606,
+        node_name: str = "gene_name",
+    ) -> None:
         self.organism = organism
         self.node_name = node_name
 
         # ---------- resolve central cache ----------
-        cache_root = get_flexynesis_cache_dir() / self.base_folder / f"v{self.version}" / str(self.organism)
+        cache_root = (
+            get_flexynesis_cache_dir()
+            / self.base_folder
+            / f"v{self.version}"
+            / str(self.organism)
+        )
 
         # layout
         self._cache_root = cache_root
         self._cache_raw_dir = cache_root / "raw"
         self._cache_processed_dir = cache_root / "processed"
         self._processed_basename = f"graph_{self.node_name}.csv"
-        self._cache_processed_path = self._cache_processed_dir / self._processed_basename
+        self._cache_processed_path = (
+            self._cache_processed_dir / self._processed_basename
+        )
 
         self._cache_raw_dir.mkdir(parents=True, exist_ok=True)
         self._cache_processed_dir.mkdir(parents=True, exist_ok=True)
@@ -1081,7 +1370,9 @@ class STRING(PYGDataset):
         super().__init__(str(self._cache_root))
 
         # Load processed data
-        self.graph_df = pd.read_csv(self.processed_paths[0], sep=",", header=0, index_col=0)
+        self.graph_df = pd.read_csv(
+            self.processed_paths[0], sep=",", header=0, index_col=0
+        )
 
     # -------------------- PyG stubs --------------------
     def len(self) -> int:
@@ -1123,7 +1414,7 @@ class STRING(PYGDataset):
         return self._cache_root
 
 
-def read_user_graph(fpath, sep=None, header='infer', **pd_read_csv_kw):
+def read_user_graph(fpath, sep=None, header="infer", **pd_read_csv_kw):
     """Read user-provided gene-gene interaction network file.
 
     This function reads a custom network file and validates that it contains
@@ -1159,18 +1450,19 @@ def read_user_graph(fpath, sep=None, header='infer', **pd_read_csv_kw):
     if sep is None:
         # Use CSV Sniffer for robust separator detection
         import csv
-        with open(fpath, 'r') as f:
+
+        with open(fpath, "r") as f:
             # Read first few lines for better detection
             sample = f.read(4096)
 
         try:
             sniffer = csv.Sniffer()
-            dialect = sniffer.sniff(sample, delimiters='\t,| ')
+            dialect = sniffer.sniff(sample, delimiters="\t,| ")
             sep = dialect.delimiter
             print(f"[INFO] Auto-detected separator using CSV Sniffer: {repr(sep)}")
         except csv.Error:
             # Fallback to tab if Sniffer fails
-            sep = '\t'
+            sep = "\t"
             print(f"[INFO] CSV Sniffer failed, using default separator: {repr(sep)}")
 
     # Read the file
@@ -1186,21 +1478,51 @@ def read_user_graph(fpath, sep=None, header='infer', **pd_read_csv_kw):
     # Get column names (handle cases with or without header)
     if header is None or (isinstance(header, int) and header < 0):
         # No header - assign default names
-        print("[INFO] No header detected. Assuming first 3 columns are: GeneA, GeneB, Score")
-        df.columns = [f'col_{i}' for i in range(len(df.columns))]
-        col_gene_a = 'col_0'
-        col_gene_b = 'col_1'
-        col_score = 'col_2'
+        print(
+            "[INFO] No header detected. Assuming first 3 columns are: GeneA, GeneB, Score"
+        )
+        df.columns = [f"col_{i}" for i in range(len(df.columns))]
+        col_gene_a = "col_0"
+        col_gene_b = "col_1"
+        col_score = "col_2"
     else:
         # Header present - use hybrid scoring to intelligently identify columns
         from difflib import SequenceMatcher
 
         # Define candidate keywords for each column type
         candidates = {
-            'gene_a': ['genea', 'gene_a', 'gene1', 'protein1', 'node1', 'source', 'from'],
-            'gene_b': ['geneb', 'gene_b', 'gene2', 'protein2', 'node2', 'target', 'to'],
-            'score': ['score', 'weight', 'combined_score', 'correlation', 'confidence',
-                     'value', 'strength', 'coef', 'coefficient', 'corr', 'pvalue', 'p_value']
+            "gene_a": [
+                "genea",
+                "gene_a",
+                "gene1",
+                "protein1",
+                "node1",
+                "source",
+                "from",
+            ],
+            "gene_b": [
+                "geneb",
+                "gene_b",
+                "gene2",
+                "protein2",
+                "node2",
+                "target",
+                "to",
+            ],
+            "score": [
+                "score",
+                "weight",
+                "combined_score",
+                "correlation",
+                "confidence",
+                "value",
+                "strength",
+                "coef",
+                "coefficient",
+                "corr",
+                "pvalue",
+                "p_value",
+            ],
         }
 
         def score_column_match(col, col_idx, category, total_cols):
@@ -1230,15 +1552,15 @@ def read_user_graph(fpath, sep=None, header='infer', **pd_read_csv_kw):
 
             # Signal 4: Position hints (10 points)
             # First column likely gene_a, second likely gene_b, third+ likely score
-            if category == 'gene_a' and col_idx == 0:
+            if category == "gene_a" and col_idx == 0:
                 total_score += 10
-            elif category == 'gene_b' and col_idx == 1:
+            elif category == "gene_b" and col_idx == 1:
                 total_score += 10
-            elif category == 'score' and col_idx >= 2:
+            elif category == "score" and col_idx >= 2:
                 total_score += 10
 
             # Signal 5: Data type hint for score (5 points)
-            if category == 'score':
+            if category == "score":
                 if pd.api.types.is_numeric_dtype(df[col]):
                     total_score += 5
 
@@ -1248,7 +1570,7 @@ def read_user_graph(fpath, sep=None, header='infer', **pd_read_csv_kw):
         total_cols = len(df.columns)
         matches = {}
 
-        for category in ['gene_a', 'gene_b', 'score']:
+        for category in ["gene_a", "gene_b", "score"]:
             best_col = None
             best_score = 0
 
@@ -1261,29 +1583,37 @@ def read_user_graph(fpath, sep=None, header='infer', **pd_read_csv_kw):
             matches[category] = (best_col, best_score)
 
         # Extract matched columns and scores
-        col_gene_a, score_a = matches['gene_a']
-        col_gene_b, score_b = matches['gene_b']
-        col_score, score_s = matches['score']
+        col_gene_a, score_a = matches["gene_a"]
+        col_gene_b, score_b = matches["gene_b"]
+        col_score, score_s = matches["score"]
 
         # Check if confidence is too low
         min_threshold = 30
-        if score_a < min_threshold or score_b < min_threshold or score_s < min_threshold:
-            print(f"[WARNING] Low confidence in column detection. Using first 3 columns as fallback.")
+        if (
+            score_a < min_threshold
+            or score_b < min_threshold
+            or score_s < min_threshold
+        ):
+            print(
+                "[WARNING] Low confidence in column detection. Using first 3 columns as fallback."
+            )
             col_gene_a = df.columns[0]
             col_gene_b = df.columns[1]
             col_score = df.columns[2]
         else:
-            print(f"[INFO] Detected columns - GeneA: '{col_gene_a}', GeneB: '{col_gene_b}', Score: '{col_score}'")
+            print(
+                f"[INFO] Detected columns - GeneA: '{col_gene_a}', GeneB: '{col_gene_b}', Score: '{col_score}'"
+            )
 
     # Extract only the required 3 columns and standardize names
     result_df = df[[col_gene_a, col_gene_b, col_score]].copy()
-    result_df.columns = ['protein1', 'protein2', 'combined_score']
+    result_df.columns = ["protein1", "protein2", "combined_score"]
 
     # Validate data types
     # Convert score to numeric if not already
-    if not pd.api.types.is_numeric_dtype(result_df['combined_score']):
+    if not pd.api.types.is_numeric_dtype(result_df["combined_score"]):
         try:
-            result_df['combined_score'] = pd.to_numeric(result_df['combined_score'])
+            result_df["combined_score"] = pd.to_numeric(result_df["combined_score"])
         except ValueError:
             raise ValueError(
                 f"Score column must contain numeric values. "
@@ -1294,14 +1624,19 @@ def read_user_graph(fpath, sep=None, header='infer', **pd_read_csv_kw):
     original_len = len(result_df)
     result_df = result_df.dropna()
     if len(result_df) < original_len:
-        print(f"[WARNING] Removed {original_len - len(result_df)} rows with missing values")
+        print(
+            f"[WARNING] Removed {original_len - len(result_df)} rows with missing values"
+        )
 
     print(f"[INFO] Successfully loaded user graph: {len(result_df)} interactions")
-    print(f"[INFO] Score range: [{result_df['combined_score'].min():.4f}, {result_df['combined_score'].max():.4f}]")
+    print(
+        f"[INFO] Score range: [{result_df['combined_score'].min():.4f}, {result_df['combined_score'].max():.4f}]"
+    )
 
     return result_df
 
-def read_stringdb_links(fname, top_neighbors = 5):
+
+def read_stringdb_links(fname, top_neighbors=5):
     """
     Reads and processes a STRING database file to extract and rank protein-protein interactions.
 
@@ -1327,18 +1662,25 @@ def read_stringdb_links(fname, top_neighbors = 5):
     """
     df = pd.read_csv(fname, header=0, sep=" ")
     df = df[df.combined_score > 400]
-    df_expanded = pd.concat([
-        df.rename(columns={'protein1': 'protein', 'protein2': 'partner'}),
-        df.rename(columns={'protein2': 'protein', 'protein1': 'partner'})
-    ])
+    df_expanded = pd.concat(
+        [
+            df.rename(columns={"protein1": "protein", "protein2": "partner"}),
+            df.rename(columns={"protein2": "protein", "protein1": "partner"}),
+        ]
+    )
     # Sort the expanded DataFrame by 'combined_score' in descending order
-    df_expanded_sorted = df_expanded.sort_values(by='combined_score', ascending=False)
-        # Reduce to unique interactions to avoid counting duplicates
-    df_expanded_unique = df_expanded_sorted.drop_duplicates(subset=['protein', 'partner'])
-    top_interactions = df_expanded_unique.groupby('protein').head(top_neighbors)
-    df = top_interactions.rename(columns={'protein': 'protein1', 'partner': 'protein2'})
-    df[["protein1", "protein2"]] = df[["protein1", "protein2"]].map(lambda a: a.split(".")[-1])
+    df_expanded_sorted = df_expanded.sort_values(by="combined_score", ascending=False)
+    # Reduce to unique interactions to avoid counting duplicates
+    df_expanded_unique = df_expanded_sorted.drop_duplicates(
+        subset=["protein", "partner"]
+    )
+    top_interactions = df_expanded_unique.groupby("protein").head(top_neighbors)
+    df = top_interactions.rename(columns={"protein": "protein1", "partner": "protein2"})
+    df[["protein1", "protein2"]] = df[["protein1", "protein2"]].map(
+        lambda a: a.split(".")[-1]
+    )
     return df
+
 
 def read_stringdb_aliases(fname: str, node_name: str) -> dict[str, str]:
     if node_name == "gene_id":
@@ -1385,6 +1727,7 @@ def read_stringdb_graph(node_name, edges_data_path, nodes_data_path):
     graph_df[["protein1", "protein2"]] = graph_df[["protein1", "protein2"]].map(fn)
     return graph_df
 
+
 def stringdb_links_to_list(df):
     lst = df[["protein1", "protein2"]].to_numpy().tolist()
     return lst
@@ -1401,7 +1744,7 @@ def split_by_median(tensor_dict):
 
             # Convert to categorical, but preserve NaNs
             tensor_cat = (tensor > median_val).float()
-            tensor_cat[torch.isnan(tensor)] = float('nan')
+            tensor_cat[torch.isnan(tensor)] = float("nan")
             new_dict[key] = tensor_cat
         else:
             # If tensor is not numerical, leave it as it is

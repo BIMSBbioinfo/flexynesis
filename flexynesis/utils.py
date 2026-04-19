@@ -1,37 +1,31 @@
-from lightning import seed_everything
-import pandas as pd
-import numpy as np
-import torch
-import math
-import warnings
-import requests
-import tarfile
 import os
-from glob import glob
-import re
-import logging
-from tqdm import tqdm
+import tarfile
+import warnings
+from collections import deque
 
-from umap import UMAP
-import seaborn as sns
 import matplotlib.pyplot as plt
-import matplotlib
+import numpy as np
+import pandas as pd
+import requests
+import seaborn as sns
+import torch
+from scipy.stats import kruskal, linregress, mannwhitneyu, pearsonr
 from sklearn.decomposition import PCA
-from sklearn.metrics import balanced_accuracy_score, f1_score, cohen_kappa_score, classification_report, roc_auc_score, average_precision_score
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
-from sklearn.utils import resample
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.feature_selection import (SelectFromModel, mutual_info_classif,
+                                       mutual_info_regression)
+from sklearn.metrics import (adjusted_mutual_info_score, adjusted_rand_score,
+                             average_precision_score, balanced_accuracy_score,
+                             classification_report, cohen_kappa_score,
+                             f1_score, mean_squared_error,
+                             precision_recall_curve, roc_auc_score, roc_curve)
+from sklearn.model_selection import GridSearchCV, KFold
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import label_binarize
+from sklearn.svm import SVC, SVR
 from sksurv.metrics import cumulative_dynamic_auc
 from sksurv.util import Surv
-
-from scipy.stats import pearsonr, linregress
-
-
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.svm import SVC, SVR
-from sklearn.feature_selection import SelectFromModel
-from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
-from sklearn.model_selection import KFold, cross_val_score, GridSearchCV
+from umap import UMAP
 
 try:
     from xgboost import XGBClassifier, XGBRegressor
@@ -39,44 +33,27 @@ except Exception:
     XGBClassifier = None
     XGBRegressor = None
 
-from sksurv.ensemble import RandomSurvivalForest
-from sksurv.metrics import concordance_index_censored
-
-from lifelines import KaplanMeierFitter
-from lifelines.utils import concordance_index
-from lifelines import CoxPHFitter
+import community as community_louvain
+import networkx as nx
+import ot
+from lifelines import CoxPHFitter, KaplanMeierFitter
 from lifelines.statistics import logrank_test, multivariate_logrank_test
-
-from plotnine import (
-    ggplot, aes, geom_point, geom_smooth, geom_line, geom_abline, geom_step,
-    labs, ggtitle, annotate, theme_minimal, theme, element_text,
-    scale_color_manual, scale_color_gradient, scale_color_brewer,
-    geom_errorbarh, geom_text,
-    theme_bw, theme, element_blank, scale_y_discrete
-)
-
+from lifelines.utils import concordance_index
+from plotnine import (aes, annotate, element_text, geom_abline, geom_errorbarh,
+                      geom_line, geom_point, geom_smooth, geom_step, geom_text,
+                      ggplot, ggtitle, labs, scale_color_gradient,
+                      scale_color_manual, theme, theme_bw, theme_minimal)
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import euclidean_distances
-import networkx as nx
-import community as community_louvain
-
 from sklearn.preprocessing import StandardScaler
-import ot
+from sksurv.ensemble import RandomSurvivalForest
+from sksurv.metrics import concordance_index_censored
 
-
-# imports
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from plotnine import (
-    ggplot, aes, geom_point, geom_step, labs, ggtitle, annotate,
-    theme_minimal, theme, element_text, scale_color_manual, scale_color_gradient
-)
-from sklearn.decomposition import PCA
-from umap import UMAP
-from lifelines import KaplanMeierFitter
-from lifelines.statistics import logrank_test, multivariate_logrank_test
+try:
+    from geomloss import SamplesLoss
+except Exception:
+    SamplesLoss = None
 
 
 def _labels_to_1d(labels):
@@ -91,6 +68,7 @@ def _labels_to_1d(labels):
         arr = np.asarray(labels)
     return np.ravel(arr)
 
+
 def get_color_mapping(labels):
     """
     Map categorical labels to colors using ALPHABETICAL order (deterministic).
@@ -102,17 +80,17 @@ def get_color_mapping(labels):
     n = len(unique_labels)
 
     if n <= 10:
-        cmap = plt.get_cmap('tab10', n)
+        cmap = plt.get_cmap("tab10", n)
         colors = [cmap(i) for i in range(n)]
     elif n <= 20:
-        cmap = plt.get_cmap('tab20', n)
+        cmap = plt.get_cmap("tab20", n)
         colors = [cmap(i) for i in range(n)]
     else:
         # stack multiple palettes to cover many categories
         palettes = [
-            plt.get_cmap('tab20', 20),
-            plt.get_cmap('Dark2', 8),
-            plt.get_cmap('Accent', 8),
+            plt.get_cmap("tab20", 20),
+            plt.get_cmap("Dark2", 8),
+            plt.get_cmap("Accent", 8),
         ]
         colors = []
         for pal in palettes:
@@ -122,25 +100,33 @@ def get_color_mapping(labels):
             colors.extend(colors)
         colors = colors[:n]
 
-    to_hex = lambda c: '#%02x%02x%02x' % (int(c[0]*255), int(c[1]*255), int(c[2]*255))
+    def to_hex(c):
+        return "#%02x%02x%02x" % (
+            int(c[0] * 255),
+            int(c[1] * 255),
+            int(c[2] * 255),
+        )
+
     color_hex = [to_hex(c) for c in colors]
     return dict(zip(unique_labels, color_hex))
 
 
-def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', title=None):
+def plot_dim_reduced(
+    matrix, labels, method="pca", color_type="categorical", title=None
+):
     """
     Plot first two dims (PCA/UMAP). Uses alphabetical label ordering + shared palette.
     """
     method = method.lower()
 
-    if method == 'pca':
+    if method == "pca":
         transformer = PCA(n_components=2)
         transformed = transformer.fit_transform(matrix)
         var_exp = transformer.explained_variance_ratio_ * 100
         xlab = f"PC1 ({var_exp[0]:.1f}%)"
         ylab = f"PC2 ({var_exp[1]:.1f}%)"
-        xcol, ycol = 'PC1', 'PC2'
-    elif method == 'umap':
+        xcol, ycol = "PC1", "PC2"
+    elif method == "umap":
         transformer = UMAP(n_components=2)
         m = np.array(matrix, dtype=np.float32)
         try:
@@ -148,7 +134,7 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', tit
         except TypeError:
             transformed = transformer.fit_transform(m)
         xlab, ylab = "UMAP1", "UMAP2"
-        xcol, ycol = 'UMAP1', 'UMAP2'
+        xcol, ycol = "UMAP1", "UMAP2"
     else:
         raise ValueError("Invalid method. Expected 'pca' or 'umap'.")
 
@@ -162,20 +148,20 @@ def plot_dim_reduced(matrix, labels, method='pca', color_type='categorical', tit
 
     plot_title = title if title else f"{method.upper()} Scatter Plot"
 
-    if color_type == 'categorical':
+    if color_type == "categorical":
         p = (
-            ggplot(df, aes(x=xcol, y=ycol, color='Label'))
+            ggplot(df, aes(x=xcol, y=ycol, color="Label"))
             + geom_point()
             + scale_color_manual(values=color_mapping)
             + labs(title=plot_title, x=xlab, y=ylab, color="Labels")
             + theme_minimal()
         )
-    elif color_type == 'numerical':
+    elif color_type == "numerical":
         # numerical coloring ignores the categorical palette
         df_num = df.copy()
-        df_num["Label"] = pd.to_numeric(lbls, errors='coerce')
+        df_num["Label"] = pd.to_numeric(lbls, errors="coerce")
         p = (
-            ggplot(df_num, aes(x=xcol, y=ycol, color='Label'))
+            ggplot(df_num, aes(x=xcol, y=ycol, color="Label"))
             + geom_point()
             + scale_color_gradient(low="blue", high="red")
             + labs(title=plot_title, x=xlab, y=ylab, color="Label")
@@ -191,11 +177,15 @@ def plot_kaplan_meier_curves(durations, events, categorical_variable):
     """
     Kaplan–Meier curves with alphabetical label ordering + shared palette.
     """
-    data = pd.DataFrame({
-        'Duration': _labels_to_1d(durations),
-        'Event': _labels_to_1d(events),
-        'Group': pd.Series(_labels_to_1d(categorical_variable), dtype="object").astype(str)
-    })
+    data = pd.DataFrame(
+        {
+            "Duration": _labels_to_1d(durations),
+            "Event": _labels_to_1d(events),
+            "Group": pd.Series(
+                _labels_to_1d(categorical_variable), dtype="object"
+            ).astype(str),
+        }
+    )
 
     # shared palette + fixed legend order
     color_mapping = get_color_mapping(data["Group"])
@@ -205,49 +195,58 @@ def plot_kaplan_meier_curves(durations, events, categorical_variable):
     kmf = KaplanMeierFitter()
     survival_curves = []
     for g in order:  # iterate in the same alphabetical order
-        gd = data[data['Group'] == g]
+        gd = data[data["Group"] == g]
         if len(gd) == 0:
             continue
-        kmf.fit(gd['Duration'], gd['Event'], label=g)
+        kmf.fit(gd["Duration"], gd["Event"], label=g)
         surv_df = kmf.survival_function_.reset_index()
-        surv_df.columns = ['Time', 'Survival']
-        surv_df['Group'] = g
+        surv_df.columns = ["Time", "Survival"]
+        surv_df["Group"] = g
         survival_curves.append(surv_df)
 
     plot_data = pd.concat(survival_curves, ignore_index=True)
-    plot_data["Group"] = pd.Categorical(plot_data["Group"], categories=order, ordered=True)
+    plot_data["Group"] = pd.Categorical(
+        plot_data["Group"], categories=order, ordered=True
+    )
 
     # log-rank text
-    categories = pd.unique(data['Group'])
+    categories = pd.unique(data["Group"])
     if len(categories) == 2:
         g1, g2 = categories[0], categories[1]
-        grp1 = data[data['Group'] == g1]
-        grp2 = data[data['Group'] == g2]
-        result = logrank_test(grp1['Duration'], grp2['Duration'],
-                              event_observed_A=grp1['Event'],
-                              event_observed_B=grp2['Event'])
+        grp1 = data[data["Group"] == g1]
+        grp2 = data[data["Group"] == g2]
+        result = logrank_test(
+            grp1["Duration"],
+            grp2["Duration"],
+            event_observed_A=grp1["Event"],
+            event_observed_B=grp2["Event"],
+        )
         p_text = f"Log-rank p = {result.p_value:.2e}"
     elif len(categories) > 2:
-        result = multivariate_logrank_test(data['Duration'], data['Group'], data['Event'])
+        result = multivariate_logrank_test(
+            data["Duration"], data["Group"], data["Event"]
+        )
         p_text = f"Multivariate log-rank p = {result.p_value:.2e}"
     else:
         p_text = "Only one group — log-rank test not applicable"
 
     p = (
-        ggplot(plot_data, aes(x='Time', y='Survival', color='Group'))
+        ggplot(plot_data, aes(x="Time", y="Survival", color="Group"))
         + geom_step()
-        + labs(x='Time', y='Survival Probability', color='Group')
-        + ggtitle('Kaplan-Meier Survival Curves by Group')
-        + annotate("text", x=0.1, y=0.1, label=p_text, size=10, ha='left')
+        + labs(x="Time", y="Survival Probability", color="Group")
+        + ggtitle("Kaplan-Meier Survival Curves by Group")
+        + annotate("text", x=0.1, y=0.1, label=p_text, size=10, ha="left")
         + theme_minimal()
-        + theme(legend_title=element_text(size=10, weight='bold'))
+        + theme(legend_title=element_text(size=10, weight="bold"))
         + scale_color_manual(values=color_mapping)
     )
     return p
 
+
 def plot_scatter(true_values, predicted_values):
     """
-    Plots a scatterplot of true vs predicted values, with a regression line and annotated with the Pearson correlation coefficient.
+    Plots a scatterplot of true vs predicted values, with a regression line and
+    annotated with the Pearson correlation coefficient.
 
     Args:
         true_values (list or np.array): True values
@@ -267,28 +266,43 @@ def plot_scatter(true_values, predicted_values):
     corr_text = f"Pearson r: {corr:.2f}"
 
     # Create DataFrame
-    df = pd.DataFrame({"True Values": true_values, "Predicted Values": predicted_values})
+    df = pd.DataFrame(
+        {"True Values": true_values, "Predicted Values": predicted_values}
+    )
 
     # Generate scatter plot with regression line
     plot = (
-        ggplot(df, aes(x="True Values", y="Predicted Values")) +
-        geom_point(alpha=0.5) +
-        geom_smooth(method='lm', color='red') +
-        annotate("text", x=min(true_values), y=max(predicted_values), label=corr_text, ha='left', va='top', size=10) +
-        labs(
+        ggplot(df, aes(x="True Values", y="Predicted Values"))
+        + geom_point(alpha=0.5)
+        + geom_smooth(method="lm", color="red")
+        + annotate(
+            "text",
+            x=min(true_values),
+            y=max(predicted_values),
+            label=corr_text,
+            ha="left",
+            va="top",
+            size=10,
+        )
+        + labs(
             title="True vs Predicted Values",
             x="True Values",
-            y="Predicted Values"
-        ) +
-        theme_minimal()
+            y="Predicted Values",
+        )
+        + theme_minimal()
     )
 
     return plot
 
 
-from scipy.stats import mannwhitneyu, kruskal
-
-def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Values', figsize=(10, 6), jittersize = 4):
+def plot_boxplot(
+    categorical_x,
+    numerical_y,
+    title_x="Categories",
+    title_y="Values",
+    figsize=(10, 6),
+    jittersize=4,
+):
     df = pd.DataFrame({title_x: categorical_x, title_y: numerical_y})
 
     # Compute p-value
@@ -296,7 +310,7 @@ def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Valu
     if len(groups) == 2:
         group1 = df[df[title_x] == groups[0]][title_y]
         group2 = df[df[title_x] == groups[1]][title_y]
-        stat, p = mannwhitneyu(group1, group2, alternative='two-sided')
+        stat, p = mannwhitneyu(group1, group2, alternative="two-sided")
         test_name = "Mann-Whitney U"
     else:
         group_data = [df[df[title_x] == group][title_y] for group in groups]
@@ -305,8 +319,25 @@ def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Valu
 
     # Create a boxplot with jittered points
     plt.figure(figsize=figsize)
-    sns.boxplot(x=title_x, y=title_y,  hue=title_x, data=df, palette='Set2', legend=False, fill= False)
-    sns.stripplot(x=title_x, y=title_y, data=df, color='black', size=jittersize, jitter=True, dodge=True, alpha=0.4)
+    sns.boxplot(
+        x=title_x,
+        y=title_y,
+        hue=title_x,
+        data=df,
+        palette="Set2",
+        legend=False,
+        fill=False,
+    )
+    sns.stripplot(
+        x=title_x,
+        y=title_y,
+        data=df,
+        color="black",
+        size=jittersize,
+        jitter=True,
+        dodge=True,
+        alpha=0.4,
+    )
 
     # Labels and p-value annotation
     plt.xlabel(title_x)
@@ -314,20 +345,22 @@ def plot_boxplot(categorical_x, numerical_y, title_x='Categories', title_y='Valu
     plt.text(
         x=-0.4,
         y=plt.ylim()[1],
-        s=f'{test_name} p = {p:.3e}',
-        verticalalignment='top',
-        horizontalalignment='left',
+        s=f"{test_name} p = {p:.3e}",
+        verticalalignment="top",
+        horizontalalignment="left",
         fontsize=12,
-        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', edgecolor='gray')
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="gray"),
     )
 
     plt.tight_layout()
     return plt.gcf()
 
+
 # given a vector of numerical values which may contain
 # NAN values, return a binary grouping based on median values
 def split_by_median(v):
     return ((v - torch.nanmedian(v)) > 0).float()
+
 
 def evaluate_survival(outputs, durations, events):
     """
@@ -358,14 +391,16 @@ def evaluate_survival(outputs, durations, events):
 
     # Compute concordance index (lifelines expects higher risk → lower survival)
     c_index = concordance_index(durations, -outputs, events)
-    return {'cindex': c_index}
+    return {"cindex": c_index}
+
 
 def generate_bootstrap_indices(n, n_bootstraps=1000, seed=42):
     rng = np.random.default_rng(seed)
     return [rng.choice(n, size=n, replace=True) for _ in range(n_bootstraps)]
 
+
 # bootstrapping function for regression/classification tasks
-def bootstrap_metric(y_true, y_pred, indices_list, metric_fn, ci = 95, **kwargs):
+def bootstrap_metric(y_true, y_pred, indices_list, metric_fn, ci=95, **kwargs):
     scores = []
     y_true = np.array(y_true)
     y_pred = np.array(y_pred)
@@ -377,12 +412,15 @@ def bootstrap_metric(y_true, y_pred, indices_list, metric_fn, ci = 95, **kwargs)
     upper = np.percentile(scores, 100 - (100 - ci) / 2)
     return scores, (np.mean(scores), lower, upper)
 
+
 def evaluate_classifier(y_true, y_probs, print_report=False):
     """
-    Evaluate the performance of a classifier using multiple metrics and optionally print a detailed classification report.
+    Evaluate the performance of a classifier using multiple metrics and optionally
+    print a detailed classification report.
 
-    This function computes balanced accuracy, F1 score (weighted), Cohen's Kappa score, average AUROC score, and
-    weighted-average AUC-PR score for the given true labels and predicted probabilities.
+    This function computes balanced accuracy, F1 score (weighted), Cohen's Kappa
+    score, average AUROC score, and weighted-average AUC-PR score for the given
+    true labels and predicted probabilities.
     If `print_report` is set to True, it prints a detailed classification report.
 
     Args:
@@ -405,7 +443,7 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     balanced_acc = balanced_accuracy_score(y_true, y_pred)
 
     # F1 score (weighted)
-    f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
+    f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
 
     # Cohen's Kappa
     kappa = cohen_kappa_score(y_true, y_pred)
@@ -415,10 +453,16 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
         if y_probs.shape[1] == 2:  # Binary classification
             y_probs_binary = y_probs[:, 1]  # Use positive class probabilities
             average_auroc = roc_auc_score(y_true, y_probs_binary)
-            average_aupr = average_precision_score(y_true, y_probs_binary)  # AUC-PR for binary case
+            average_aupr = average_precision_score(
+                y_true, y_probs_binary
+            )  # AUC-PR for binary case
         else:  # Multiclass classification
-            average_auroc = roc_auc_score(y_true, y_probs, multi_class='ovr', average='weighted')
-            average_aupr = average_precision_score(y_true, y_probs, average='weighted')  # Weighted AUC-PR for multiclass
+            average_auroc = roc_auc_score(
+                y_true, y_probs, multi_class="ovr", average="weighted"
+            )
+            average_aupr = average_precision_score(
+                y_true, y_probs, average="weighted"
+            )  # Weighted AUC-PR for multiclass
     except ValueError:
         average_auroc = None  # Handle cases where AUROC cannot be computed
         average_aupr = None  # Handle cases where AUC-PR cannot be computed
@@ -434,12 +478,9 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
         "f1_score": f1,
         "kappa": kappa,
         "average_auroc": average_auroc,
-        "average_aupr": average_aupr  # Added AUC-PR
+        "average_aupr": average_aupr,  # Added AUC-PR
     }
 
-from sklearn.metrics import roc_curve, roc_auc_score
-from sklearn.preprocessing import label_binarize
-from sklearn.metrics import precision_recall_curve, average_precision_score
 
 def plot_roc_curves(y_true, y_probs):
     """
@@ -457,7 +498,15 @@ def plot_roc_curves(y_true, y_probs):
         # Binary classification
         fpr, tpr, _ = roc_curve(y_true, y_probs[:, 1])
         auc_score = roc_auc_score(y_true, y_probs[:, 1])
-        plot_data.append(pd.DataFrame({'fpr': fpr, 'tpr': tpr, 'label': [f'Class 1 (AUC = {auc_score:.2f})'] * len(fpr)}))
+        plot_data.append(
+            pd.DataFrame(
+                {
+                    "fpr": fpr,
+                    "tpr": tpr,
+                    "label": [f"Class 1 (AUC = {auc_score:.2f})"] * len(fpr),
+                }
+            )
+        )
     else:
         # Multiclass classification
         classes = np.arange(n_classes)
@@ -466,11 +515,13 @@ def plot_roc_curves(y_true, y_probs):
         for i in classes:
             fpr, tpr, _ = roc_curve(y_true_bin[:, i], y_probs[:, i])
             auc_score = roc_auc_score(y_true_bin[:, i], y_probs[:, i])
-            df = pd.DataFrame({
-                'fpr': fpr,
-                'tpr': tpr,
-                'label': [f'Class {i} (AUC = {auc_score:.2f})'] * len(fpr)
-            })
+            df = pd.DataFrame(
+                {
+                    "fpr": fpr,
+                    "tpr": tpr,
+                    "label": [f"Class {i} (AUC = {auc_score:.2f})"] * len(fpr),
+                }
+            )
             plot_data.append(df)
 
     # Combine all data
@@ -478,18 +529,15 @@ def plot_roc_curves(y_true, y_probs):
 
     # Plot using plotnine
     roc_plot = (
-        ggplot(all_data, aes(x='fpr', y='tpr', color='label')) +
-        geom_line(size=1.2) +
-        geom_abline(intercept=0, slope=1, linetype='dashed', color='gray') +
-        labs(
-            title='ROC Curve',
-            x='False Positive Rate',
-            y='True Positive Rate'
-        ) +
-        theme_minimal()
+        ggplot(all_data, aes(x="fpr", y="tpr", color="label"))
+        + geom_line(size=1.2)
+        + geom_abline(intercept=0, slope=1, linetype="dashed", color="gray")
+        + labs(title="ROC Curve", x="False Positive Rate", y="True Positive Rate")
+        + theme_minimal()
     )
 
     return roc_plot
+
 
 def plot_pr_curves(y_true, y_probs):
     """
@@ -507,24 +555,32 @@ def plot_pr_curves(y_true, y_probs):
         # Binary classification
         precision, recall, _ = precision_recall_curve(y_true, y_probs[:, 1])
         aupr = average_precision_score(y_true, y_probs[:, 1])
-        plot_data.append(pd.DataFrame({
-            'recall': recall,
-            'precision': precision,
-            'label': [f'Class 1 (AUPR = {aupr:.2f})'] * len(recall)
-        }))
+        plot_data.append(
+            pd.DataFrame(
+                {
+                    "recall": recall,
+                    "precision": precision,
+                    "label": [f"Class 1 (AUPR = {aupr:.2f})"] * len(recall),
+                }
+            )
+        )
     else:
         # Multiclass classification (one-vs-rest)
         classes = np.arange(n_classes)
         y_true_bin = label_binarize(y_true, classes=classes)
 
         for i in classes:
-            precision, recall, _ = precision_recall_curve(y_true_bin[:, i], y_probs[:, i])
+            precision, recall, _ = precision_recall_curve(
+                y_true_bin[:, i], y_probs[:, i]
+            )
             aupr = average_precision_score(y_true_bin[:, i], y_probs[:, i])
-            df = pd.DataFrame({
-                'recall': recall,
-                'precision': precision,
-                'label': [f'Class {i} (AUPR = {aupr:.2f})'] * len(recall)
-            })
+            df = pd.DataFrame(
+                {
+                    "recall": recall,
+                    "precision": precision,
+                    "label": [f"Class {i} (AUPR = {aupr:.2f})"] * len(recall),
+                }
+            )
             plot_data.append(df)
 
     # Combine all data
@@ -532,14 +588,10 @@ def plot_pr_curves(y_true, y_probs):
 
     # Plot using plotnine
     pr_plot = (
-        ggplot(all_data, aes(x='recall', y='precision', color='label')) +
-        geom_line(size=1.2) +
-        labs(
-            title='Precision-Recall Curve',
-            x='Recall',
-            y='Precision'
-        ) +
-        theme_minimal()
+        ggplot(all_data, aes(x="recall", y="precision", color="label"))
+        + geom_line(size=1.2)
+        + labs(title="Precision-Recall Curve", x="Recall", y="Precision")
+        + theme_minimal()
     )
 
     return pr_plot
@@ -547,71 +599,94 @@ def plot_pr_curves(y_true, y_probs):
 
 def evaluate_regressor(y_true, y_pred):
     """
-    Evaluate the performance of a regression model using mean squared error, R-squared, and Pearson correlation coefficient.
+    Evaluate the performance of a regression model using mean squared error,
+    R-squared, and Pearson correlation coefficient.
 
-    This function computes the mean squared error (MSE) between true and predicted values as a measure of prediction accuracy.
-    It also performs a linear regression analysis between the true and predicted values to obtain the R-squared value, which
-    explains the variance ratio, and the Pearson correlation coefficient, providing insight into the linear relationship strength.
+    This function computes the mean squared error (MSE) between true and predicted
+    values as a measure of prediction accuracy. It also performs a linear regression
+    analysis between the true and predicted values to obtain the R-squared value,
+    which explains the variance ratio, and the Pearson correlation coefficient,
+    providing insight into the linear relationship strength.
 
     Args:
-        y_true (array-like): True values of the dependent variable, must be a 1D list or array.
-        y_pred (array-like): Predicted values as returned by a regressor, must match the dimensions of y_true.
+        y_true (array-like): True values of the dependent variable, must be a 1D
+            list or array.
+        y_pred (array-like): Predicted values as returned by a regressor, must
+            match the dimensions of y_true.
 
     Returns:
         dict: A dictionary containing:
               - 'mse': The mean squared error between the true and predicted values.
-              - 'r2': The R-squared value indicating the proportion of variance in the dependent variable predictable from the independent variable.
-              - 'pearson_corr': The Pearson correlation coefficient indicating the linear relationship strength between the true and predicted values.
+              - 'r2': The R-squared value indicating the proportion of variance in
+                the dependent variable predictable from the independent variable.
+              - 'pearson_corr': The Pearson correlation coefficient indicating the
+                linear relationship strength between the true and predicted values.
     """
     mse = mean_squared_error(y_true, y_pred)
-    slope, intercept, r_value, p_value, std_err = linregress(y_true,y_pred)
+    slope, intercept, r_value, p_value, std_err = linregress(y_true, y_pred)
     r2 = r_value**2
     return {"mse": mse, "r2": r2, "pearson_corr": r_value}
 
-def evaluate_wrapper(method, y_pred_dict, dataset, surv_event_var = None, surv_time_var = None):
-    """
-    Evaluates predictions for different variables within a dataset using appropriate metrics based on the variable type.
-    Supports evaluation for numerical, categorical, and survival data.
 
-    This function loops through each variable in the predictions dictionary, determines the type of the variable,
-    and evaluates the predictions using the appropriate method: regression, classification, or survival analysis.
-    It compiles the metrics into a list of dictionaries, which is then converted into a pandas DataFrame.
+def evaluate_wrapper(
+    method, y_pred_dict, dataset, surv_event_var=None, surv_time_var=None
+):
+    """
+    Evaluates predictions for different variables within a dataset using
+    appropriate metrics based on the variable type. Supports evaluation for
+    numerical, categorical, and survival data.
+
+    This function loops through each variable in the predictions dictionary,
+    determines the type of the variable, and evaluates the predictions using the
+    appropriate method: regression, classification, or survival analysis. It
+    compiles the metrics into a list of dictionaries, which is then converted into
+    a pandas DataFrame.
 
     Args:
         method (str): Identifier for the prediction method or model used.
-        y_pred_dict (dict): A dictionary where keys are variable names and values are arrays of predicted values.
-        dataset (Dataset): A dataset object containing actual values and metadata such as variable types.
-        surv_event_var (str, optional): The name of the survival event variable. Required if survival analysis is performed.
-        surv_time_var (str, optional): The name of the survival time variable. Required if survival analysis is performed.
+        y_pred_dict (dict): A dictionary where keys are variable names and values
+            are arrays of predicted values.
+        dataset (Dataset): A dataset object containing actual values and metadata
+            such as variable types.
+        surv_event_var (str, optional): The name of the survival event variable.
+            Required if survival analysis is performed.
+        surv_time_var (str, optional): The name of the survival time variable.
+            Required if survival analysis is performed.
 
     Returns:
-        pd.DataFrame: A DataFrame where each row contains the method, variable name, variable type, metric name, and metric value.
+        pd.DataFrame: A DataFrame where each row contains the method, variable
+            name, variable type, metric name, and metric value.
 
     """
     metrics_list = []
     for var in y_pred_dict.keys():
-        if dataset.variable_types[var] == 'numerical':
+        if dataset.variable_types[var] == "numerical":
             if var == surv_event_var:
                 events = dataset.ann[surv_event_var]
                 durations = dataset.ann[surv_time_var]
                 metrics = evaluate_survival(y_pred_dict[var], durations, events)
             else:
                 ind = ~torch.isnan(dataset.ann[var])
-                metrics = evaluate_regressor(dataset.ann[var][ind], y_pred_dict[var][ind].flatten())
+                metrics = evaluate_regressor(
+                    dataset.ann[var][ind], y_pred_dict[var][ind].flatten()
+                )
         else:
             ind = ~torch.isnan(dataset.ann[var])
             metrics = evaluate_classifier(dataset.ann[var][ind], y_pred_dict[var][ind])
 
         for metric, value in metrics.items():
-            metrics_list.append({
-                'method': method,
-                'var': var,
-                'variable_type': dataset.variable_types[var],
-                'metric': metric,
-                'value': value
-            })
+            metrics_list.append(
+                {
+                    "method": method,
+                    "var": var,
+                    "variable_type": dataset.variable_types[var],
+                    "metric": metric,
+                    "value": value,
+                }
+            )
     # Convert the list of metrics to a DataFrame
     return pd.DataFrame(metrics_list)
+
 
 def get_predicted_labels(y_pred_dict, dataset, split, method_name):
     """
@@ -637,61 +712,90 @@ def get_predicted_labels(y_pred_dict, dataset, split, method_name):
     dfs = []
 
     for var in y_pred_dict.keys():
-        if dataset.variable_types[var] == 'categorical':
+        if dataset.variable_types[var] == "categorical":
             # Predicted probabilities
             probabilities = y_pred_dict[var]
 
             # Convert class indices to labels if mappings exist
             if var in dataset.label_mappings.keys():
-                class_labels = [dataset.label_mappings[var][idx] for idx in range(probabilities.shape[1])]
+                class_labels = [
+                    dataset.label_mappings[var][idx]
+                    for idx in range(probabilities.shape[1])
+                ]
             else:
-                class_labels = [f'class_{i}' for i in range(probabilities.shape[1])]
+                class_labels = [f"class_{i}" for i in range(probabilities.shape[1])]
 
             # Get true labels (y_true)
-            y_true = [dataset.label_mappings[var][int(x.item())] if var in dataset.label_mappings.keys() and not np.isnan(x.item()) else np.nan for x in dataset.ann[var]]
+            y_true = [
+                (
+                    dataset.label_mappings[var][int(x.item())]
+                    if var in dataset.label_mappings.keys() and not np.isnan(x.item())
+                    else np.nan
+                )
+                for x in dataset.ann[var]
+            ]
 
             # Predicted labels (argmax of probabilities)
             y_pred_indices = np.argmax(probabilities, axis=1)
-            y_pred = [dataset.label_mappings[var][idx] if var in dataset.label_mappings.keys() else idx for idx in y_pred_indices]
+            y_pred = [
+                (
+                    dataset.label_mappings[var][idx]
+                    if var in dataset.label_mappings.keys()
+                    else idx
+                )
+                for idx in y_pred_indices
+            ]
 
             # Create a DataFrame for each sample and its probabilities
             for i, sample_id in enumerate(dataset.samples):
                 for j, class_label in enumerate(class_labels):
-                    dfs.append({
-                        'sample_id': sample_id,
-                        'variable': var,
-                        'class_label': class_label,
-                        'probability': probabilities[i, j],
-                        'known_label': y_true[i],
-                        'predicted_label': y_pred[i],
-                        'split': split,
-                        'method': method_name
-                    })
+                    dfs.append(
+                        {
+                            "sample_id": sample_id,
+                            "variable": var,
+                            "class_label": class_label,
+                            "probability": probabilities[i, j],
+                            "known_label": y_true[i],
+                            "predicted_label": y_pred[i],
+                            "split": split,
+                            "method": method_name,
+                        }
+                    )
         else:
             # For numerical variables, set class_label and probability to NA
             y_true = [x.item() for x in dataset.ann[var]]
             y_pred = [x.item() for x in y_pred_dict[var]]
             for i, sample_id in enumerate(dataset.samples):
-                dfs.append({
-                    'sample_id': sample_id,
-                    'variable': var,
-                    'class_label': np.nan,
-                    'probability': np.nan,
-                    'known_label': y_true[i],
-                    'predicted_label': y_pred[i],
-                    'split': split,
-                    'method': method_name
-                })
+                dfs.append(
+                    {
+                        "sample_id": sample_id,
+                        "variable": var,
+                        "class_label": np.nan,
+                        "probability": np.nan,
+                        "known_label": y_true[i],
+                        "predicted_label": y_pred[i],
+                        "split": split,
+                        "method": method_name,
+                    }
+                )
 
     # Combine all rows into a DataFrame
     return pd.DataFrame(dfs)
 
 
-
-
-def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, methods, n_folds=5, n_jobs=4, use_pca=False, n_components=100):
+def evaluate_baseline_performance(
+    train_dataset,
+    test_dataset,
+    variable_name,
+    methods,
+    n_folds=5,
+    n_jobs=4,
+    use_pca=False,
+    n_components=100,
+):
     """
-    Evaluates the performance of machine learning models on a given variable with optional PCA for dimensionality reduction.
+    Evaluates the performance of machine learning models on a given variable with
+    optional PCA for dimensionality reduction.
 
     Args:
         train_dataset (Dataset): A MultiOmicDataset object containing training data and metadata.
@@ -706,6 +810,7 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
     Returns:
         pd.DataFrame: A DataFrame containing metrics for each method.
     """
+
     def prepare_data(data_object, pca_model=None, fit_pca=False):
         # Concatenate Data Matrices
         X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=1)
@@ -733,41 +838,63 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
 
     # Cross-Validation and Training
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
-    X_train, y_train, train_indices = prepare_data(train_dataset, pca_model=pca_model, fit_pca=True)
+    X_train, y_train, train_indices = prepare_data(
+        train_dataset, pca_model=pca_model, fit_pca=True
+    )
     print("Train:", X_train.shape)
-    X_test, y_test, test_indices = prepare_data(test_dataset, pca_model=pca_model, fit_pca=False)
+    X_test, y_test, test_indices = prepare_data(
+        test_dataset, pca_model=pca_model, fit_pca=False
+    )
     print("Test:", X_test.shape)
 
     metrics_list = []
     predictions = []  # Collect all predictions
 
     for method in methods:
-        if variable_type == 'categorical':
-            if method == 'RandomForest':
+        if variable_type == "categorical":
+            if method == "RandomForest":
                 model = RandomForestClassifier(random_state=42)
-                params = {'n_estimators': [100, 200, 300], 'max_depth': [10, 20, None]}
-            elif method == 'SVM':
+                params = {
+                    "n_estimators": [100, 200, 300],
+                    "max_depth": [10, 20, None],
+                }
+            elif method == "SVM":
                 model = SVC(probability=True, random_state=42)
-                params = {'C': [0.1, 1, 10], 'kernel': ['rbf', 'poly']}
-            elif method == 'XGBoost':
+                params = {"C": [0.1, 1, 10], "kernel": ["rbf", "poly"]}
+            elif method == "XGBoost":
                 if XGBClassifier is None:
-                    print("[WARNING] XGBoost is not available (on macOS, run: brew install libomp). Skipping.")
+                    print(
+                        "[WARNING] XGBoost is not available (on macOS, run: brew install libomp). Skipping."
+                    )
                     continue
-                model = XGBClassifier(eval_metric='logloss', random_state=42)
-                params = {'n_estimators': [100, 200, 300], 'max_depth': [3, 6, 9], 'learning_rate': [0.01, 0.1, 0.2]}
-        elif variable_type == 'numerical':
-            if method == 'RandomForest':
+                model = XGBClassifier(eval_metric="logloss", random_state=42)
+                params = {
+                    "n_estimators": [100, 200, 300],
+                    "max_depth": [3, 6, 9],
+                    "learning_rate": [0.01, 0.1, 0.2],
+                }
+        elif variable_type == "numerical":
+            if method == "RandomForest":
                 model = RandomForestRegressor(random_state=42)
-                params = {'n_estimators': [100, 200, 300], 'max_depth': [10, 20, None]}
-            elif method == 'SVM':
+                params = {
+                    "n_estimators": [100, 200, 300],
+                    "max_depth": [10, 20, None],
+                }
+            elif method == "SVM":
                 model = SVR()
-                params = {'C': [0.1, 1, 10], 'kernel': ['rbf', 'poly']}
-            elif method == 'XGBoost':
+                params = {"C": [0.1, 1, 10], "kernel": ["rbf", "poly"]}
+            elif method == "XGBoost":
                 if XGBRegressor is None:
-                    print("[WARNING] XGBoost is not available (on macOS, run: brew install libomp). Skipping.")
+                    print(
+                        "[WARNING] XGBoost is not available (on macOS, run: brew install libomp). Skipping."
+                    )
                     continue
                 model = XGBRegressor(random_state=42)
-                params = {'n_estimators': [100, 200, 300], 'max_depth': [3, 6, 9], 'learning_rate': [0.01, 0.1, 0.2]}
+                params = {
+                    "n_estimators": [100, 200, 300],
+                    "max_depth": [3, 6, 9],
+                    "learning_rate": [0.01, 0.1, 0.2],
+                }
 
         print("Training method:", method)
         grid_search = GridSearchCV(model, params, cv=kf, n_jobs=n_jobs)
@@ -775,56 +902,69 @@ def evaluate_baseline_performance(train_dataset, test_dataset, variable_name, me
         best_model = grid_search.best_estimator_
 
         # Predict on test data
-        if variable_type == 'categorical':
+        if variable_type == "categorical":
             y_probs = best_model.predict_proba(X_test)
             metrics = evaluate_classifier(y_test, y_probs, print_report=True)
             y_pred_dict = {variable_name: y_probs}
-        elif variable_type == 'numerical':
+        elif variable_type == "numerical":
             y_pred = best_model.predict(X_test)
             metrics = evaluate_regressor(y_test, y_pred)
             y_pred_dict = {variable_name: y_pred}
 
         # need to get test indices to only consider samples with labels
-        df_preds = get_predicted_labels(y_pred_dict, test_dataset.subset(test_indices), 'test', method)
+        df_preds = get_predicted_labels(
+            y_pred_dict, test_dataset.subset(test_indices), "test", method
+        )
         predictions.append(df_preds)
 
         for metric, value in metrics.items():
-            metrics_list.append({
-                'method': method + ('Classifier' if variable_type == 'categorical' else 'Regressor'),
-                'var': variable_name,
-                'variable_type': variable_type,
-                'metric': metric,
-                'value': value
-            })
+            metrics_list.append(
+                {
+                    "method": method
+                    + ("Classifier" if variable_type == "categorical" else "Regressor"),
+                    "var": variable_name,
+                    "variable_type": variable_type,
+                    "metric": metric,
+                    "value": value,
+                }
+            )
 
     predictions = pd.concat(predictions, ignore_index=True)
 
     return pd.DataFrame(metrics_list), predictions
 
 
-
-def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration_col, event_col, n_folds=5, n_jobs=4):
+def evaluate_baseline_survival_performance(
+    train_dataset, test_dataset, duration_col, event_col, n_folds=5, n_jobs=4
+):
     """
-    Evaluates the baseline performance of a Random Survival Forest model on survival data using the Concordance Index.
+    Evaluates the baseline performance of a Random Survival Forest model on
+    survival data using the Concordance Index.
 
-    The function preprocesses both training and testing datasets to prepare appropriate survival data (comprising durations
-    and event occurrences), performs cross-validation to assess model robustness, and then calculates the Concordance Index on
-    the test data. It uses a Random Survival Forest (RSF) as the predictive model.
+    The function preprocesses both training and testing datasets to prepare
+    appropriate survival data (comprising durations and event occurrences), performs
+    cross-validation to assess model robustness, and then calculates the Concordance
+    Index on the test data. It uses a Random Survival Forest (RSF) as the
+    predictive model.
 
     Args:
         train_dataset (Dataset): The training dataset (a MultiOmicDataset object) containing features and survival data.
         test_dataset (Dataset): The testing dataset  (a MultiOmicDataset object) containing features and survival data.
         duration_col (str): Column name in the dataset for survival time.
         event_col (str): Column name in the dataset for the event occurrence (1 if event occurred, 0 otherwise).
-        n_folds (int, optional): Number of folds for K-fold cross-validation. Defaults to 5.
-        n_jobs (int, optional): Number of parallel jobs to run for Random Survival Forest training. Defaults to 4.
+        n_folds (int, optional): Number of folds for K-fold cross-validation.
+            Defaults to 5.
+        n_jobs (int, optional): Number of parallel jobs to run for Random Survival
+            Forest training. Defaults to 4.
 
     Returns:
-        pd.DataFrame: A DataFrame containing the performance metrics of the RSF model, specifically the Concordance Index,
-                      listed along with the method name and variable details.
+        pd.DataFrame: A DataFrame containing the performance metrics of the RSF
+            model, specifically the Concordance Index, listed along with the method
+            name and variable details.
 
     """
-    print(f"[INFO] Evaluating baseline survival prediction performance")
+    print("[INFO] Evaluating baseline survival prediction performance")
+
     def prepare_data(data_object, duration_col, event_col):
         # Concatenate Data Matrices
         X = np.concatenate([tensor for tensor in data_object.dat.values()], axis=1)
@@ -832,8 +972,10 @@ def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration
         # Prepare Survival Data (Durations and Events)
         durations = np.array(data_object.ann[duration_col])
         events = np.array(data_object.ann[event_col])
-        y = np.array([(event, duration) for event, duration in zip(events, durations)],
-                     dtype=[('Event', '?'), ('Time', '<f8')])
+        y = np.array(
+            [(event, duration) for event, duration in zip(events, durations)],
+            dtype=[("Event", "?"), ("Time", "<f8")],
+        )
 
         # Filter out samples without a valid survival data
         valid_indices = ~np.isnan(durations) & ~np.isnan(events)
@@ -842,12 +984,21 @@ def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration
         return X, y, np.where(valid_indices)[0]
 
     # Prepare train and test data
-    X_train, y_train, train_indices = prepare_data(train_dataset, duration_col, event_col)
+    X_train, y_train, train_indices = prepare_data(
+        train_dataset, duration_col, event_col
+    )
     X_test, y_test, test_indices = prepare_data(test_dataset, duration_col, event_col)
 
     # Initialize Random Survival Forest
-    rsf = RandomSurvivalForest(n_estimators=100, max_depth=5, min_samples_split=10,
-                               min_samples_leaf=15, max_features="sqrt", n_jobs=n_jobs, random_state=42)
+    rsf = RandomSurvivalForest(
+        n_estimators=100,
+        max_depth=5,
+        min_samples_split=10,
+        min_samples_leaf=15,
+        max_features="sqrt",
+        n_jobs=n_jobs,
+        random_state=42,
+    )
 
     # Cross-Validation to determine the best model
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
@@ -859,7 +1010,9 @@ def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration
 
         rsf.fit(X_fold_train, y_fold_train)
         prediction = rsf.predict(X_fold_test)
-        c_index = concordance_index_censored(y_fold_test['Event'], y_fold_test['Time'], prediction)
+        c_index = concordance_index_censored(
+            y_fold_test["Event"], y_fold_test["Time"], prediction
+        )
         c_index_scores.append(c_index[0])
 
     # Calculate average C-index across all folds
@@ -869,24 +1022,35 @@ def evaluate_baseline_survival_performance(train_dataset, test_dataset, duration
     # Retrain on full training data and evaluate on test data
     rsf.fit(X_train, y_train)
     test_prediction = rsf.predict(X_test)
-    test_c_index = concordance_index_censored(y_test['Event'], y_test['Time'], test_prediction)
+    test_c_index = concordance_index_censored(
+        y_test["Event"], y_test["Time"], test_prediction
+    )
     print(f"[INFO] C-index on test data: {test_c_index[0]}")
 
-
     # need to get test indices to only consider samples with labels
-    predicted_labels = get_predicted_labels({event_col: test_prediction}, test_dataset.subset(test_indices), 'test', 'RandomSurvivalForest')
+    predicted_labels = get_predicted_labels(
+        {event_col: test_prediction},
+        test_dataset.subset(test_indices),
+        "test",
+        "RandomSurvivalForest",
+    )
     # Reporting
-    metrics_list = [{
-        'method': 'RandomSurvivalForest',
-        'var': event_col,
-        'variable_type': 'numerical',
-        'metric': 'cindex',
-        'value': test_c_index[0]
-    }]
+    metrics_list = [
+        {
+            "method": "RandomSurvivalForest",
+            "var": event_col,
+            "variable_type": "numerical",
+            "metric": "cindex",
+            "value": test_c_index[0],
+        }
+    ]
 
     return pd.DataFrame(metrics_list), predicted_labels
 
-def remove_batch_associated_variables(data, variable_types, target_dict, batch_dict = None, mi_threshold=0.1):
+
+def remove_batch_associated_variables(
+    data, variable_types, target_dict, batch_dict=None, mi_threshold=0.1
+):
     """
     Filter the data matrix to keep only the columns that are predictive of the target variables
     and not predictive of the batch variables.
@@ -960,9 +1124,14 @@ def get_important_features(model, var, top=20):
     # Fetch the dataframe for the specified variable
     df_imp = model.feature_importances[var]
 
-    top_features = df_imp.groupby(['target_class']).apply(lambda x: x.nlargest(top, 'importance')).reset_index(drop=True)
+    top_features = (
+        df_imp.groupby(["target_class"])
+        .apply(lambda x: x.nlargest(top, "importance"))
+        .reset_index(drop=True)
+    )
 
     return top_features
+
 
 def subset_assays_by_features(dataset, features_dict):
     # Find indices of the features in the corresponding
@@ -984,6 +1153,7 @@ def subset_assays_by_features(dataset, features_dict):
     concatenated_df = pd.concat(df_list, axis=1)
     return concatenated_df
 
+
 # Accepts as input a MultiOmicDataset object and prints summary stats per variable
 def print_summary_stats(dataset):
     for var, tensor in dataset.ann.items():
@@ -995,20 +1165,24 @@ def print_summary_stats(dataset):
             print("Categorical Variable Summary:")
 
             for uv, cnt in zip(unique_vals, counts):
-                original_label = dataset.label_mappings.get(var, {}).get(uv, uv)  # Fall back to uv if mapping doesn't exist
+                original_label = dataset.label_mappings.get(var, {}).get(
+                    uv, uv
+                )  # Fall back to uv if mapping doesn't exist
                 print(f"  Label: {original_label}, Count: {cnt}")
 
         elif dataset.variable_types[var] == "numerical":
             # Handle Numerical Variable
             median_val = np.nanmedian(tensor)
             mean_val = np.nanmean(tensor)
-            print(f"Numerical Variable Summary: Median = {median_val}, Mean = {mean_val}")
+            print(
+                f"Numerical Variable Summary: Median = {median_val}, Mean = {mean_val}"
+            )
         print("------")
 
 
-
-
-def find_optimal_cutoff(expression, time, event, min_percent=0.1, max_percent=0.9, step=0.01):
+def find_optimal_cutoff(
+    expression, time, event, min_percent=0.1, max_percent=0.9, step=0.01
+):
     """
     Find the optimal cutoff in a continuous variable (e.g., gene expression)
     that best separates survival curves based on log-rank test.
@@ -1035,9 +1209,7 @@ def find_optimal_cutoff(expression, time, event, min_percent=0.1, max_percent=0.
         if group.nunique() < 2:
             continue
         results = logrank_test(
-            time[group], time[~group],
-            event[group], event[~group],
-            alpha=0.99
+            time[group], time[~group], event[group], event[~group], alpha=0.99
         )
         if results.p_value < best_p:
             best_p = results.p_value
@@ -1045,10 +1217,15 @@ def find_optimal_cutoff(expression, time, event, min_percent=0.1, max_percent=0.
 
     return best_cutoff, best_p
 
-from collections import deque
 
-def recursive_binary_split_minN(df, score='pred_risk', time='OS.time', event='OS',
-                                alpha=0.05, min_samples_per_group=25):
+def recursive_binary_split_minN(
+    df,
+    score="pred_risk",
+    time="OS.time",
+    event="OS",
+    alpha=0.05,
+    min_samples_per_group=25,
+):
     """
     Recursively split df by optimal cutoff from flexynesis.utils.find_optimal_cutoff.
     Stop splitting when pval >= alpha or resulting child would have < min_samples_per_group.
@@ -1080,7 +1257,7 @@ def recursive_binary_split_minN(df, score='pred_risk', time='OS.time', event='OS
             continue
 
         left = node[node[score] <= cutoff]
-        right = node[node[score] >  cutoff]
+        right = node[node[score] > cutoff]
 
         # if either resulting child is smaller than required, reject split
         if len(left) < min_samples_per_group or len(right) < min_samples_per_group:
@@ -1092,7 +1269,7 @@ def recursive_binary_split_minN(df, score='pred_risk', time='OS.time', event='OS
         queue.append(left)
         queue.append(right)
 
-    df['auto_group'] = df.index.map(groups)
+    df["auto_group"] = df.index.map(groups)
     return df
 
 
@@ -1106,55 +1283,63 @@ def plot_hazard_ratios(cox_model):
         cox_model = cox_model[0]
 
     # Extract summary
-    coef_summary = cox_model.summary[['coef', 'coef lower 95%', 'coef upper 95%', 'p']].copy()
-    coef_summary.columns = ['coef', 'coef_lower_95', 'coef_upper_95', 'p']
-    coef_summary['variable'] = coef_summary.index
+    coef_summary = cox_model.summary[
+        ["coef", "coef lower 95%", "coef upper 95%", "p"]
+    ].copy()
+    coef_summary.columns = ["coef", "coef_lower_95", "coef_upper_95", "p"]
+    coef_summary["variable"] = coef_summary.index
 
     # Sort by p-value
-    coef_summary_sorted = coef_summary.sort_values('p').reset_index(drop=True)
+    coef_summary_sorted = coef_summary.sort_values("p").reset_index(drop=True)
 
     # Add significance stars
     def significance(p):
         if p < 0.0001:
-            return '***'
+            return "***"
         elif p < 0.001:
-            return '**'
+            return "**"
         elif p < 0.05:
-            return '*'
+            return "*"
         elif p < 0.1:
-            return '.'
+            return "."
         else:
-            return ''
+            return ""
 
-    coef_summary_sorted['stars'] = coef_summary_sorted['p'].apply(significance)
+    coef_summary_sorted["stars"] = coef_summary_sorted["p"].apply(significance)
 
     # Reverse the order for top-to-bottom importance
-    coef_summary_sorted['variable'] = pd.Categorical(
-        coef_summary_sorted['variable'],
-        categories=coef_summary_sorted['variable'][::-1],
-        ordered=True
+    coef_summary_sorted["variable"] = pd.Categorical(
+        coef_summary_sorted["variable"],
+        categories=coef_summary_sorted["variable"][::-1],
+        ordered=True,
     )
     c_index = cox_model.concordance_index_
 
     # Plot
     p = (
-        ggplot(coef_summary_sorted, aes(x='coef', y='variable'))
+        ggplot(coef_summary_sorted, aes(x="coef", y="variable"))
         + geom_errorbarh(
-            aes(xmin='coef_lower_95', xmax='coef_upper_95'),
-            height=0.2, color='skyblue'
+            aes(xmin="coef_lower_95", xmax="coef_upper_95"),
+            height=0.2,
+            color="skyblue",
         )
-        + geom_point(color='skyblue', size=3)
-        + geom_text(aes(label='stars'), nudge_y=0.1, size=10)
-        + annotate('vline', xintercept=0, linetype='dashed', color='gray')
-        + labs(x='Log Hazard Ratio', y='', title=f'Log Hazard Ratios Sorted by P-Value with 95% CI\n Model C-index: {c_index:.2f}')
+        + geom_point(color="skyblue", size=3)
+        + geom_text(aes(label="stars"), nudge_y=0.1, size=10)
+        + annotate("vline", xintercept=0, linetype="dashed", color="gray")
+        + labs(
+            x="Log Hazard Ratio",
+            y="",
+            title=f"Log Hazard Ratios Sorted by P-Value with 95% CI\n Model C-index: {c_index:.2f}",
+        )
         + theme_bw()
         + theme(
             axis_text_y=element_text(size=10),
             axis_text_x=element_text(size=10),
-            plot_title=element_text(weight='bold'),
+            plot_title=element_text(weight="bold"),
         )
     )
     return p
+
 
 def build_cox_model(
     df: pd.DataFrame,
@@ -1162,9 +1347,9 @@ def build_cox_model(
     event_col: str,
     n_splits: int = 5,
     random_state: int = 42,
-    eval_time: float | None = None,     # single horizon, same units as duration_col
+    eval_time: float | None = None,  # single horizon, same units as duration_col
     low_variance_threshold: float = 0.01,
-    cox_penalizer = 0.05,
+    cox_penalizer=0.05,
     return_metrics: bool = True,
 ):
     """
@@ -1186,14 +1371,18 @@ def build_cox_model(
         for feature in df.drop(columns=[duration_col, event_col]).columns:
             v1 = df.loc[events, feature].var()
             v0 = df.loc[~events, feature].var()
-            if (v1 is not None and v1 < threshold) or (v0 is not None and v0 < threshold):
+            if (v1 is not None and v1 < threshold) or (
+                v0 is not None and v0 < threshold
+            ):
                 low_var.append(feature)
         df_f = df.drop(columns=low_var, errors="ignore")
         if low_var:
             print("Removed low variance features:", low_var)
         return df_f
 
-    df = remove_low_variance_survival_features(df, duration_col, event_col, low_variance_threshold)
+    df = remove_low_variance_survival_features(
+        df, duration_col, event_col, low_variance_threshold
+    )
     metrics = {
         "cv_cindex_mean": None,
         "cv_auc_mean": None,
@@ -1205,7 +1394,7 @@ def build_cox_model(
 
     for train_idx, test_idx in kf.split(df):
         train_df = df.iloc[train_idx]
-        test_df  = df.iloc[test_idx]
+        test_df = df.iloc[test_idx]
 
         model = CoxPHFitter(penalizer=cox_penalizer)
         model.fit(train_df, duration_col=duration_col, event_col=event_col)
@@ -1215,7 +1404,7 @@ def build_cox_model(
         ci = concordance_index(
             test_df[duration_col].values,
             -risk_scores,  # higher hazard => higher risk
-            test_df[event_col].astype(int).values
+            test_df[event_col].astype(int).values,
         )
         c_indices.append(ci)
 
@@ -1223,11 +1412,11 @@ def build_cox_model(
         if eval_time is not None:
             y_train = Surv.from_arrays(
                 event=train_df[event_col].astype(bool).values,
-                time=train_df[duration_col].values
+                time=train_df[duration_col].values,
             )
             y_test = Surv.from_arrays(
                 event=test_df[event_col].astype(bool).values,
-                time=test_df[duration_col].values
+                time=test_df[duration_col].values,
             )
 
             # Only evaluate if the horizon lies strictly inside this test fold's follow-up
@@ -1236,7 +1425,10 @@ def build_cox_model(
             eps = 1e-8
             if (test_min + eps) < float(eval_time) < (test_max - eps):
                 _, auc_val = cumulative_dynamic_auc(
-                    y_train, y_test, risk_scores, np.asarray([float(eval_time)])
+                    y_train,
+                    y_test,
+                    risk_scores,
+                    np.asarray([float(eval_time)]),
                 )
                 auc_val = float(np.atleast_1d(auc_val)[0])
                 auc_per_fold.append(auc_val)
@@ -1264,7 +1456,7 @@ def k_means_clustering(data, k):
     - kmeans: The fitted KMeans instance, which can be used to access cluster centers and other attributes.
     """
     # Initialize the KMeans model
-    kmeans = KMeans(n_clusters=k, n_init='auto', random_state=42)
+    kmeans = KMeans(n_clusters=k, n_init="auto", random_state=42)
 
     # Fit the model to the data
     kmeans.fit(data)
@@ -1273,6 +1465,7 @@ def k_means_clustering(data, k):
     cluster_labels = pd.Series(kmeans.labels_, index=data.index)
 
     return cluster_labels, kmeans
+
 
 def louvain_clustering(X, threshold=None, k=None):
     """
@@ -1293,11 +1486,11 @@ def louvain_clustering(X, threshold=None, k=None):
         for j in range(i + 1, distances.shape[0]):
             # If a threshold is defined, use it to create edges
             if threshold is not None and distances[i, j] < threshold:
-                G.add_edge(i, j, weight=1/distances[i, j])
+                G.add_edge(i, j, weight=1 / distances[i, j])
             # If k is defined, add an edge if j is one of i's k-nearest neighbors
             elif k is not None:
-                if np.argsort(distances[i])[:k + 1].__contains__(j):
-                    G.add_edge(i, j, weight=1/distances[i, j])
+                if np.argsort(distances[i])[: k + 1].__contains__(j):
+                    G.add_edge(i, j, weight=1 / distances[i, j])
     partition = community_louvain.best_partition(G)
 
     cluster_labels = np.full(len(X), np.nan, dtype=float)
@@ -1331,33 +1524,39 @@ def get_optimal_clusters(data, min_k=2, max_k=10):
     cluster_labels_dict = {}  # To store cluster labels for each k
 
     for k in range(min_k, max_k + 1):
-        kmeans = KMeans(n_clusters=k, n_init = 'auto', random_state=42)
+        kmeans = KMeans(n_clusters=k, n_init="auto", random_state=42)
         cluster_labels = kmeans.fit_predict(data)
         silhouette_avg = silhouette_score(data, cluster_labels)
         silhouette_scores.append((k, silhouette_avg))
         cluster_labels_dict[k] = cluster_labels  # Store cluster labels
-        #print(f"Number of clusters: {k}, Silhouette Score: {silhouette_avg:.4f}")
+        # print(f"Number of clusters: {k}, Silhouette Score: {silhouette_avg:.4f}")
 
     # Convert silhouette scores to DataFrame for easier handling and visualization
-    silhouette_scores_df = pd.DataFrame(silhouette_scores, columns=['k', 'silhouette_score'])
+    silhouette_scores_df = pd.DataFrame(
+        silhouette_scores, columns=["k", "silhouette_score"]
+    )
 
     # Find the optimal k (number of clusters) with the highest silhouette score
-    optimal_k = silhouette_scores_df.loc[silhouette_scores_df['silhouette_score'].idxmax()]['k']
+    optimal_k = silhouette_scores_df.loc[
+        silhouette_scores_df["silhouette_score"].idxmax()
+    ]["k"]
 
     # Retrieve the cluster labels for the optimal k
     optimal_cluster_labels = cluster_labels_dict[optimal_k]
 
     return optimal_cluster_labels, optimal_k, silhouette_scores_df
 
+
 # compute adjusted rand index; adjusted mutual information for two sets of paired labels
 def compute_ami_ari(labels1, labels2):
-    def convert_nan (labels):
-        return ['unavailable' if pd.isna(x) else x for x in labels]
+    def convert_nan(labels):
+        return ["unavailable" if pd.isna(x) else x for x in labels]
+
     labels1 = convert_nan(labels1)
     labels2 = convert_nan(labels2)
     ami = adjusted_mutual_info_score(labels1, labels2)
     ari = adjusted_rand_score(labels1, labels2)
-    return {'ami': ami, 'ari': ari}
+    return {"ami": ami, "ari": ari}
 
 
 def plot_label_concordance_heatmap(labels1, labels2, figsize=(12, 10)):
@@ -1369,18 +1568,23 @@ def plot_label_concordance_heatmap(labels1, labels2, figsize=(12, 10)):
     - labels2: The second set of labels.
     """
     # Compute the cross-tabulation
-    ct = pd.crosstab(pd.Series(labels1, name='Labels Set 1'), pd.Series(labels2, name='Labels Set 2'))
+    ct = pd.crosstab(
+        pd.Series(labels1, name="Labels Set 1"),
+        pd.Series(labels2, name="Labels Set 2"),
+    )
     # Normalize the cross-tabulation matrix column-wise
     ct_normalized = ct.div(ct.sum(axis=1), axis=0)
 
     # Plot the heatmap
-    plt.figure(figsize = figsize)
-    sns.heatmap(ct_normalized, annot=True,cmap='viridis', linewidths=.5)# col_cluster=False)
-    plt.title('Concordance between label groups')
+    plt.figure(figsize=figsize)
+    sns.heatmap(
+        ct_normalized, annot=True, cmap="viridis", linewidths=0.5
+    )  # col_cluster=False)
+    plt.title("Concordance between label groups")
     return plt.gcf()
 
-def scale_and_standardize_by_labels(data_matrix, labels):
 
+def scale_and_standardize_by_labels(data_matrix, labels):
     """
     Scale and standardize data_matrix by factor labels.
     Data is split by factors and each subset is scaled/standardized.
@@ -1417,14 +1621,21 @@ def scale_and_standardize_by_labels(data_matrix, labels):
 
     return scaled_data_matrix
 
+
 # df: annotation data frame ('clin.csv')
 # given a pandas data frame, go through each column and find out if the column is numeric or categorical
 def get_variable_types(df):
     # Select only the categorical columns
-    df_categorical = df.select_dtypes(include=['object', 'category'])
-    variable_types = {col: 'categorical' for col in df_categorical.columns}
-    variable_types.update({col: 'numerical' for col in df.select_dtypes(exclude=['object', 'category']).columns})
+    df_categorical = df.select_dtypes(include=["object", "category"])
+    variable_types = {col: "categorical" for col in df_categorical.columns}
+    variable_types.update(
+        {
+            col: "numerical"
+            for col in df.select_dtypes(exclude=["object", "category"]).columns
+        }
+    )
     return variable_types
+
 
 def create_covariate_matrix(covariates, variable_types, ann):
     """
@@ -1432,32 +1643,41 @@ def create_covariate_matrix(covariates, variable_types, ann):
     Missing values in numerical variables are imputed using the median.
 
     Args:
-        covariates (list of str): List of variable names that must exist in the "clin.csv".
-        variable_types (dict): Dictionary mapping variable names to their types ('categorical' or 'numerical').
+        covariates (list of str): List of variable names that must exist in the
+            "clin.csv".
+        variable_types (dict): Dictionary mapping variable names to their types
+            ('categorical' or 'numerical').
         ann (pd.DataFrame): Annotation DataFrame containing batch variable values.
 
     Returns:
-        pd.DataFrame: A covariate matrix DataFrame where categorical variables are one-hot-encoded as 0/1 and numerical variables are imputed,
-                      with features as rows and samples as columns.
+        pd.DataFrame: A covariate matrix DataFrame where categorical variables are
+            one-hot-encoded as 0/1 and numerical variables are imputed, with
+            features as rows and samples as columns.
     """
     covariate_features = []
     feature_names = []
 
     for var in covariates:
-        if variable_types.get(var) == 'categorical':
+        if variable_types.get(var) == "categorical":
             # One-hot-encode categorical variables with 0/1 encoding
             one_hot = pd.get_dummies(ann[var], prefix=var).astype(int)
             covariate_features.append(one_hot.T)  # Transpose to make features rows
             feature_names.extend(one_hot.columns.tolist())
-        elif variable_types.get(var) == 'numerical':
+        elif variable_types.get(var) == "numerical":
             # Handle numerical variables with missing values
             numerical_data = ann[[var]].copy()
             # Impute missing values using the median and assign back
-            numerical_data[var] = numerical_data[var].fillna(numerical_data[var].median())
-            covariate_features.append(numerical_data.T)  # Transpose to make features rows
+            numerical_data[var] = numerical_data[var].fillna(
+                numerical_data[var].median()
+            )
+            covariate_features.append(
+                numerical_data.T
+            )  # Transpose to make features rows
             feature_names.append(var)
         else:
-            raise ValueError(f"Unknown variable type for {var}: {variable_types.get(var)}")
+            raise ValueError(
+                f"Unknown variable type for {var}: {variable_types.get(var)}"
+            )
 
     # Concatenate all covariate features into a single DataFrame
     covariate_matrix = pd.concat(covariate_features, axis=0)
@@ -1468,23 +1688,31 @@ def create_covariate_matrix(covariates, variable_types, ann):
 
     return covariate_matrix
 
-def generate_synthetic_batches (n_samples_per_batch = 150,  n_features = 50):
+
+def generate_synthetic_batches(n_samples_per_batch=150, n_features=50):
     # Generate batch 1 data (mean centered at 0, standard deviation 1)
-    batch1_data = np.random.normal(loc=0.0, scale=1.0, size=(n_samples_per_batch, n_features))
+    batch1_data = np.random.normal(
+        loc=0.0, scale=1.0, size=(n_samples_per_batch, n_features)
+    )
 
     # Generate batch 2 data (mean shifted by +2, standard deviation 1.5)
-    batch2_data = np.random.normal(loc=2.0, scale=1.5, size=(n_samples_per_batch, n_features))
+    batch2_data = np.random.normal(
+        loc=2.0, scale=1.5, size=(n_samples_per_batch, n_features)
+    )
 
     # Combine into a single dataset
     combined_data = np.vstack([batch1_data, batch2_data])
-    batch_labels = np.array([0] * n_samples_per_batch + [1] * n_samples_per_batch)  # Batch labels
+    batch_labels = np.array(
+        [0] * n_samples_per_batch + [1] * n_samples_per_batch
+    )  # Batch labels
 
     # Convert to Pandas DataFrame
     feature_columns = [f"feature_{i+1}" for i in range(n_features)]
     synthetic_data = pd.DataFrame(combined_data, columns=feature_columns)
     return synthetic_data, batch_labels
 
-def optimal_transport_align(embeddings, batch_labels, standardize_by_labels = False):
+
+def optimal_transport_align(embeddings, batch_labels, standardize_by_labels=False):
     """
     Align embeddings from two batches using Optimal Transport, preserving the order of samples.
 
@@ -1493,8 +1721,10 @@ def optimal_transport_align(embeddings, batch_labels, standardize_by_labels = Fa
     - batch_labels (np.ndarray or pd.Series): Batch labels corresponding to the rows of embeddings.
 
     Returns:
-    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned embeddings for all samples, with original indices preserved.
-    - aligned_batch_labels (pd.Series): A Series containing the corresponding batch labels for the aligned embeddings.
+    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned
+        embeddings for all samples, with original indices preserved.
+    - aligned_batch_labels (pd.Series): A Series containing the corresponding
+        batch labels for the aligned embeddings.
     """
     # Ensure batch labels are a NumPy array
     batch_labels_np = np.array(batch_labels)
@@ -1512,7 +1742,7 @@ def optimal_transport_align(embeddings, batch_labels, standardize_by_labels = Fa
     batch2_embeddings = embeddings.iloc[batch2_indices].to_numpy()
 
     # Compute the cost matrix (e.g., Euclidean distances)
-    cost_matrix = ot.dist(batch1_embeddings, batch2_embeddings, metric='euclidean')
+    cost_matrix = ot.dist(batch1_embeddings, batch2_embeddings, metric="euclidean")
 
     # Solve the optimal transport problem
     n_samples_1 = batch1_embeddings.shape[0]
@@ -1534,19 +1764,32 @@ def optimal_transport_align(embeddings, batch_labels, standardize_by_labels = Fa
         scaler1 = StandardScaler()
         scaler2 = StandardScaler()
 
-        aligned_embeddings[batch1_indices] = scaler1.fit_transform(aligned_embeddings[batch1_indices])
-        aligned_embeddings[batch2_indices] = scaler2.fit_transform(aligned_embeddings[batch2_indices])
+        aligned_embeddings[batch1_indices] = scaler1.fit_transform(
+            aligned_embeddings[batch1_indices]
+        )
+        aligned_embeddings[batch2_indices] = scaler2.fit_transform(
+            aligned_embeddings[batch2_indices]
+        )
 
     # Convert back to pandas DataFrame and Series, preserving indices
-    aligned_embeddings_df = pd.DataFrame(aligned_embeddings, columns=embeddings.columns, index=embeddings.index)
-    aligned_batch_labels = pd.Series(batch_labels, index=embeddings.index, name="batch_labels")
+    aligned_embeddings_df = pd.DataFrame(
+        aligned_embeddings, columns=embeddings.columns, index=embeddings.index
+    )
+    aligned_batch_labels = pd.Series(
+        batch_labels, index=embeddings.index, name="batch_labels"
+    )
 
     return aligned_embeddings_df, aligned_batch_labels
 
 
-from sklearn.neighbors import NearestNeighbors
-
-def reciprocal_pca_mnn(embeddings, batch_labels, n_components=10, n_neighbors=5, standardize_by_labels=False, random_state=None):
+def reciprocal_pca_mnn(
+    embeddings,
+    batch_labels,
+    n_components=10,
+    n_neighbors=5,
+    standardize_by_labels=False,
+    random_state=None,
+):
     """
     Align embeddings from two batches using Reciprocal PCA (rPCA) and Mutual Nearest Neighbors (MNN).
 
@@ -1559,8 +1802,10 @@ def reciprocal_pca_mnn(embeddings, batch_labels, n_components=10, n_neighbors=5,
     - random_state (int, optional): Random seed for reproducibility.
 
     Returns:
-    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned embeddings for all samples, with original indices preserved.
-    - aligned_batch_labels (pd.Series): A Series containing the corresponding batch labels for the aligned embeddings.
+    - aligned_embeddings (pd.DataFrame): A DataFrame containing the aligned
+        embeddings for all samples, with original indices preserved.
+    - aligned_batch_labels (pd.Series): A Series containing the corresponding
+        batch labels for the aligned embeddings.
     """
     # Ensure batch labels are a NumPy array
     batch_labels_np = np.array(batch_labels)
@@ -1579,8 +1824,12 @@ def reciprocal_pca_mnn(embeddings, batch_labels, n_components=10, n_neighbors=5,
 
     # Standardize embeddings separately for each batch if required
     if standardize_by_labels:
-        batch1_embeddings = (batch1_embeddings - batch1_embeddings.mean(axis=0)) / batch1_embeddings.std(axis=0)
-        batch2_embeddings = (batch2_embeddings - batch2_embeddings.mean(axis=0)) / batch2_embeddings.std(axis=0)
+        batch1_embeddings = (
+            batch1_embeddings - batch1_embeddings.mean(axis=0)
+        ) / batch1_embeddings.std(axis=0)
+        batch2_embeddings = (
+            batch2_embeddings - batch2_embeddings.mean(axis=0)
+        ) / batch2_embeddings.std(axis=0)
 
     # Perform PCA on both batches
     pca1 = PCA(n_components=n_components, random_state=random_state)
@@ -1628,17 +1877,17 @@ def reciprocal_pca_mnn(embeddings, batch_labels, n_components=10, n_neighbors=5,
     aligned_embeddings[batch2_indices] = aligned_batch2
 
     # Convert back to pandas DataFrame and Series, preserving indices
-    aligned_embeddings_df = pd.DataFrame(aligned_embeddings,
-                                         columns=[f"rPCA_{i+1}" for i in range(n_components)],
-                                         index=embeddings.index)
-    aligned_batch_labels = pd.Series(batch_labels, index=embeddings.index, name="batch_labels")
+    aligned_embeddings_df = pd.DataFrame(
+        aligned_embeddings,
+        columns=[f"rPCA_{i+1}" for i in range(n_components)],
+        index=embeddings.index,
+    )
+    aligned_batch_labels = pd.Series(
+        batch_labels, index=embeddings.index, name="batch_labels"
+    )
 
     return aligned_embeddings_df, aligned_batch_labels
 
-
-import tarfile
-import requests
-from io import StringIO
 
 class CBioPortalData:
     def __init__(self, study_id, base_url="https://datahub.assets.cbioportal.org"):
@@ -1647,7 +1896,7 @@ class CBioPortalData:
         self.data_files = None
         self.data = None
 
-    def download_study_archive(self, force=False, timeout=60):
+    def download_study_archive(self, force=False, timeout=120):
         url = f"{self.base_url}/{self.study_id}.tar.gz"
         dest_file = f"{self.study_id}.tar.gz"
 
@@ -1673,7 +1922,9 @@ class CBioPortalData:
             with tarfile.open(archive_path, "r:gz") as tar:
                 tar.extractall()
 
-        self.data_files = [f for f in os.listdir(base) if f.startswith("data_") and f.endswith(".txt")]
+        self.data_files = [
+            f for f in os.listdir(base) if f.startswith("data_") and f.endswith(".txt")
+        ]
         return base
 
     def read_data(self, files=None):
@@ -1684,12 +1935,12 @@ class CBioPortalData:
         for datatype, file in files.items():
             print(f"Importing {file}...")
             file_path = os.path.join(self.study_id, file)
-            df = pd.read_csv(file_path, sep='\t', comment='#', low_memory=False)
+            df = pd.read_csv(file_path, sep="\t", comment="#", low_memory=False)
 
-            if 'mutations' in file:
+            if "mutations" in file:
                 print(f"Binarizing and converting {file} to matrix...")
                 df = self.binarize_mutations(df)
-            elif 'clinical' not in file and 'drug_treatment' not in file:
+            elif "clinical" not in file and "drug_treatment" not in file:
                 print(f"Converting {file} to matrix...")
                 df = self.process_data(df)
 
@@ -1697,12 +1948,12 @@ class CBioPortalData:
         return data
 
     def process_data(self, df):
-        if 'Hugo_Symbol' in df.columns and 'Entrez_Gene_Id' in df.columns:
-            df = df.drop(columns=['Entrez_Gene_Id'], errors='ignore')
+        if "Hugo_Symbol" in df.columns and "Entrez_Gene_Id" in df.columns:
+            df = df.drop(columns=["Entrez_Gene_Id"], errors="ignore")
 
-        if 'Hugo_Symbol' in df.columns:
-            df = df.drop_duplicates(subset=['Hugo_Symbol'])
-            df.set_index('Hugo_Symbol', inplace=True)
+        if "Hugo_Symbol" in df.columns:
+            df = df.drop_duplicates(subset=["Hugo_Symbol"])
+            df.set_index("Hugo_Symbol", inplace=True)
 
         return df
 
@@ -1711,10 +1962,18 @@ class CBioPortalData:
 
         for col in required_cols:
             if col not in df.columns:
-                raise ValueError(f"Can't map mutations to sample IDs. Column {col} not found.")
+                raise ValueError(
+                    f"Can't map mutations to sample IDs. Column {col} not found."
+                )
 
-        mutation_counts = df.groupby(["Hugo_Symbol", "Tumor_Sample_Barcode"]).size().reset_index(name='count')
-        mutation_matrix = mutation_counts.pivot(index='Hugo_Symbol', columns='Tumor_Sample_Barcode', values='count').fillna(0)
+        mutation_counts = (
+            df.groupby(["Hugo_Symbol", "Tumor_Sample_Barcode"])
+            .size()
+            .reset_index(name="count")
+        )
+        mutation_matrix = mutation_counts.pivot(
+            index="Hugo_Symbol", columns="Tumor_Sample_Barcode", values="count"
+        ).fillna(0)
         mutation_matrix[mutation_matrix > 0] = 1
 
         return mutation_matrix
@@ -1725,27 +1984,31 @@ class CBioPortalData:
 
     def get_cbioportal_data(self, study_id, files=None):
         archive_path = self.download_study_archive()
-        study_dir = self.extract_archive(archive_path)
+        self.extract_archive(archive_path)
 
         if files is None:
             self.print_data_files()
-            print("\n\nPlease select a list of files to import. Example:\n get_cbioportal_data('study_id', files={'mut': 'data_mutations.txt', 'clin': 'data_clinical_patient.txt'})")
+            print(
+                "\n\nPlease select a list of files to import. Example:\n "
+                "get_cbioportal_data('study_id', files={'mut': 'data_mutations.txt', "
+                "'clin': 'data_clinical_patient.txt'})"
+            )
             return
 
         data = self.read_data(files)
 
-        if 'clin' in files:
-            clin = data['clin']
+        if "clin" in files:
+            clin = data["clin"]
             clin = clin.drop_duplicates(subset=clin.columns[0])
             clin.set_index(clin.columns[0], inplace=True)
-            data['clin'] = clin
+            data["clin"] = clin
 
         print({x: data[x].shape for x in data.keys()})
         self.data = data
 
     def split_data(self, samples=None, ratio=0.7):
         if samples is None:
-            samples = self.data['clin'].index.tolist()
+            samples = self.data["clin"].index.tolist()
 
         train_samples = list(pd.Series(samples).sample(frac=ratio, random_state=42))
         test_samples = list(set(samples) - set(train_samples))
@@ -1754,10 +2017,18 @@ class CBioPortalData:
         test_data = {}
 
         for key, df in self.data.items():
-            train_data[key] = df.loc[df.index.intersection(train_samples)] if key == 'clin' else df.loc[:, df.columns.intersection(train_samples)]
-            test_data[key] = df.loc[df.index.intersection(test_samples)] if key == 'clin' else df.loc[:, df.columns.intersection(test_samples)]
+            train_data[key] = (
+                df.loc[df.index.intersection(train_samples)]
+                if key == "clin"
+                else df.loc[:, df.columns.intersection(train_samples)]
+            )
+            test_data[key] = (
+                df.loc[df.index.intersection(test_samples)]
+                if key == "clin"
+                else df.loc[:, df.columns.intersection(test_samples)]
+            )
 
-        return {'train': train_data, 'test': test_data}
+        return {"train": train_data, "test": test_data}
 
     def print_dataset(self, dataset, outdir):
         if not os.path.exists(outdir):
@@ -1769,8 +2040,7 @@ class CBioPortalData:
                 os.makedirs(split_dir)
 
             for file, df in data.items():
-                df.to_csv(os.path.join(split_dir, f"{file}.csv"), sep=',')
-
+                df.to_csv(os.path.join(split_dir, f"{file}.csv"), sep=",")
 
 
 def compute_correlation_loss(embeddings, batch_labels):
@@ -1778,7 +2048,9 @@ def compute_correlation_loss(embeddings, batch_labels):
     batch_labels = batch_labels.float()
 
     # Normalize embeddings
-    embeddings = (embeddings - embeddings.mean(dim=0, keepdim=True)) / (embeddings.std(dim=0, keepdim=True) + 1e-8)
+    embeddings = (embeddings - embeddings.mean(dim=0, keepdim=True)) / (
+        embeddings.std(dim=0, keepdim=True) + 1e-8
+    )
 
     # Normalize batch labels
     batch_labels = (batch_labels - batch_labels.mean()) / (batch_labels.std() + 1e-8)
@@ -1793,7 +2065,7 @@ def compute_correlation_loss(embeddings, batch_labels):
     loss = torch.sum(torch.abs(covariance))
     return loss
 
-# from geomloss import SamplesLoss
+
 def compute_transport_cost(embeddings, batch_labels, blur=0.5):
     """
     Compute a transport cost using Sinkhorn loss to align embeddings between batches.
@@ -1814,7 +2086,14 @@ def compute_transport_cost(embeddings, batch_labels, blur=0.5):
     batch2_embeddings = embeddings[batch_labels == 1]
 
     if batch1_embeddings.size(0) == 0 or batch2_embeddings.size(0) == 0:
-        raise ValueError("Both batches must have at least one sample for transport cost computation.")
+        raise ValueError(
+            "Both batches must have at least one sample for transport cost computation."
+        )
+
+    if SamplesLoss is None:
+        raise ImportError(
+            "geomloss is required for compute_transport_cost. Install it with: pip install geomloss"
+        )
 
     # Initialize the Sinkhorn loss function
     loss_fn = SamplesLoss("sinkhorn", blur=blur)
@@ -1855,29 +2134,33 @@ def get_optimal_device(device_preference=None):
             - device_type: String indicating the device type for compatibility
     """
     if device_preference is None:
-        device_preference = 'auto'
+        device_preference = "auto"
 
     # If specific device is requested, validate and return it
-    if device_preference == 'cuda':
+    if device_preference == "cuda":
         if torch.cuda.is_available():
-            return 'cuda', 'gpu'
+            return "cuda", "gpu"
         else:
-            warnings.warn("CUDA requested but not available. Falling back to auto-detection.")
-    elif device_preference == 'mps':
+            warnings.warn(
+                "CUDA requested but not available. Falling back to auto-detection."
+            )
+    elif device_preference == "mps":
         if torch.backends.mps.is_available():
-            return 'mps', 'mps'
+            return "mps", "mps"
         else:
-            warnings.warn("MPS requested but not available. Falling back to auto-detection.")
-    elif device_preference == 'cpu':
-        return 'cpu', 'cpu'
+            warnings.warn(
+                "MPS requested but not available. Falling back to auto-detection."
+            )
+    elif device_preference == "cpu":
+        return "cpu", "cpu"
 
     # Auto-detection logic (priority: CUDA > MPS > CPU)
     if torch.cuda.is_available():
-        return 'cuda', 'gpu'
+        return "cuda", "gpu"
     elif torch.backends.mps.is_available():
-        return 'mps', 'mps'
+        return "mps", "mps"
     else:
-        return 'cpu', 'cpu'
+        return "cpu", "cpu"
 
 
 def get_device_memory_info(device_str):
@@ -1890,30 +2173,30 @@ def get_device_memory_info(device_str):
     Returns:
         dict: Memory information dictionary
     """
-    if device_str == 'cuda' and torch.cuda.is_available():
+    if device_str == "cuda" and torch.cuda.is_available():
         return {
-            'allocated': torch.cuda.memory_allocated() / (1024**2),  # MB
-            'reserved': torch.cuda.memory_reserved() / (1024**2),    # MB
-            'max_allocated': torch.cuda.max_memory_allocated() / (1024**2),  # MB
-            'device_name': torch.cuda.get_device_name(0),
-            'device_count': torch.cuda.device_count()
+            "allocated": torch.cuda.memory_allocated() / (1024**2),  # MB
+            "reserved": torch.cuda.memory_reserved() / (1024**2),  # MB
+            "max_allocated": torch.cuda.max_memory_allocated() / (1024**2),  # MB
+            "device_name": torch.cuda.get_device_name(0),
+            "device_count": torch.cuda.device_count(),
         }
-    elif device_str == 'mps' and torch.backends.mps.is_available():
+    elif device_str == "mps" and torch.backends.mps.is_available():
         # MPS doesn't have the same detailed memory tracking as CUDA
         return {
-            'allocated': 'N/A (MPS)',
-            'reserved': 'N/A (MPS)',
-            'max_allocated': 'N/A (MPS)',
-            'device_name': 'Apple Metal Performance Shaders',
-            'device_count': 1
+            "allocated": "N/A (MPS)",
+            "reserved": "N/A (MPS)",
+            "max_allocated": "N/A (MPS)",
+            "device_name": "Apple Metal Performance Shaders",
+            "device_count": 1,
         }
     else:
         return {
-            'allocated': 'N/A (CPU)',
-            'reserved': 'N/A (CPU)',
-            'max_allocated': 'N/A (CPU)',
-            'device_name': 'CPU',
-            'device_count': 1
+            "allocated": "N/A (CPU)",
+            "reserved": "N/A (CPU)",
+            "max_allocated": "N/A (CPU)",
+            "device_name": "CPU",
+            "device_count": 1,
         }
 
 
@@ -1927,20 +2210,20 @@ def create_device_from_string(device_str):
     Returns:
         torch.device: PyTorch device object
     """
-    if device_str in ['gpu', 'auto']:
+    if device_str in ["gpu", "auto"]:
         optimal_device, _ = get_optimal_device()
         return torch.device(optimal_device)
-    elif device_str == 'mps':
+    elif device_str == "mps":
         if torch.backends.mps.is_available():
-            return torch.device('mps')
+            return torch.device("mps")
         else:
             warnings.warn("MPS not available, falling back to CPU")
-            return torch.device('cpu')
-    elif device_str == 'cuda':
+            return torch.device("cpu")
+    elif device_str == "cuda":
         if torch.cuda.is_available():
-            return torch.device('cuda')
+            return torch.device("cuda")
         else:
             warnings.warn("CUDA not available, falling back to CPU")
-            return torch.device('cpu')
+            return torch.device("cpu")
     else:
-        return torch.device('cpu')
+        return torch.device("cpu")

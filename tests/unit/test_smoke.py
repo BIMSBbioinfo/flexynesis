@@ -1,2 +1,2 @@
 def test_smoke():
-    import flexynesis
+    import flexynesis  # noqa: F401

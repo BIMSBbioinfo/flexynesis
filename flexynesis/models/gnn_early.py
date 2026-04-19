@@ -1,19 +1,14 @@
+import lightning as pl
 import numpy as np
 import pandas as pd
-
 import torch
+from captum.attr import GradientShap, IntegratedGradients
 from torch import nn
 from torch.nn import functional as F
-from torch.utils.data import random_split
-
-import lightning as pl
-
 from torch.utils.data import DataLoader
 
-from captum.attr import IntegratedGradients, GradientShap
-
-from ..utils import to_device_safe
 from ..modules import MLP, cox_ph_loss, flexGCN
+from ..utils import to_device_safe
 
 
 class GNN(pl.LightningModule):
@@ -51,20 +46,22 @@ class GNN(pl.LightningModule):
         surv_event_var (str, optional): The variable name representing survival events.
         surv_time_var (str, optional): The variable name representing survival times.
         use_loss_weighting (bool, optional): Whether to use uncertainty weighting in loss calculation. Defaults to True.
-        device_type (str, optional): Specifies the computation device ('gpu' or 'cpu'). Default is None, which uses 'cpu' if 'gpu' is not available.
+        device_type (str, optional): Specifies the computation device ('gpu' or 'cpu'). Default is None, which uses
+                                     'cpu' if 'gpu' is not available.
         gnn_conv_type (str, optional): Specifies the type of graph convolutional layer to use.
-    """    
+    """
+
     def __init__(
         self,
         config,
-        dataset, # MultiomicDatasetNW object
+        dataset,  # MultiomicDatasetNW object
         target_variables,
         batch_variables=None,
         surv_event_var=None,
         surv_time_var=None,
         use_loss_weighting=True,
-        device_type = None,
-        gnn_conv_type = None 
+        device_type=None,
+        gnn_conv_type=None,
     ):
         super().__init__()
         self.config = config
@@ -76,37 +73,57 @@ class GNN(pl.LightningModule):
         if self.surv_event_var is not None and self.surv_time_var is not None:
             self.target_variables = self.target_variables + [self.surv_event_var]
         self.batch_variables = batch_variables
-        self.variables = self.target_variables + self.batch_variables if self.batch_variables else self.target_variables
-        self.variable_types = getattr(dataset, 'multiomic_dataset', dataset).variable_types 
-        self.ann = getattr(dataset, 'multiomic_dataset', dataset).ann 
+        self.variables = (
+            self.target_variables + self.batch_variables
+            if self.batch_variables
+            else self.target_variables
+        )
+        self.variable_types = getattr(
+            dataset, "multiomic_dataset", dataset
+        ).variable_types
+        self.ann = getattr(dataset, "multiomic_dataset", dataset).ann
         self.edge_index = dataset.edge_index
-        
+
         self.feature_importances = {}
         self.use_loss_weighting = use_loss_weighting
 
-        self.device_type = device_type 
+        self.device_type = device_type
         self.gnn_conv_type = gnn_conv_type
-        
+
         from ..utils import create_device_from_string
-        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
-        self.edge_index = to_device_safe(self.edge_index, device) # edge index is re-used across samples, so we keep it in device
-                
+
+        device = create_device_from_string(
+            self.device_type
+            if hasattr(self, "device_type") and self.device_type
+            else "auto"
+        )
+        self.edge_index = to_device_safe(
+            self.edge_index, device
+        )  # edge index is re-used across samples, so we keep it in device
+
         if self.use_loss_weighting:
             # Initialize log variance parameters for uncertainty weighting
             self.log_vars = nn.ParameterDict()
             for var in self.variables:
                 self.log_vars[var] = nn.Parameter(torch.zeros(1))
-        
-        self.encoders = nn.ModuleList([ 
-            flexGCN(
-                node_count = dataset[0][0].shape[0], #number of nodes
-                node_feature_count= dataset[0][0].shape[1], # number of node features
-                node_embedding_dim=int(self.config["node_embedding_dim"]),  
-                num_convs = int(self.config['num_convs']), # Number of convolutional layers 
-                output_dim=self.config["latent_dim"],
-                act = self.config['activation'],
-                conv = self.gnn_conv_type
-            )])
+
+        self.encoders = nn.ModuleList(
+            [
+                flexGCN(
+                    node_count=dataset[0][0].shape[0],  # number of nodes
+                    node_feature_count=dataset[0][0].shape[
+                        1
+                    ],  # number of node features
+                    node_embedding_dim=int(self.config["node_embedding_dim"]),
+                    num_convs=int(
+                        self.config["num_convs"]
+                    ),  # Number of convolutional layers
+                    output_dim=self.config["latent_dim"],
+                    act=self.config["activation"],
+                    conv=self.gnn_conv_type,
+                )
+            ]
+        )
 
         # Init output layers
         self.MLPs = nn.ModuleDict()
@@ -118,10 +135,10 @@ class GNN(pl.LightningModule):
             self.MLPs[var] = MLP(
                 input_dim=self.config["latent_dim"],
                 hidden_dim=self.config["supervisor_hidden_dim"],
-                output_dim=num_class
+                output_dim=num_class,
             )
-            
-    def forward(self, x, edge_index): 
+
+    def forward(self, x, edge_index):
         """
         Defines the forward pass of the GNN.
 
@@ -139,13 +156,13 @@ class GNN(pl.LightningModule):
             outputs[var] = mlp(embeddings)
         return outputs
 
-            
-    def training_step(self, batch, batch_idx, log = True):
+    def training_step(self, batch, batch_idx, log=True):
         """
         Performs a training step including loss calculation and logging.
 
         Args:
-            batch (tuple): A batch of data consisting of features, target labels as a dictionary of tensors, and sample ids.
+            batch (tuple): A batch of data consisting of features, target labels
+                           as a dictionary of tensors, and sample ids.
 
         Returns:
             float: Total loss for the batch.
@@ -169,15 +186,22 @@ class GNN(pl.LightningModule):
         total_loss = self.compute_total_loss(losses)
         losses["train_loss"] = total_loss
         if log:
-            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch))
+            self.log_dict(
+                losses,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+                batch_size=len(batch),
+            )
         return total_loss
 
-    def validation_step(self, batch, batch_idx, log = True):
+    def validation_step(self, batch, batch_idx, log=True):
         """
         Performs a validation step, computing losses for a batch of data.
 
         Args:
-            batch (tuple): A batch of data consisting of features, target labels as a dictionary of tensors, and sample ids.
+            batch (tuple): A batch of data consisting of features, target labels as a
+                           dictionary of tensors, and sample ids.
 
         Returns:
             float: Total validation loss for the batch.
@@ -200,9 +224,15 @@ class GNN(pl.LightningModule):
         total_loss = sum(losses.values())
         losses["val_loss"] = total_loss
         if log:
-            self.log_dict(losses, on_step=False, on_epoch=True, prog_bar=True, batch_size=len(batch))
+            self.log_dict(
+                losses,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+                batch_size=len(batch),
+            )
         return total_loss
-            
+
     def configure_optimizers(self):
         """
         Configure the optimizer for the DirectPred model.
@@ -210,23 +240,23 @@ class GNN(pl.LightningModule):
         Returns:
             torch.optim.Optimizer: The configured optimizer.
         """
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.config['lr'])
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
         return optimizer
 
     def compute_loss(self, var, y, y_hat):
         """
         Computes the loss for a specific variable based on whether the variable is numerical or categorical.
         Handles missing labels by excluding them from the loss calculation.
-    
+
         Args:
             var (str): The name of the variable for which the loss is being calculated.
             y (torch.Tensor): The true labels or values for the variable.
             y_hat (torch.Tensor): The predicted labels or values output by the model.
-    
+
         Returns:
             torch.Tensor: The calculated loss tensor for the variable. If there are no valid labels or values
                           to compute the loss (all are missing), returns a zero loss tensor with gradient enabled.
-    
+
         The method first checks the type of the variable (`var`) from `variable_types`. If the variable is
         numerical, it computes the mean squared error loss. For categorical variables, it calculates the
         cross-entropy loss. The method ensures to ignore any instances where the labels are missing (NaN for
@@ -235,17 +265,23 @@ class GNN(pl.LightningModule):
         if self.variable_types[var] == "numerical":
             # Ignore instances with missing labels for numerical variables
             valid_indices = ~torch.isnan(y)
-            if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+            if (
+                valid_indices.sum() > 0
+            ):  # only calculate loss if there are valid targets
                 y_hat = y_hat[valid_indices]
                 y = y[valid_indices]
                 loss = F.mse_loss(torch.flatten(y_hat), y.float())
             else:
-                loss = torch.tensor(0.0, device=y_hat.device, requires_grad=True)  # if no valid labels, set loss to 0
+                loss = torch.tensor(
+                    0.0, device=y_hat.device, requires_grad=True
+                )  # if no valid labels, set loss to 0
         else:
             # Ignore instances with missing labels for categorical variables
             # Assuming that missing values were encoded as -1
             valid_indices = (y != -1) & (~torch.isnan(y))
-            if valid_indices.sum() > 0:  # only calculate loss if there are valid targets
+            if (
+                valid_indices.sum() > 0
+            ):  # only calculate loss if there are valid targets
                 y_hat = y_hat[valid_indices]
                 y = y[valid_indices]
                 loss = F.cross_entropy(y_hat, y.long())
@@ -259,14 +295,14 @@ class GNN(pl.LightningModule):
         either weighted or unweighted total loss based on the model configuration. If loss weighting
         is enabled and there are multiple loss components, it uses uncertainty-based weighting.
         See Kendall A. et al, https://arxiv.org/abs/1705.07115.
-        
+
         Args:
             losses (dict of torch.Tensor): A dictionary where each key is a variable name and
                                            each value is the loss tensor associated with that variable.
-    
+
         Returns:
             torch.Tensor: The total loss computed across all inputs, either weighted or unweighted.
-        
+
         The method checks if loss weighting is used (`use_loss_weighting`) and if there are multiple
         losses to weight. If so, it computes the weighted sum of losses, where the weight involves
         the exponential of the negative log variance (acting as precision) associated with each loss,
@@ -278,13 +314,14 @@ class GNN(pl.LightningModule):
             # Compute weighted loss for each loss
             # Weighted loss = precision * loss + log-variance
             total_loss = sum(
-                torch.exp(-self.log_vars[name]) * loss + self.log_vars[name] for name, loss in losses.items()
+                torch.exp(-self.log_vars[name]) * loss + self.log_vars[name]
+                for name, loss in losses.items()
             )
         else:
             # Compute unweighted total loss
             total_loss = sum(losses.values())
         return total_loss
-    
+
     def predict(self, dataset):
         """
         Make predictions on an entire dataset.
@@ -297,29 +334,42 @@ class GNN(pl.LightningModule):
         """
         self.eval()  # Set the model to evaluation mode
         from ..utils import create_device_from_string
-        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
+
+        device = create_device_from_string(
+            self.device_type
+            if hasattr(self, "device_type") and self.device_type
+            else "auto"
+        )
         self.to(device)  # Move the model to the appropriate device
 
         # Create a DataLoader with a practical batch size
-        dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
+        dataloader = DataLoader(
+            dataset, batch_size=64, shuffle=False
+        )  # Adjust the batch size as needed
         edge_index = dataset.edge_index.to(device)  # Move edge_index to GPU
 
-        predictions = {var: [] for var in self.variables}  # Initialize prediction storage
+        predictions = {
+            var: [] for var in self.variables
+        }  # Initialize prediction storage
 
         # Process each batch
-        for x, y_dict,samples in dataloader:
+        for x, y_dict, samples in dataloader:
             x = x.to(device)  # Move data to GPU
 
             outputs = self.forward(x, edge_index)
             for var in self.variables:
                 logits = outputs[var].detach().cpu()  # Raw model outputs (logits)
 
-                if dataset.variable_types[var] == 'categorical':
-                    probs = torch.softmax(logits, dim=1).numpy() # class probabilities between 0 and 1
+                if dataset.variable_types[var] == "categorical":
+                    probs = torch.softmax(
+                        logits, dim=1
+                    ).numpy()  # class probabilities between 0 and 1
                     predictions[var].extend(probs)
                 else:
-                    predictions[var].extend(logits.numpy()) # return raw output for regression problems
-        # Convert lists to arrays 
+                    predictions[var].extend(
+                        logits.numpy()
+                    )  # return raw output for regression problems
+        # Convert lists to arrays
         predictions = {var: np.array(predictions[var]) for var in predictions}
 
         return predictions
@@ -336,11 +386,18 @@ class GNN(pl.LightningModule):
         """
         self.eval()  # Set the model to evaluation mode
         from ..utils import create_device_from_string
-        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
+
+        device = create_device_from_string(
+            self.device_type
+            if hasattr(self, "device_type") and self.device_type
+            else "auto"
+        )
         self.to(device)  # Move the model to the appropriate device
         edge_index = dataset.edge_index.to(device)  # Move edge_index to GPU
 
-        dataloader = DataLoader(dataset, batch_size=64, shuffle=False)  # Adjust the batch size as needed
+        dataloader = DataLoader(
+            dataset, batch_size=64, shuffle=False
+        )  # Adjust the batch size as needed
         all_embeddings = []  # List to store embeddings from all batches
         sample_ids = []  # List to store indices for all samples processed
 
@@ -349,10 +406,12 @@ class GNN(pl.LightningModule):
             x = x.to(device)  # Move data to GPU
 
             # notice we are using the first encoder (it is currently a early fusion method)
-            embeddings = self.encoders[0](x, edge_index).detach().cpu().numpy()  # Compute embeddings and move to CPU
+            embeddings = (
+                self.encoders[0](x, edge_index).detach().cpu().numpy()
+            )  # Compute embeddings and move to CPU
             all_embeddings.append(embeddings)
-            sample_ids.extend(samples)  
-            
+            sample_ids.extend(samples)
+
         # Concatenate all embeddings into a single numpy array
         all_embeddings = np.vstack(all_embeddings)
 
@@ -363,24 +422,31 @@ class GNN(pl.LightningModule):
             columns=[f"E{dim}" for dim in range(all_embeddings.shape[1])],
         )
         return embeddings_df
-        
-    # Adaptor forward function for captum integrated gradients. 
+
+    # Adaptor forward function for captum integrated gradients.
     def forward_target(self, *args):
         input_data = list(args[:-2])  # expect a single tensor (early integration)
         target_var = args[-2]  # target variable of interest
-        steps = args[-1]  # number of steps for IntegratedGradients().attribute 
+        steps = args[-1]  # number of steps for IntegratedGradients().attribute
         outputs_list = []
         for i in range(steps):
-            x_step = input_data[0][i] 
-            #edges_step = edge_index[i] # although, identical, they get copied. 
+            x_step = input_data[0][i]
+            # edges_step = edge_index[i] # although, identical, they get copied.
             out = self.forward(x_step, self.dataset_edge_index)
             outputs_list.append(out[target_var])
-        return torch.cat(outputs_list, dim = 0)
+        return torch.cat(outputs_list, dim=0)
 
-        
-    def compute_feature_importance(self, dataset, target_var, method="IntegratedGradients", steps_or_samples=5, batch_size=64):
+    def compute_feature_importance(
+        self,
+        dataset,
+        target_var,
+        method="IntegratedGradients",
+        steps_or_samples=5,
+        batch_size=64,
+    ):
         """
-        Computes the feature importance for each variable in the dataset using either Integrated Gradients or Gradient SHAP.
+        Computes the feature importance for each variable in the dataset
+        using either Integrated Gradients or Gradient SHAP.
 
         Args:
             dataset: The dataset object containing the features and data.
@@ -394,43 +460,58 @@ class GNN(pl.LightningModule):
         Returns:
             pd.DataFrame: A DataFrame containing feature importances across different variables and data modalities.
         """
+
         def bytes_to_gb(bytes):
-            return bytes / 1024 ** 2
+            return bytes / 1024**3
+
         from ..utils import create_device_from_string, to_device_safe
-        device = create_device_from_string(self.device_type if hasattr(self, 'device_type') and self.device_type else 'auto')
-        
+
+        device = create_device_from_string(
+            self.device_type
+            if hasattr(self, "device_type") and self.device_type
+            else "auto"
+        )
+
         # Force CPU for Captum feature importance, as MPS lacks the required float64 support.
-        if device.type == 'mps':
-            print("[WARNING] MPS device detected. Computing feature importance on CPU due to MPS float64 incompatibility.")
-            device = torch.device('cpu')
-            
+        if device.type == "mps":
+            print(
+                "[WARNING] MPS device detected. Computing feature importance on CPU due to MPS float64 incompatibility."
+            )
+            device = torch.device("cpu")
+
         self.to(device)
         self.dataset_edge_index = to_device_safe(dataset.edge_index, device)
 
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-        
+
         # Choose the attribution method dynamically
         if method == "IntegratedGradients":
             explainer = IntegratedGradients(self.forward_target)
         elif method == "GradientShap":
             explainer = GradientShap(self.forward_target)
         else:
-            raise ValueError(f"Unsupported method '{method}'. Choose 'IntegratedGradients' or 'GradientShap'.")
+            raise ValueError(
+                f"Unsupported method '{method}'. Choose 'IntegratedGradients' or 'GradientShap'."
+            )
 
-        if dataset.variable_types[target_var] == 'numerical':
+        if dataset.variable_types[target_var] == "numerical":
             num_class = 1
         else:
             num_class = len(np.unique(dataset.ann[target_var]))
-        
+
         # Report memory usage based on device type
-        if device.type == 'cuda':
-            print("Memory before batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
+        if device.type == "cuda":
+            print(
+                "Memory before batch processing: {:.3f} MB".format(
+                    bytes_to_gb(torch.cuda.max_memory_reserved())
+                )
+            )
         # MPS and CPU don't have detailed memory tracking like CUDA
 
         aggregated_attributions = [[] for _ in range(num_class)]
         for batch in dataloader:
             x, y_dict, samples = batch
-            
+
             # Ensure input data is on the correct device
             x = to_device_safe(x, device)
             input_data = x.unsqueeze(0).requires_grad_()
@@ -439,38 +520,59 @@ class GNN(pl.LightningModule):
             x = to_device_safe(x, device)
             input_data = x.unsqueeze(0).requires_grad_()
             baseline = torch.zeros_like(input_data)
-            
-            if method == 'IntegratedGradients':
+
+            if method == "IntegratedGradients":
                 baseline = torch.zeros_like(input_data)
-            elif method == 'GradientShap': # provide multiple baselines for Gr.Shap
-                baseline = torch.cat([torch.zeros_like(input_data) for _ in range(steps_or_samples)], dim=0)
-                    
+            elif method == "GradientShap":  # provide multiple baselines for Gr.Shap
+                baseline = torch.cat(
+                    [torch.zeros_like(input_data) for _ in range(steps_or_samples)],
+                    dim=0,
+                )
+
             if num_class == 1:
                 # returns a tuple of tensors (one per data modality)
-                if method == 'IntegratedGradients':
-                    attributions = explainer.attribute(input_data, baseline, 
-                                                 additional_forward_args=(target_var, steps_or_samples), 
-                                                 n_steps=steps_or_samples)
-                elif method == 'GradientShap':
-                    attributions = explainer.attribute(input_data, baseline, 
-                                                 additional_forward_args=(target_var, steps_or_samples), 
-                                                 n_samples=steps_or_samples)
+                if method == "IntegratedGradients":
+                    attributions = explainer.attribute(
+                        input_data,
+                        baseline,
+                        additional_forward_args=(target_var, steps_or_samples),
+                        n_steps=steps_or_samples,
+                    )
+                elif method == "GradientShap":
+                    attributions = explainer.attribute(
+                        input_data,
+                        baseline,
+                        additional_forward_args=(target_var, steps_or_samples),
+                        n_samples=steps_or_samples,
+                    )
                 aggregated_attributions[0].append(attributions)
             else:
                 for target_class in range(num_class):
-                    if method == 'IntegratedGradients':
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                           additional_forward_args=(target_var, steps_or_samples), 
-                                                           target=target_class,
-                                                           n_steps=steps_or_samples)
-                    elif method == 'GradientShap':
-                        attributions = explainer.attribute(input_data, baseline, 
-                                                           additional_forward_args=(target_var, steps_or_samples), 
-                                                           target=target_class,
-                                                           n_samples=steps_or_samples)
+                    if method == "IntegratedGradients":
+                        attributions = explainer.attribute(
+                            input_data,
+                            baseline,
+                            additional_forward_args=(
+                                target_var,
+                                steps_or_samples,
+                            ),
+                            target=target_class,
+                            n_steps=steps_or_samples,
+                        )
+                    elif method == "GradientShap":
+                        attributions = explainer.attribute(
+                            input_data,
+                            baseline,
+                            additional_forward_args=(
+                                target_var,
+                                steps_or_samples,
+                            ),
+                            target=target_class,
+                            n_samples=steps_or_samples,
+                        )
                     aggregated_attributions[target_class].append(attributions)
-        # For each target class concatenate node attributions accross batches 
-        processed_attributions = [] 
+        # For each target class concatenate node attributions accross batches
+        processed_attributions = []
         # Process each class
         for class_idx in range(len(aggregated_attributions)):
             class_attr = aggregated_attributions[class_idx]
@@ -478,37 +580,57 @@ class GNN(pl.LightningModule):
             attr_concat = torch.cat([batch_attr for batch_attr in class_attr], dim=1)
             processed_attributions.append(attr_concat)
 
-        # compute absolute importance and move to cpu 
-        abs_attr = [torch.abs(attr_class).cpu() for attr_class in processed_attributions]
-        # average over samples 
+        # compute absolute importance and move to cpu
+        abs_attr = [
+            torch.abs(attr_class).cpu() for attr_class in processed_attributions
+        ]
+        # average over samples
         imp = [a.mean(dim=1) for a in abs_attr]
 
         # move the model also back to cpu (if not already on cpu)
-        self.to('cpu')
-        
+        self.to("cpu")
+
         # Report memory usage based on device type
-        if device.type == 'cuda':
-            print("Memory after batch processing: {:.3f} MB".format(bytes_to_gb(torch.cuda.max_memory_reserved())))
+        if device.type == "cuda":
+            print(
+                "Memory after batch processing: {:.3f} MB".format(
+                    bytes_to_gb(torch.cuda.max_memory_reserved())
+                )
+            )
         # MPS and CPU don't have detailed memory tracking like CUDA
 
         df_list = []
-        layers = list(getattr(dataset, 'multiomic_dataset', dataset).dat.keys())
+        layers = list(getattr(dataset, "multiomic_dataset", dataset).dat.keys())
         for i in range(num_class):
             features = dataset.common_features
-            target_class_label = dataset.label_mappings[target_var].get(i) if target_var in dataset.label_mappings else ''
-            for l in range(len(layers)): 
+            target_class_label = (
+                dataset.label_mappings[target_var].get(i)
+                if target_var in dataset.label_mappings
+                else ""
+            )
+            for layer_idx, layer_name in enumerate(layers):
                 # Extracting node feature attributes coming from different omic layers
                 importances_array = imp[i].squeeze().detach().numpy()
                 if importances_array.ndim == 1:
-                    importances = importances_array  # Use the array as is if it is 1-dimensional
+                    importances = (
+                        importances_array  # Use the array as is if it is 1-dimensional
+                    )
                 else:
-                    importances = importances_array[:, l]  # Use the original indexing for 2D arrays
-                df_list.append(pd.DataFrame({'target_variable': target_var, 
-                                             'target_class': i, 
-                                             'target_class_label': target_class_label,
-                                             'layer': layers[l], 
-                                             'name': features, 
-                                             'importance': importances}))    
+                    importances = importances_array[
+                        :, layer_idx
+                    ]  # Use the original indexing for 2D arrays
+                df_list.append(
+                    pd.DataFrame(
+                        {
+                            "target_variable": target_var,
+                            "target_class": i,
+                            "target_class_label": target_class_label,
+                            "layer": layer_name,
+                            "name": features,
+                            "importance": importances,
+                        }
+                    )
+                )
         df_imp = pd.concat(df_list, ignore_index=True)
         # save the computed scores in the model
         self.feature_importances[target_var] = df_imp
