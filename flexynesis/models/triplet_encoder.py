@@ -456,8 +456,8 @@ class MultiTripletNetwork(pl.LightningModule):
 
             # convert to dict
             anchor = {k: anchor[k] for k in range(len(anchor))}
-            positive = {k: anchor[k] for k in range(len(positive))}
-            negative = {k: anchor[k] for k in range(len(negative))}
+            positive = {k: positive[k] for k in range(len(positive))}
+            negative = {k: negative[k] for k in range(len(negative))}
             (
                 anchor_embedding,
                 positive_embedding,
