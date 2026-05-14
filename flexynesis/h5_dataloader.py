@@ -37,6 +37,7 @@ Memory profile:
   PEAK: ~20 GB (vs 60+ with stock CSV path) → safe on 64 GB ROG
 """
 import os
+
 import h5py
 import numpy as np
 import pandas as pd
