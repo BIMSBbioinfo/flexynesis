@@ -42,7 +42,7 @@ import h5py
 import numpy as np
 import pandas as pd
 
-ROOT    = Path("/home/amit/Desktop/projects/flexynesis")
+ROOT = Path("/home/amit/Desktop/projects/flexynesis")
 SRC_DIR = ROOT / "processed_scaled_411k_tissue_B"
 DST_DIR = ROOT / "processed_scaled_411k_tissue_B_h5"
 
@@ -54,9 +54,9 @@ def log(msg):
 
 
 def convert_split(split):
-    src_gex  = SRC_DIR / split / "gex.csv"
+    src_gex = SRC_DIR / split / "gex.csv"
     src_clin = SRC_DIR / split / "clin.csv"
-    dst_gex  = DST_DIR / split / "gex.h5"
+    dst_gex = DST_DIR / split / "gex.h5"
     dst_clin = DST_DIR / split / "clin.csv"
 
     DST_DIR.joinpath(split).mkdir(parents=True, exist_ok=True)
@@ -138,12 +138,12 @@ def convert_split(split):
                            data=np.array(sample_ids, dtype="S"))
         h5f.create_dataset("gene_symbols",
                            data=np.array(gene_symbols, dtype="S"))
-        h5f.attrs["created_by"]    = "csv_to_h5.py"
-        h5f.attrs["source_csv"]    = str(src_gex)
+        h5f.attrs["created_by"] = "csv_to_h5.py"
+        h5f.attrs["source_csv"] = str(src_gex)
         h5f.attrs["normalization"] = "log2(count+1) — inherited from upstream"
-        h5f.attrs["orientation"]   = "samples_as_rows"
-        h5f.attrs["n_samples"]     = n_samples
-        h5f.attrs["n_genes"]       = n_genes
+        h5f.attrs["orientation"] = "samples_as_rows"
+        h5f.attrs["n_samples"] = n_samples
+        h5f.attrs["n_genes"] = n_genes
     del arr_T
 
     write_min = (time.time() - t) / 60
@@ -168,7 +168,7 @@ def main():
 
     t_total = time.time()
     train_h5 = convert_split("train")
-    test_h5  = convert_split("test")
+    test_h5 = convert_split("test")
     total_min = (time.time() - t_total) / 60
 
     log("\n" + "=" * 70)

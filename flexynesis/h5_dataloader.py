@@ -111,7 +111,7 @@ class H5DataImporter(DataImporter):
 
             # Read as samples-rows, then transpose
             arr = f['expression'][:]  # (n_samples, n_genes) float32
-            sample_ids   = [s.decode() for s in f['sample_ids'][:]]
+            sample_ids = [s.decode() for s in f['sample_ids'][:]]
             gene_symbols = [g.decode() for g in f['gene_symbols'][:]]
 
         # Transpose to (n_genes, n_samples) to match Flexynesis CSV convention
