@@ -1,39 +1,30 @@
 #!/usr/bin/env python3
 """
-csv_to_h5.py — Convert Scope B CSVs to HDF5 for memory-safe training.
+csv_to_h5.py - Convert a feature matrix CSV to HDF5 for memory-efficient loading.
 
-Why this exists:
-  Flexynesis CSV DataImporter blows RAM (60+ GB peak with copies) on the
-  Scope B 14 GB train CSV → GUI freeze + force-shutdown. HDF5 with
-  lazy per-sample loading sidesteps the whole problem.
+Large feature-matrix CSV files are slow to parse and, when read with pandas,
+are stored as float64 by default - doubling their in-memory footprint.
+Converting such a CSV to HDF5 once allows it to be loaded later as native
+float32 with substantially lower peak memory.
 
-Inputs (must exist):
-  processed_scaled_411k_tissue_B/train/gex.csv         (14 GB, ~118k samples)
-  processed_scaled_411k_tissue_B/train/clin.csv
-  processed_scaled_411k_tissue_B/test/gex.csv          (3.3 GB, ~28k samples)
-  processed_scaled_411k_tissue_B/test/clin.csv
+The input CSV is expected to have features as rows and samples as columns, with
+the first column containing feature identifiers and the header row containing
+sample identifiers. This matches the layout used elsewhere in Flexynesis.
 
-Outputs:
-  processed_scaled_411k_tissue_B_h5/train/gex.h5       (~8 GB, samples × genes)
-  processed_scaled_411k_tissue_B_h5/train/clin.csv     (copied)
-  processed_scaled_411k_tissue_B_h5/test/gex.h5        (~2 GB)
-  processed_scaled_411k_tissue_B_h5/test/clin.csv      (copied)
+The output HDF5 file has the following layout:
+    /matrix         (n_samples, n_features) float32, chunked (1, n_features)
+    /sample_ids     (n_samples,) byte strings
+    /feature_names  (n_features,) byte strings
+    attrs: created_by, source_csv, orientation, n_samples, n_features
 
-HDF5 layout per gex.h5:
-  /expression    (n_samples, n_genes) float32, chunks=(1, n_genes)  ← fast row reads
-  /sample_ids    (n_samples,) bytes
-  /gene_symbols  (n_genes,) bytes
-  attrs: created_by, source_csv, normalization, orientation
+Data are stored samples-as-rows with per-row chunking so that individual
+samples can be read efficiently. H5DataImporter reads files in this layout.
 
-Memory profile:
-  Read phase:      ~8 GB (pre-allocated array fills as chunks parsed)
-  Transpose phase: ~16 GB (temporary 2× during transpose copy)
-  Write phase:     ~8 GB (writes to disk, then frees)
-  PEAK:            ~16 GB ← well within 58 GB free
-
-Runtime: ~6-8 min total (NVMe sequential, no compression overhead)
+Usage:
+    python -m flexynesis.csv_to_h5 input.csv output.h5
+    python -m flexynesis.csv_to_h5 input.csv output.h5 --chunksize 1000
 """
-import shutil
+import argparse
 import sys
 import time
 from pathlib import Path
@@ -42,145 +33,112 @@ import h5py
 import numpy as np
 import pandas as pd
 
-ROOT = Path("/home/amit/Desktop/projects/flexynesis")
-SRC_DIR = ROOT / "processed_scaled_411k_tissue_B"
-DST_DIR = ROOT / "processed_scaled_411k_tissue_B_h5"
-
-GENES_PER_CHUNK = 500   # pandas chunksize
+DEFAULT_CHUNKSIZE = 500  # rows (features) read per pandas chunk
 
 
 def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
-def convert_split(split):
-    src_gex = SRC_DIR / split / "gex.csv"
-    src_clin = SRC_DIR / split / "clin.csv"
-    dst_gex = DST_DIR / split / "gex.h5"
-    dst_clin = DST_DIR / split / "clin.csv"
+def convert_csv_to_h5(src_csv, dst_h5, chunksize=DEFAULT_CHUNKSIZE):
+    """
+    Convert a single feature-matrix CSV to HDF5.
 
-    DST_DIR.joinpath(split).mkdir(parents=True, exist_ok=True)
+    Parameters
+    ----------
+    src_csv : str or Path
+        Input CSV: features as rows, samples as columns, first column is the
+        feature index.
+    dst_h5 : str or Path
+        Output HDF5 path. Parent directories are created if needed.
+    chunksize : int
+        Number of CSV rows parsed per chunk while streaming the file.
 
-    log("=" * 70)
-    log(f"[{split}] CSV → HDF5")
-    log("=" * 70)
+    Returns
+    -------
+    Path
+        The path to the written HDF5 file.
+    """
+    src_csv = Path(src_csv)
+    dst_h5 = Path(dst_h5)
 
-    # ---------- Copy clin.csv ----------
-    shutil.copy(src_clin, dst_clin)
-    log(f"  Copied clin.csv → {dst_clin}")
+    if not src_csv.exists():
+        raise FileNotFoundError(f"Input CSV not found: {src_csv}")
 
-    # ---------- Pass 1: scan structure (headers + gene names) ----------
-    log("  [1/4] Scanning CSV structure...")
-    t = time.time()
+    dst_h5.parent.mkdir(parents=True, exist_ok=True)
 
-    # Get sample IDs from header (one-row read, near-instant)
-    header_df = pd.read_csv(src_gex, nrows=0, index_col=0)
+    log(f"Converting {src_csv} -> {dst_h5}")
+
+    # ---------- Scan structure: sample IDs (header) and feature IDs (col 0) ----------
+    header_df = pd.read_csv(src_csv, nrows=0, index_col=0)
     sample_ids = header_df.columns.tolist()
     n_samples = len(sample_ids)
 
-    # Get gene symbols (first column only — fast)
-    gene_col = pd.read_csv(src_gex, usecols=[0])
-    gene_symbols = gene_col.iloc[:, 0].tolist()
-    n_genes = len(gene_symbols)
-    del gene_col
+    feature_col = pd.read_csv(src_csv, usecols=[0])
+    feature_names = feature_col.iloc[:, 0].astype(str).tolist()
+    n_features = len(feature_names)
+    del feature_col
 
-    log(f"      Samples: {n_samples:,}  Genes: {n_genes:,}  "
-        f"(scan {time.time()-t:.1f}s)")
-    log(f"      Output size: {n_samples*n_genes*4/1e9:.2f} GB (float32, no compression)")
+    log(f"  {n_samples:,} samples x {n_features:,} features")
 
-    # ---------- Pass 2: stream CSV into pre-allocated array ----------
-    log("  [2/4] Streaming CSV into RAM (pandas chunked, float32)...")
-    t = time.time()
+    # ---------- Stream CSV into a pre-allocated (n_features, n_samples) array ----------
+    arr = np.empty((n_features, n_samples), dtype=np.float32)
 
-    # Pre-allocate target: (n_genes, n_samples) — matches CSV orientation
-    arr = np.empty((n_genes, n_samples), dtype=np.float32)
-
-    chunks = pd.read_csv(src_gex, index_col=0, chunksize=GENES_PER_CHUNK)
-    gene_idx = 0
-    for chunk_i, chunk in enumerate(chunks):
-        chunk_arr = chunk.values.astype(np.float32, copy=False)  # (n, n_samples)
+    chunks = pd.read_csv(src_csv, index_col=0, chunksize=chunksize)
+    row_idx = 0
+    for chunk in chunks:
+        chunk_arr = chunk.values.astype(np.float32, copy=False)
         n = chunk_arr.shape[0]
-        arr[gene_idx:gene_idx + n] = chunk_arr
-        gene_idx += n
+        arr[row_idx:row_idx + n] = chunk_arr
+        row_idx += n
         del chunk_arr
 
-        if (chunk_i + 1) % 4 == 0:
-            elapsed = time.time() - t
-            rate = gene_idx / elapsed
-            eta_min = (n_genes - gene_idx) / rate / 60
-            log(f"      {gene_idx:>6,}/{n_genes:,} genes  "
-                f"({rate:.0f}/s, ETA {eta_min:.1f} min, elapsed {elapsed/60:.1f} min)")
-
-    read_min = (time.time() - t) / 60
-    log(f"      Read done: {arr.nbytes / 1e9:.2f} GB in RAM  ({read_min:.1f} min)")
-
-    # ---------- Pass 3: transpose to (n_samples, n_genes) ----------
-    log("  [3/4] Transposing (n_genes, n_samples) → (n_samples, n_genes)...")
-    t = time.time()
-    # ascontiguousarray forces a real copy in C-order — needed for HDF5 write
-    arr_T = np.ascontiguousarray(arr.T)
-    del arr  # free 8 GB
-    log(f"      Transpose done ({time.time()-t:.1f}s)  "
-        f"Now: {arr_T.nbytes / 1e9:.2f} GB")
-
-    # ---------- Pass 4: write HDF5 ----------
-    log("  [4/4] Writing HDF5...")
-    t = time.time()
-    with h5py.File(dst_gex, "w") as h5f:
-        # chunks=(1, n_genes) → one chunk = one sample row = fast single-sample reads
-        h5f.create_dataset(
-            "expression",
-            data=arr_T,
-            chunks=(1, n_genes),
-            # No compression — speed > space (NVMe has 464 GB free)
+    if row_idx != n_features:
+        raise ValueError(
+            f"Row count mismatch: scanned {n_features} features, "
+            f"read {row_idx} while streaming."
         )
-        h5f.create_dataset("sample_ids",
-                           data=np.array(sample_ids, dtype="S"))
-        h5f.create_dataset("gene_symbols",
-                           data=np.array(gene_symbols, dtype="S"))
+
+    # ---------- Transpose to (n_samples, n_features) for samples-as-rows storage ----------
+    arr_t = np.ascontiguousarray(arr.T)
+    del arr
+
+    # ---------- Write HDF5 ----------
+    with h5py.File(dst_h5, "w") as h5f:
+        # Per-row chunking: one chunk == one sample, for fast single-sample reads.
+        h5f.create_dataset("matrix", data=arr_t, chunks=(1, n_features))
+        h5f.create_dataset("sample_ids", data=np.array(sample_ids, dtype="S"))
+        h5f.create_dataset("feature_names",
+                           data=np.array(feature_names, dtype="S"))
         h5f.attrs["created_by"] = "csv_to_h5.py"
-        h5f.attrs["source_csv"] = str(src_gex)
-        h5f.attrs["normalization"] = "log2(count+1) — inherited from upstream"
+        h5f.attrs["source_csv"] = str(src_csv)
         h5f.attrs["orientation"] = "samples_as_rows"
         h5f.attrs["n_samples"] = n_samples
-        h5f.attrs["n_genes"] = n_genes
-    del arr_T
+        h5f.attrs["n_features"] = n_features
+    del arr_t
 
-    write_min = (time.time() - t) / 60
-    size_gb = dst_gex.stat().st_size / 1e9
-    log(f"      Wrote {size_gb:.2f} GB to {dst_gex}  ({write_min:.1f} min)")
-
-    return dst_gex
+    size_gb = dst_h5.stat().st_size / 1e9
+    log(f"  Wrote {size_gb:.2f} GB to {dst_h5}")
+    return dst_h5
 
 
-def main():
-    log("=" * 70)
-    log("CSV → HDF5 conversion (Scope B, memory-safe)")
-    log("=" * 70)
-    log(f"  Source:      {SRC_DIR}")
-    log(f"  Destination: {DST_DIR}")
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Convert a feature-matrix CSV to HDF5 for "
+                    "memory-efficient loading."
+    )
+    parser.add_argument("input_csv", help="Input CSV (features x samples).")
+    parser.add_argument("output_h5", help="Output HDF5 file path.")
+    parser.add_argument(
+        "--chunksize", type=int, default=DEFAULT_CHUNKSIZE,
+        help=f"CSV rows parsed per chunk (default: {DEFAULT_CHUNKSIZE}).",
+    )
+    args = parser.parse_args(argv)
 
-    # Sanity
-    for p in [SRC_DIR / "train/gex.csv", SRC_DIR / "train/clin.csv",
-              SRC_DIR / "test/gex.csv",  SRC_DIR / "test/clin.csv"]:
-        if not p.exists():
-            sys.exit(f"ERROR: {p} not found")
-
-    t_total = time.time()
-    train_h5 = convert_split("train")
-    test_h5 = convert_split("test")
-    total_min = (time.time() - t_total) / 60
-
-    log("\n" + "=" * 70)
-    log(f"DONE — HDF5 conversion complete  ({total_min:.1f} min total)")
-    log("=" * 70)
-    log(f"  Train HDF5: {train_h5}  ({train_h5.stat().st_size / 1e9:.2f} GB)")
-    log(f"  Test  HDF5: {test_h5}   ({test_h5.stat().st_size / 1e9:.2f} GB)")
-    log("\nNext steps:")
-    log("  1. Verify HDF5 files (h5dump or python h5py read)")
-    log("  2. Run h5_dataset.py + train_denoising_vae_h5.py "
-        "(I'll write these next)")
-    log("=" * 70)
+    try:
+        convert_csv_to_h5(args.input_csv, args.output_h5, args.chunksize)
+    except (FileNotFoundError, ValueError) as exc:
+        sys.exit(f"ERROR: {exc}")
 
 
 if __name__ == "__main__":
