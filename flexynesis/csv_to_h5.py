@@ -74,10 +74,12 @@ def convert_csv_to_h5(src_csv, dst_h5, chunksize=DEFAULT_CHUNKSIZE):
     sample_ids = header_df.columns.tolist()
     n_samples = len(sample_ids)
 
-    feature_col = pd.read_csv(src_csv, usecols=[0])
-    feature_names = feature_col.iloc[:, 0].astype(str).tolist()
+    # Use index_col=0 to read the first column as the row index;
+    # `nrows=None` keeps it light because no value columns are loaded.
+    feature_index = pd.read_csv(src_csv, index_col=0, usecols=[0]).index
+    feature_names = feature_index.astype(str).tolist()
     n_features = len(feature_names)
-    del feature_col
+    del feature_index
 
     log(f"  {n_samples:,} samples x {n_features:,} features")
 
