@@ -45,6 +45,11 @@ jobs:
           curl -L -o lgggbm_tcga_pub_processed.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/lgggbm_tcga_pub_processed.tgz
           tar -xzvf lgggbm_tcga_pub_processed.tgz
 
+      - name: Download dataset1_h5
+        run: |
+          curl -L -o dataset1_h5.tgz https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis-benchmark-datasets/dataset1_h5.tgz
+          tar -xzvf dataset1_h5.tgz
+
       - name: Run DirectPred
         shell: bash -l {0}
         run: |
@@ -93,3 +98,8 @@ jobs:
           export FLEXYNESIS_CACHE=./dataset1
           flexynesis --data_path dataset1 --model_class GNN --target_variables Erlotinib --fusion_type intermediate --hpo_iter 1 --features_top_percentile 10 --log_transform False --data_types gex --outdir . --prefix erlotinib_gnn --early_stop_patience 3 --use_loss_weighting False --subsample 50
           flexynesis --pretrained_model erlotinib_gnn.final_model.pth --artifacts erlotinib_gnn.artifacts.joblib --data_path_test dataset1/test --target_variables Erlotinib
+
+      - name: Run DirectPred_HDF5
+        shell: bash -l {0}
+        run: |
+          flexynesis --data_path dataset1_h5 --model_class DirectPred --target_variables Erlotinib --hpo_iter 1 --features_top_percentile 5 --data_types gex,cnv
