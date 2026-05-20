@@ -1,4 +1,5 @@
 import argparse
+import glob
 import os
 import sys
 import time
@@ -1122,7 +1123,23 @@ def main():
         else:
             covariates = None
 
-        data_importer = DataImporter(
+        # Autodetect HDF5 inputs: if any modality is supplied as
+        # .h5 instead of .csv (in either the train/ or test/
+        # split), use the HDF5-backed loader. clin.csv is still
+        # required as CSV by the stock DataImporter.
+        h5_present = any(
+            glob.glob(os.path.join(args.data_path, split, f"{dt}.h5"))
+            for split in ("train", "test")
+            for dt in datatypes
+        )
+        if h5_present:
+            from .h5_dataloader import H5DataImporter as _DataImporter
+            print("[INFO] HDF5 modality files detected "
+                  "-- using H5DataImporter.")
+        else:
+            _DataImporter = DataImporter
+
+        data_importer = _DataImporter(
             path=args.data_path,
             data_types=datatypes,
             covariates=covariates,

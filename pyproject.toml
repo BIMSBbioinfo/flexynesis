@@ -47,7 +47,8 @@ dependencies = [
     "pot",
     "geomloss",
     "plotnine",
-    "safetensors"
+    "safetensors",
+    "h5py"
 ]
 
 [project.scripts]

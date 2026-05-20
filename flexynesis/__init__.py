@@ -67,6 +67,7 @@ main = LazyModule("main")
 models = LazyModule("models")
 feature_selection = LazyModule("feature_selection")
 utils = LazyModule("utils")
+csv_to_h5 = LazyModule("csv_to_h5")
 
 
 # Import commonly used classes directly for easy access
@@ -74,6 +75,12 @@ utils = LazyModule("utils")
 def _get_data_importer():
     """Lazy getter for DataImporter class."""
     return data.DataImporter
+
+
+def _get_h5_data_importer():
+    """Lazy getter for H5DataImporter class (HDF5-backed)."""
+    from .h5_dataloader import H5DataImporter
+    return H5DataImporter
 
 
 def _get_models():
@@ -90,5 +97,7 @@ __all__ = [
     "models",
     "feature_selection",
     "utils",
+    "csv_to_h5",
     "DataImporter",
+    "H5DataImporter",
 ]
