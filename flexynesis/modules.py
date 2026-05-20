@@ -175,8 +175,7 @@ class flexGCN(nn.Module):
         dropout_rate (float, optional): The dropout probability used for regularization. Defaults to 0.2.
         conv (str, optional): Type of convolution layer to use. Supported types
                               include 'GCN' for Graph Convolution Network,
-                              'GAT' for Graph Attention Network, 'SAGE' for
-                              GraphSAGE, and 'GC' for generic Graph Convolution.
+                              'SAGE' for GraphSAGE, and 'GC' for generic Graph Convolution.
                               Defaults to 'GC'.
         act (str, optional): Type of activation function to use. Supported types
                              include 'relu', 'sigmoid', 'leakyrelu', 'tanh',
@@ -187,7 +186,7 @@ class flexGCN(nn.Module):
 
     Example:
         >>> model = flexGCN(node_count=100, node_feature_count=5, node_embedding_dim=64, output_dim=10,
-                         num_convs=3, dropout_rate=0.3, conv='GAT', act='relu')
+                         num_convs=3, dropout_rate=0.3, conv='SAGE', act='relu')
         >>> output = model(input_features, edge_index)
         # Where `input_features` is a tensor of shape (batch_size, num_nodes, node_feature_count)
         # and `edge_index` is a list of edges in the COO format (2, num_edges).
