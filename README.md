@@ -90,6 +90,10 @@ In order to refer to our work, please cite our manuscript published at [Nature C
 
 - [Getting Started with Flexynesis](https://bimsbstatic.mdc-berlin.de/akalin/buyar/flexynesis/site/getting_started/)
 
+## Claude-Code or OpenCode
+
+- [Use Claude-Code or OpenCode to help you get started with Flexynesis](https://github.com/BIMSBbioinfo/flexynesis-guide)
+
 ## Jupyter notebooks for interactive usage
 
 - [Modeling Breast Cancer Subtypes](https://github.com/BIMSBbioinfo/flexynesis/blob/main/examples/tutorials/brca_subtypes.ipynb)
