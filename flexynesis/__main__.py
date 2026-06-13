@@ -958,31 +958,31 @@ def main():
         print(f"[INFO] Test dataset loaded: {len(test_dataset.samples)} samples")
 
     # Import evaluation utilities needed in the shared evaluation section below
-    import pandas as pd  # noqa: F401
+    import pandas as pd  
 
-    from .utils import evaluate_wrapper, get_predicted_labels  # noqa: F401
+    from .utils import evaluate_wrapper, get_predicted_labels  
 
     # Continue to evaluation section (skip training)
 
     # ------------- Heavy imports only when training or in inference with evaluation ---
     if not (args.pretrained_model and args.artifacts and args.data_path_test):
-        import json  # noqa: F401
-        import tracemalloc  # noqa: F401
+        import json  
+        import tracemalloc  
 
-        import torch  # noqa: F401
-        from safetensors.torch import save_file  # noqa: F401
+        import torch  
+        from safetensors.torch import save_file  # 
 
         # data + utils
-        from .data import (STRING, DataImporter,  # noqa: F401
+        from .data import (STRING, DataImporter,  
                            MultiOmicDatasetNW)
-        from .main import FineTuner, HyperparameterTuning  # noqa: F401
-        from .models.crossmodal_pred import CrossModalPred  # noqa: F401
+        from .main import HyperparameterTuning  
+        from .models.crossmodal_pred import CrossModalPred  
         # models
-        from .models.direct_pred import DirectPred  # noqa: F401
-        from .models.gnn_early import GNN  # noqa: F401
-        from .models.supervised_vae import supervised_vae  # noqa: F401
-        from .models.triplet_encoder import MultiTripletNetwork  # noqa: F401
-        from .utils import evaluate_baseline_performance  # noqa: F401
+        from .models.direct_pred import DirectPred  
+        from .models.gnn_early import GNN  
+        from .models.supervised_vae import supervised_vae  
+        from .models.triplet_encoder import MultiTripletNetwork  
+        from .utils import evaluate_baseline_performance  
         from .utils import (evaluate_baseline_survival_performance,
                             get_device_memory_info, get_optimal_device)
 
@@ -1161,7 +1161,7 @@ def main():
         # classical ML baselines
         if args.model_class == "XGBoost":
             try:
-                from xgboost import XGBClassifier  # noqa: F401
+                from xgboost import XGBClassifier  
             except Exception:
                 raise ImportError(
                     "XGBoost is not available. On macOS, install the OpenMP runtime: "
@@ -1308,31 +1308,33 @@ def main():
         # do a hyperparameter search training multiple models and get the best configuration
         model, best_params = tuner.perform_tuning(hpo_patience=args.hpo_patience)
 
-        # if fine-tuning is enabled; fine tune the model on a portion of test samples
-        if args.finetuning_samples > 0:
-            finetuneSampleN = args.finetuning_samples
-            print(
-                "[INFO] Finetuning the model on ",
-                finetuneSampleN,
-                "test samples",
-            )
-            # split test dataset into finetuning and holdout datasets
-            all_indices = range(len(test_dataset))
-            import random as _random
+    # if fine-tuning is enabled; fine tune the model on a portion of test samples
+    if args.finetuning_samples > 0:
+        from .main import FineTuner
 
-            finetune_indices = _random.sample(list(all_indices), finetuneSampleN)
-            holdout_indices = list(set(all_indices) - set(finetune_indices))
-            finetune_dataset = test_dataset.subset(finetune_indices)
-            holdout_dataset = test_dataset.subset(holdout_indices)
+        finetuneSampleN = args.finetuning_samples
+        print(
+            "[INFO] Finetuning the model on ",
+            finetuneSampleN,
+            "test samples",
+        )
+        # split test dataset into finetuning and holdout datasets
+        all_indices = range(len(test_dataset))
+        import random as _random
 
-            # fine tune on the finetuning dataset; freeze the encoders
-            finetuner = FineTuner(model, finetune_dataset)
-            finetuner.run_experiments()
+        finetune_indices = _random.sample(list(all_indices), finetuneSampleN)
+        holdout_indices = list(set(all_indices) - set(finetune_indices))
+        finetune_dataset = test_dataset.subset(finetune_indices)
+        holdout_dataset = test_dataset.subset(holdout_indices)
 
-            # update the model to finetuned model
-            model = finetuner.model
-            # update the test dataset to exclude finetuning samples
-            test_dataset = holdout_dataset
+        # fine tune on the finetuning dataset; freeze the encoders
+        finetuner = FineTuner(model, finetune_dataset)
+        finetuner.run_experiments()
+
+        # update the model to finetuned model
+        model = finetuner.model
+        # update the test dataset to exclude finetuning samples
+        test_dataset = holdout_dataset
 
     # get sample embeddings and save
     print("[INFO] Extracting sample embeddings")
@@ -1628,8 +1630,8 @@ def main():
                 print(f"[INFO] Wrote inference artifacts to {joblib_path}")
 
             elif args.safetensors:
-                import numpy as np  # noqa: F401
-                from sklearn.preprocessing import LabelEncoder  # noqa: F401
+                import numpy as np  
+                from sklearn.preprocessing import LabelEncoder  
                 from sklearn.preprocessing import (OrdinalEncoder,
                                                    StandardScaler)
 
