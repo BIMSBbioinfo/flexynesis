@@ -566,6 +566,11 @@ class FineTuner(pl.LightningModule):
         )
 
     def run_experiments(self):
+        import torch as _torch
+        _param = next(self.original_model.parameters(), None)
+        _current_device = _param.device if _param is not None else "unknown"
+        _cuda_available = _torch.cuda.is_available()
+        print(f"[INFO] FineTuner: model currently on device={_current_device}, cuda_available={_cuda_available}")
         val_loss_results = []
         for lr in self.learning_rates:
             for config in self.freeze_configs:

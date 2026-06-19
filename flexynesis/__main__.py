@@ -1327,12 +1327,25 @@ def main():
         finetune_dataset = test_dataset.subset(finetune_indices)
         holdout_dataset = test_dataset.subset(holdout_indices)
 
+        # Move model to best available device for finetuning
+        _ft_original_device = next(model.parameters()).device
+        if torch.cuda.is_available():
+            _ft_device = torch.device("cuda")
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            _ft_device = torch.device("mps")
+        else:
+            _ft_device = _ft_original_device
+        if _ft_device != _ft_original_device:
+            print(f"[INFO] Moving model to {_ft_device} for finetuning")
+            model.to(_ft_device)
+
         # fine tune on the finetuning dataset; freeze the encoders
         finetuner = FineTuner(model, finetune_dataset)
         finetuner.run_experiments()
 
-        # update the model to finetuned model
+        # update the model to finetuned model; restore original device for inference
         model = finetuner.model
+        model.to(_ft_original_device).eval()
         # update the test dataset to exclude finetuning samples
         test_dataset = holdout_dataset
 
@@ -1530,22 +1543,22 @@ def main():
                 index=False,
             )
 
-    # save the trained model in file (skip in inference mode)
-    if not in_infer:
+    # save the trained model in file; also save finetuned model when in inference mode
+    if not in_infer or args.finetuning_samples > 0:
         if not args.safetensors:
-            torch.save(
-                model,
-                os.path.join(args.outdir, ".".join([args.prefix, "final_model.pth"])),
-            )
+            model_path = os.path.join(args.outdir, ".".join([args.prefix, "final_model.pth"]))
+            torch.save(model, model_path)
         else:
-            save_file(
-                model.state_dict(),
-                os.path.join(
-                    args.outdir,
-                    ".".join([args.prefix, "final_model.safetensors"]),
-                ),
+            from safetensors.torch import save_file as _save_file
+            model_path = os.path.join(
+                args.outdir,
+                ".".join([args.prefix, "final_model.safetensors"]),
             )
+            _save_file(model.state_dict(), model_path)
+        if in_infer and args.finetuning_samples > 0:
+            print(f"[INFO] Finetuned model saved to {model_path}")
         # save model config as JSON
+        import json as _json
         config = {
             "model_class": model.__class__.__name__,
             "model_module": model.__class__.__module__,
@@ -1574,13 +1587,11 @@ def main():
             model_specific_config = model.config
             config.update(model_specific_config)
 
-        with open(
-            os.path.join(
-                args.outdir, ".".join([args.prefix, "final_model_config.json"])
-            ),
-            "w",
-        ) as f:
-            json.dump(config, f, indent=2, default=str)
+        config_path = os.path.join(
+            args.outdir, ".".join([args.prefix, "final_model_config.json"])
+        )
+        with open(config_path, "w") as f:
+            _json.dump(config, f, indent=2, default=str)
 
     # --- write inference artifacts joblib (auto-generated after training) ---
     if train_dataset is not None:  # Only save artifacts in training mode
