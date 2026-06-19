@@ -1374,14 +1374,14 @@ def main():
             else:
                 explainers = [args.feature_importance_method]
 
-            captum_sample_cap = 10000
+            captum_sample_cap = 50
             if len(train_dataset) > captum_sample_cap:
                 print(
                     f"[INFO] Subsampling {captum_sample_cap} of {len(train_dataset)} "
                     "training samples for Captum feature importance"
                 )
-                rng = np.random.default_rng(42)
-                captum_indices = rng.choice(len(train_dataset), size=captum_sample_cap, replace=False).tolist()
+                import random; random.seed(42)
+                captum_indices = random.sample(range(len(train_dataset)), captum_sample_cap)
                 captum_dataset = train_dataset.subset(captum_indices)
             else:
                 captum_dataset = train_dataset
