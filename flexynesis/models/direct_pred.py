@@ -487,10 +487,12 @@ class DirectPred(pl.LightningModule):
         else:
             num_class = len(np.unique([y[target_var] for _, y, _ in dataset]))
 
-        aggregated_attributions = [[] for _ in range(num_class)]
+        sum_attributions = [None for _ in range(num_class)]
+        n_samples_seen = 0
         for batch in dataloader:
             dat, _, _ = batch
             x_list = [to_device_safe(dat[x], device) for x in dat.keys()]
+            n_samples_seen += x_list[0].shape[0]
             input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
 
             if method == "IntegratedGradients":
@@ -519,7 +521,12 @@ class DirectPred(pl.LightningModule):
                         additional_forward_args=(target_var, steps_or_samples),
                         n_samples=steps_or_samples,
                     )
-                aggregated_attributions[0].append(attributions)
+                reduced = tuple(a.detach().cpu().abs().sum(dim=1) for a in attributions)
+                if sum_attributions[0] is None:
+                    sum_attributions[0] = list(reduced)
+                else:
+                    for _li in range(len(reduced)):
+                        sum_attributions[0][_li] = sum_attributions[0][_li] + reduced[_li]
             else:
                 for target_class in range(num_class):
                     # returns a tuple of tensors (one per data modality)
@@ -545,25 +552,14 @@ class DirectPred(pl.LightningModule):
                             target=target_class,
                             n_samples=steps_or_samples,
                         )
-                    aggregated_attributions[target_class].append(attributions)
-        # Post-process attributions
+                    reduced = tuple(a.detach().cpu().abs().sum(dim=1) for a in attributions)
+                    if sum_attributions[target_class] is None:
+                        sum_attributions[target_class] = list(reduced)
+                    else:
+                        for _li in range(len(reduced)):
+                            sum_attributions[target_class][_li] = sum_attributions[target_class][_li] + reduced[_li]
         layers = list(dataset.dat.keys())
-        num_layers = len(layers)
-        processed_attributions = []
-        for class_idx in range(len(aggregated_attributions)):
-            class_attr = aggregated_attributions[class_idx]
-            layer_attributions = []
-            for layer_idx in range(num_layers):
-                layer_tensors = [batch_attr[layer_idx] for batch_attr in class_attr]
-                attr_concat = torch.cat(layer_tensors, dim=1)
-                layer_attributions.append(attr_concat)
-            processed_attributions.append(layer_attributions)
-
-        abs_attr = [
-            [torch.abs(a).cpu() for a in attr_class]
-            for attr_class in processed_attributions
-        ]
-        imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
+        imp = [[a / n_samples_seen for a in class_sums] for class_sums in sum_attributions]
         self.to("cpu")
 
         # Combine results into a DataFrame
