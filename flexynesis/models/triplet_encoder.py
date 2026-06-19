@@ -3,6 +3,7 @@ import itertools
 
 import lightning as pl
 import numpy as np
+from tqdm import tqdm
 import pandas as pd
 import torch
 from captum.attr import GradientShap, IntegratedGradients
@@ -473,7 +474,7 @@ class MultiTripletNetwork(pl.LightningModule):
         target_var,
         method="IntegratedGradients",
         steps_or_samples=5,
-        batch_size=64,
+        batch_size=512,
     ):
         """
         Computes the feature importance for each variable in the dataset using
@@ -537,7 +538,7 @@ class MultiTripletNetwork(pl.LightningModule):
 
         sum_attributions = [None for _ in range(num_class)]
         n_samples_seen = 0
-        for batch in dataloader:
+        for batch in tqdm(dataloader, desc=f"IG attributions [{target_var}]"):
             # see training_step to see how elements are accessed in batches
             anchor, positive, negative = (
                 batch[0],

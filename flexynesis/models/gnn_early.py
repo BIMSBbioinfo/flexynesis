@@ -1,5 +1,6 @@
 import lightning as pl
 import numpy as np
+from tqdm import tqdm
 import pandas as pd
 import torch
 from captum.attr import GradientShap, IntegratedGradients
@@ -442,7 +443,7 @@ class GNN(pl.LightningModule):
         target_var,
         method="IntegratedGradients",
         steps_or_samples=5,
-        batch_size=64,
+        batch_size=512,
     ):
         """
         Computes the feature importance for each variable in the dataset
@@ -510,7 +511,7 @@ class GNN(pl.LightningModule):
 
         sum_attributions = [None for _ in range(num_class)]
         n_samples_seen = 0
-        for batch in dataloader:
+        for batch in tqdm(dataloader, desc=f"IG attributions [{target_var}]"):
             x, y_dict, samples = batch
 
             # Ensure input data is on the correct device
