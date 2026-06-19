@@ -467,7 +467,7 @@ class DataImporter:
         return dat, ann, samples
 
     # unsupervised feature selection using laplacian score and correlation filters (optional)
-    def select_features(self, dat):
+    def select_features(self, dat, laplacian_sample_cap=10000):
         counts = {
             x: max(
                 int(dat[x].shape[0] * self.top_percentile / 100),
@@ -478,15 +478,25 @@ class DataImporter:
         dat_filtered = {}
         feature_logs = {}  # feature log for each layer
         for layer in dat.keys():
-            # filter features in the layer and keep a log of filtering process; notice we provide a transposed matrix
-            X_filt, log_df = filter_by_laplacian(
-                X=dat[layer].T,
+            X = dat[layer].T  # shape: (samples, features)
+            # subsample rows for Laplacian scoring when the dataset is large
+            if X.shape[0] > laplacian_sample_cap:
+                print(
+                    f"[INFO] Subsampling {laplacian_sample_cap} of {X.shape[0]} samples "
+                    f"for Laplacian scoring in layer '{layer}'"
+                )
+                X_score = X.sample(n=laplacian_sample_cap, random_state=42)
+            else:
+                X_score = X
+            _, log_df = filter_by_laplacian(
+                X=X_score,
                 layer=layer,
                 topN=counts[layer],
                 correlation_threshold=self.correlation_threshold,
             )
-            dat_filtered[layer] = X_filt.T  # transpose after laplacian filtering again
-            # Features will be stored after concatenation
+            # apply the ranked feature list to the full (unsubsampled) matrix
+            selected = log_df.loc[log_df["selected"] == True, "feature"] if "selected" in log_df.columns else log_df["feature"]
+            dat_filtered[layer] = X[selected].T
             feature_logs[layer] = log_df
         # update main feature logs with events from this function
         self.feature_logs["select_features"] = feature_logs
