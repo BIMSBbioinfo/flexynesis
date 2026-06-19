@@ -22,36 +22,30 @@ def laplacian_score(X, k=5, t=None):
     """
     n_samples, n_features = X.shape
 
-    # Compute the pairwise Euclidean distance matrix
-    dist_matrix = squareform(pdist(X))
-
     # Calculate the k-nearest neighbors adjacency matrix
     W = kneighbors_graph(X, k, mode="connectivity", include_self=True)
 
-    # Compute the heat kernel (optional)
+    # only compute pairwise distances when the heat kernel is requested
     if t is not None:
+        dist_matrix = squareform(pdist(X))
         W = csr_matrix(np.exp(-(dist_matrix**2) / t))
 
     # Normalize the adjacency matrix
-    D = np.array(W.sum(axis=1)).flatten()
-    D_inv_sqrt = diags(1.0 / np.sqrt(D))
+    D_vec = np.array(W.sum(axis=1)).flatten()
+    D_inv_sqrt = diags(1.0 / np.sqrt(D_vec))
+    S = (D_inv_sqrt @ W @ D_inv_sqrt).toarray()
 
-    S = D_inv_sqrt @ W @ D_inv_sqrt
-    S = S.toarray()
-
-    # Compute the Laplacian matrix
     L = csgraph.laplacian(W, normed=True)
+    D = diags(D_vec)
 
-    # Calculate Laplacian Score for each feature
-    scores = []
-    D = diags(D)  # Convert to sparse diagonal matrix for efficient dot product
-    for i in tqdm(range(n_features), desc="Calculating Laplacian scores"):
-        fi = X[:, i]
-        fi = fi - np.dot(S, fi).sum() / n_samples
-        L_score = np.dot(fi.T, L @ fi) / np.dot(fi.T, D @ fi)
-        scores.append(L_score)
+    # Vectorized: center all features at once, then compute
+    # diag(F.T @ L @ F) / diag(F.T @ D @ F) without a Python loop
+    F = X - (S @ X).sum(axis=0) / n_samples
+    LF = np.asarray(L @ F)
+    DF = np.asarray(D @ F)
+    scores = (F * LF).sum(axis=0) / (F * DF).sum(axis=0)
 
-    return np.array(scores)
+    return scores
 
 
 def remove_redundant_features(X, laplacian_scores, threshold, topN=None):
