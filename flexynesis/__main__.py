@@ -1374,6 +1374,18 @@ def main():
             else:
                 explainers = [args.feature_importance_method]
 
+            captum_sample_cap = 10000
+            if len(train_dataset) > captum_sample_cap:
+                print(
+                    f"[INFO] Subsampling {captum_sample_cap} of {len(train_dataset)} "
+                    "training samples for Captum feature importance"
+                )
+                rng = np.random.default_rng(42)
+                captum_indices = rng.choice(len(train_dataset), size=captum_sample_cap, replace=False).tolist()
+                captum_dataset = train_dataset.subset(captum_indices)
+            else:
+                captum_dataset = train_dataset
+
             for explainer in explainers:
                 print(
                     "[INFO] Computing variable importance scores using explainer: ",
@@ -1381,7 +1393,7 @@ def main():
                 )
                 for var in model.target_variables:
                     model.compute_feature_importance(
-                        train_dataset,
+                        captum_dataset,
                         var,
                         steps_or_samples=25,
                         method=explainer,
