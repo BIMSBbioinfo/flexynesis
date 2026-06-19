@@ -508,12 +508,14 @@ class GNN(pl.LightningModule):
             )
         # MPS and CPU don't have detailed memory tracking like CUDA
 
-        aggregated_attributions = [[] for _ in range(num_class)]
+        sum_attributions = [None for _ in range(num_class)]
+        n_samples_seen = 0
         for batch in dataloader:
             x, y_dict, samples = batch
 
             # Ensure input data is on the correct device
             x = to_device_safe(x, device)
+            n_samples_seen += x.shape[0]
             input_data = x.unsqueeze(0).requires_grad_()
             baseline = torch.zeros_like(input_data)
             # Ensure input data is float32 for MPS compatibility
@@ -545,7 +547,11 @@ class GNN(pl.LightningModule):
                         additional_forward_args=(target_var, steps_or_samples),
                         n_samples=steps_or_samples,
                     )
-                aggregated_attributions[0].append(attributions)
+                reduced = attributions.detach().cpu().abs().sum(dim=1)
+                if sum_attributions[0] is None:
+                    sum_attributions[0] = reduced
+                else:
+                    sum_attributions[0] = sum_attributions[0] + reduced
             else:
                 for target_class in range(num_class):
                     if method == "IntegratedGradients":
@@ -570,22 +576,12 @@ class GNN(pl.LightningModule):
                             target=target_class,
                             n_samples=steps_or_samples,
                         )
-                    aggregated_attributions[target_class].append(attributions)
-        # For each target class concatenate node attributions accross batches
-        processed_attributions = []
-        # Process each class
-        for class_idx in range(len(aggregated_attributions)):
-            class_attr = aggregated_attributions[class_idx]
-            # Concatenate tensors along the batch dimension
-            attr_concat = torch.cat([batch_attr for batch_attr in class_attr], dim=1)
-            processed_attributions.append(attr_concat)
-
-        # compute absolute importance and move to cpu
-        abs_attr = [
-            torch.abs(attr_class).cpu() for attr_class in processed_attributions
-        ]
-        # average over samples
-        imp = [a.mean(dim=1) for a in abs_attr]
+                    reduced = attributions.detach().cpu().abs().sum(dim=1)
+                    if sum_attributions[target_class] is None:
+                        sum_attributions[target_class] = reduced
+                    else:
+                        sum_attributions[target_class] = sum_attributions[target_class] + reduced
+        imp = [a / n_samples_seen for a in sum_attributions]
 
         # move the model also back to cpu (if not already on cpu)
         self.to("cpu")

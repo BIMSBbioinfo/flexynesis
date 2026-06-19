@@ -616,11 +616,13 @@ class CrossModalPred(pl.LightningModule):
 
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-        aggregated_attributions = [[] for _ in range(num_class)]
+        sum_attributions = [None for _ in range(num_class)]
+        n_samples_seen = 0
 
         for batch in dataloader:
             dat, _, _ = batch
             x_list = [to_device_safe(dat[x], device) for x in self.input_layers]
+            n_samples_seen += x_list[0].shape[0]
             input_data = tuple([data.unsqueeze(0).requires_grad_() for data in x_list])
 
             if method == "IntegratedGradients":
@@ -649,7 +651,12 @@ class CrossModalPred(pl.LightningModule):
                         additional_forward_args=(target_var, steps_or_samples),
                         n_samples=steps_or_samples,
                     )
-                aggregated_attributions[0].append(attributions)
+                reduced = tuple(a.detach().cpu().abs().sum(dim=1) for a in attributions)
+                if sum_attributions[0] is None:
+                    sum_attributions[0] = list(reduced)
+                else:
+                    for _li in range(len(reduced)):
+                        sum_attributions[0][_li] = sum_attributions[0][_li] + reduced[_li]
             else:
                 for target_class in range(num_class):
                     # returns a tuple of tensors (one per data modality)
@@ -675,34 +682,15 @@ class CrossModalPred(pl.LightningModule):
                             target=target_class,
                             n_samples=steps_or_samples,
                         )
-                    aggregated_attributions[target_class].append(attributions)
+                    reduced = tuple(a.detach().cpu().abs().sum(dim=1) for a in attributions)
+                    if sum_attributions[target_class] is None:
+                        sum_attributions[target_class] = list(reduced)
+                    else:
+                        for _li in range(len(reduced)):
+                            sum_attributions[target_class][_li] = sum_attributions[target_class][_li] + reduced[_li]
 
-        # For each target class and for each data modality/layer, concatenate attributions accross batches
         layers = list(self.input_layers)
-        num_layers = len(layers)
-        processed_attributions = []
-        # Process each class
-        for class_idx in range(len(aggregated_attributions)):
-            class_attr = aggregated_attributions[class_idx]
-            layer_attributions = []
-            # Process each layer within the class
-            for layer_idx in range(num_layers):
-                # Extract all batch tensors for this layer across all batches for the current class
-                layer_tensors = [batch_attr[layer_idx] for batch_attr in class_attr]
-                # Concatenate tensors along the batch dimension
-                attr_concat = torch.cat(layer_tensors, dim=1)
-                layer_attributions.append(attr_concat)
-            processed_attributions.append(layer_attributions)
-
-        # summarize feature importances
-        # Compute absolute attributions
-        # Move the processed tensors to CPU for further operations that are not supported on GPU
-        abs_attr = [
-            [torch.abs(a).cpu() for a in attr_class]
-            for attr_class in processed_attributions
-        ]
-        # average over samples
-        imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
+        imp = [[a / n_samples_seen for a in class_sums] for class_sums in sum_attributions]
 
         # move the model also back to cpu (if not already on cpu)
         self.to("cpu")

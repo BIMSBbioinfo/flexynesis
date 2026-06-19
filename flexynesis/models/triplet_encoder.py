@@ -535,7 +535,8 @@ class MultiTripletNetwork(pl.LightningModule):
         else:
             num_class = len(np.unique([y[target_var] for _, y, _ in dataset]))
 
-        aggregated_attributions = [[] for _ in range(num_class)]
+        sum_attributions = [None for _ in range(num_class)]
+        n_samples_seen = 0
         for batch in dataloader:
             # see training_step to see how elements are accessed in batches
             anchor, positive, negative = (
@@ -550,6 +551,7 @@ class MultiTripletNetwork(pl.LightningModule):
             negative = {k: to_device_safe(v, device) for k, v in negative.items()}
 
             anchor = [data.requires_grad_() for data in list(anchor.values())]
+            n_samples_seen += anchor[0].shape[0]
             positive = [data.requires_grad_() for data in list(positive.values())]
             negative = [data.requires_grad_() for data in list(negative.values())]
 
@@ -599,7 +601,13 @@ class MultiTripletNetwork(pl.LightningModule):
                         n_samples=steps_or_samples,
                     )
                     attributions = attributions.split(layer_sizes, dim=3)
-                aggregated_attributions[0].append(attributions)
+                # attributions shape: (1, 3, batch_size, layer_features) per layer after split
+                reduced = tuple(a.detach().cpu().abs().squeeze(0).sum(dim=1) for a in attributions)
+                if sum_attributions[0] is None:
+                    sum_attributions[0] = list(reduced)
+                else:
+                    for _li in range(len(reduced)):
+                        sum_attributions[0][_li] = sum_attributions[0][_li] + reduced[_li]
             else:
                 for target_class in range(num_class):
                     if method == "IntegratedGradients":
@@ -628,33 +636,15 @@ class MultiTripletNetwork(pl.LightningModule):
                             n_samples=steps_or_samples,
                         )
                         attributions = attributions.split(layer_sizes, dim=3)
-                    aggregated_attributions[target_class].append(attributions)
+                    reduced = tuple(a.detach().cpu().abs().squeeze(0).sum(dim=1) for a in attributions)
+                    if sum_attributions[target_class] is None:
+                        sum_attributions[target_class] = list(reduced)
+                    else:
+                        for _li in range(len(reduced)):
+                            sum_attributions[target_class][_li] = sum_attributions[target_class][_li] + reduced[_li]
 
-        # For each target class and for each data modality/layer, concatenate attributions accross batches
         layers = self.layers
-        num_layers = len(layers)
-        processed_attributions = []
-        # Process each class
-        for class_idx in range(len(aggregated_attributions)):
-            class_attr = aggregated_attributions[class_idx]
-            layer_attributions = []
-            # Process each layer within the class
-            for layer_idx in range(num_layers):
-                # Extract all batch tensors for this layer across all batches for the current class
-                layer_tensors = [batch_attr[layer_idx] for batch_attr in class_attr]
-                # Concatenate tensors along the batch dimension
-                attr_concat = torch.cat(layer_tensors, dim=2)
-                layer_attributions.append(attr_concat)
-            processed_attributions.append(layer_attributions)
-
-        # compute absolute importance and move to cpu
-        # notice the squeeze (due to triplets)
-        abs_attr = [
-            [torch.abs(a.squeeze()).cpu() for a in attr_class]
-            for attr_class in processed_attributions
-        ]
-        # average over samples
-        imp = [[a.mean(dim=1) for a in attr_class] for attr_class in abs_attr]
+        imp = [[a / n_samples_seen for a in class_sums] for class_sums in sum_attributions]
         # move the model also back to cpu (if not already on cpu)
         self.to("cpu")
         df_list = []
