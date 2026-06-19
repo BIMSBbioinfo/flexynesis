@@ -1374,7 +1374,7 @@ def main():
             else:
                 explainers = [args.feature_importance_method]
 
-            captum_sample_cap = 50
+            captum_sample_cap = 10000
             if len(train_dataset) > captum_sample_cap:
                 print(
                     f"[INFO] Subsampling {captum_sample_cap} of {len(train_dataset)} "
