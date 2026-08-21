@@ -206,13 +206,14 @@ class HyperparameterTuning:
         # we don't do early stopping
         early_stop_callback = None
         if self.early_stop_patience > 0 and not full_train:
-            early_stop_callback = self.init_early_stopping()
+            early_stop_callback = self.init_early_stopping(params)
             mycallbacks.append(early_stop_callback)
 
         trainer = pl.Trainer(
             # deterministic = True,
             # precision = '16-mixed', # mixed precision training
             max_epochs=int(params["epochs"]),
+            min_epochs=self.min_epochs_for(params),
             gradient_clip_val=1.0,
             gradient_clip_algorithm="norm",
             log_every_n_steps=5,
@@ -417,7 +418,7 @@ class HyperparameterTuning:
 
         return best_model, best_params_dict
 
-    def init_early_stopping(self):
+    def init_early_stopping(self, params=None):
         """Initialize the early stopping callback."""
         return EarlyStopping(
             monitor="val_loss",
@@ -425,6 +426,38 @@ class HyperparameterTuning:
             verbose=False,
             mode="min",
         )
+
+    def min_epochs_for(self, params):
+        """Minimum epochs to train before EarlyStopping is allowed to stop training.
+
+        For DeepTSP, this floors training at (an estimate of) the epoch its
+        GlobalPairPruner finishes hard-pruning down to target_k: each pruning
+        step changes the model's capacity discontinuously and can cause a
+        transient validation-loss dip, which would otherwise count against
+        EarlyStopping's patience and could stop training before the pruning
+        schedule even converges. Deliberately uses Trainer's own `min_epochs`
+        rather than inflating `patience`: patience counts consecutive
+        non-improving epochs from whenever the last improvement happened, not
+        from epoch 0, so adding the pruning schedule's length on top of it can
+        consume most of the remaining epoch budget once pruning actually
+        converges and effectively disable early stopping. `min_epochs` is a
+        hard floor on training length instead, leaving `patience` exactly as
+        the user requested for use once that floor is reached.
+
+        The floor mirrors GlobalPairPruner.adaptive()'s own n_rounds
+        calculation (same prune_every/pruning_budget_frac/epochs), plus a
+        small margin: `.adaptive()`'s derived prune_fraction assumes
+        continuous (non-integer) decay, but each round floors the number of
+        pairs actually pruned, so real convergence to target_k consistently
+        lands a round or two past this nominal estimate.
+        """
+        if self.model_class.__name__ != "DeepTSP":
+            return 0
+        prune_every = int(params.get("prune_every", 5))
+        pruning_budget_frac = float(params.get("pruning_budget_frac", 0.5))
+        n_epochs = int(params["epochs"])
+        n_rounds = max(1, int((n_epochs * pruning_budget_frac) // prune_every))
+        return min(n_epochs, (n_rounds + 2) * prune_every)
 
     def load_and_convert_config(self, config_path):
         # Ensure the config file exists

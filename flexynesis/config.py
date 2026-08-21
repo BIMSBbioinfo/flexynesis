@@ -49,4 +49,12 @@ search_spaces = {
         Categorical(epochs, name="epochs"),
         Categorical(["relu"], name="activation"),
     ],
+    "DeepTSP": [
+        Integer(8, 64, name="hidden_dim"),  # SetEncoder hidden layer width
+        Real(0.0001, 0.01, prior="log-uniform", name="lr"),
+        Categorical(epochs, name="epochs"),
+        Integer(5, 50, name="target_k"),  # total surviving pairs, tied to assay budget
+        Integer(2, 10, name="prune_every"),  # epochs between hard-pruning rounds
+        Integer(10, 100, name="max_genes_per_set"),  # per-set Laplacian cap
+    ],
 }

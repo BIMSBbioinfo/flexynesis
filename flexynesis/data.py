@@ -38,6 +38,12 @@ class DataImporter:
         string_organism (int): STRING organism (species) id (default: 9606 (human)).
         string_node_name (str): The type of node names used in the graph.
             Available options: "gene_name", "gene_id" (default: "gene_name").
+        skip_normalization (bool): If True, skip the log-transform and standard-scaling
+            normalization step entirely. The caller (currently only the DeepTSP model
+            class) is responsible for supplying data that is already appropriately
+            scaled (e.g. already log2-transformed) -- flexynesis will pass it through
+            completely unchanged. Defaults to False, so every other model class's
+            behavior is unaffected.
     Methods:
         import_data():
             The primary method to orchestrate the data import and preprocessing workflow. It follows these steps:
@@ -104,6 +110,7 @@ class DataImporter:
         variance_threshold=0.01,
         na_threshold=0.1,
         downsample=0,
+        skip_normalization=False,
     ):
         self.path = path
         self.data_types = data_types
@@ -115,6 +122,7 @@ class DataImporter:
         self.variance_threshold = variance_threshold
         self.na_threshold = na_threshold
         self.log_transform = log_transform
+        self.skip_normalization = skip_normalization
         # Initialize a dictionary to store the label encoders
         self.encoders = {}  # used if labels are categorical
         # initialize data scalers
@@ -200,16 +208,21 @@ class DataImporter:
         # harmonize feature sets in train/test
         train_dat, test_dat = self.harmonize(train_dat, test_dat)
 
-        # log_transform
-        if self.log_transform:
-            print("[INFO] transforming data to log scale")
-            train_dat = self.transform_data(train_dat)
-            test_dat = self.transform_data(test_dat)
+        # log_transform + normalization -- skipped entirely when skip_normalization
+        # is set (currently only by the DeepTSP model class), in which case the
+        # caller is responsible for supplying data that's already appropriately
+        # scaled (e.g. already log2-transformed); flexynesis passes it through
+        # unchanged and self.scalers stays None.
+        if not self.skip_normalization:
+            if self.log_transform:
+                print("[INFO] transforming data to log scale")
+                train_dat = self.transform_data(train_dat)
+                test_dat = self.transform_data(test_dat)
 
-        # Normalize the training data (for testing data, use normalisation factors
-        # learned from training data to apply on test data (see fit = False)
-        train_dat = self.normalize_data(train_dat, scaler_type="standard", fit=True)
-        test_dat = self.normalize_data(test_dat, scaler_type="standard", fit=False)
+            # Normalize the training data (for testing data, use normalisation factors
+            # learned from training data to apply on test data (see fit = False)
+            train_dat = self.normalize_data(train_dat, scaler_type="standard", fit=True)
+            test_dat = self.normalize_data(test_dat, scaler_type="standard", fit=False)
 
         # if covariates are defined, create a covariate matrix and add to the dictionary of data matrices
         if self.covariates:
@@ -708,6 +721,11 @@ class DataImporterInference:
         self.scalers = self.artifacts.get(
             "transforms", self.artifacts.get("scalers", {})
         )
+        if self.scalers is None:
+            # skip_normalization=True at training time (e.g. DeepTSP) means no
+            # scaler was ever fit; treat as "no scaler for any modality" rather
+            # than crashing on None lookups below.
+            self.scalers = {}
         self.label_encoders = self.artifacts.get("label_encoders", {})
         self.modalities = self.artifacts.get(
             "data_types", self.artifacts.get("modalities", [])
@@ -767,9 +785,16 @@ class DataImporterInference:
             # We need samples as rows, features as columns
             df = df.T
 
-            # Filter to expected features from training
-            # ALWAYS use scaler's feature_names_in_ to ensure correct order
-            expected_features = list(self.scalers[modality].feature_names_in_)
+            # Filter to expected features from training. Prefer the scaler's
+            # feature_names_in_ (guarantees the order matches what the scaler
+            # was fit on); fall back to the stored feature list when no scaler
+            # was fit for this modality (skip_normalization=True at training
+            # time, e.g. DeepTSP).
+            scaler = self.scalers.get(modality)
+            if scaler is not None:
+                expected_features = list(scaler.feature_names_in_)
+            else:
+                expected_features = list(self.feature_names[modality])
 
             # Check for missing or extra features
             missing = set(expected_features) - set(df.columns)
@@ -789,11 +814,16 @@ class DataImporterInference:
             # Select only expected features in correct order
             df = df[expected_features]
 
-            # Apply scaling
-            scaler = self.scalers[modality]
-            df_scaled = pd.DataFrame(
-                scaler.transform(df.values), index=df.index, columns=df.columns
-            )
+            # Apply scaling if a scaler was fit for this modality; otherwise the
+            # caller (e.g. DeepTSP with skip_normalization=True) is responsible
+            # for supplying already-appropriately-scaled input, and values pass
+            # through unchanged, matching training-time behavior.
+            if scaler is not None:
+                df_scaled = pd.DataFrame(
+                    scaler.transform(df.values), index=df.index, columns=df.columns
+                )
+            else:
+                df_scaled = df
 
             # Store as DataFrame for cross-modality intersection
             test_data[modality] = df_scaled
@@ -888,9 +918,14 @@ class DataImporterInference:
         # For early fusion, get features from scalers since feature_lists only has 'all'
         if self.modalities == ["all"]:
             modalities_for_features = self.artifacts.get("original_modalities", [])
-            # Get features from scalers for each modality
+            # Get features from scalers for each modality; fall back to the
+            # stored feature list when no scaler was fit (skip_normalization=True).
             features = {
-                modality: list(self.scalers[modality].feature_names_in_)
+                modality: (
+                    list(self.scalers[modality].feature_names_in_)
+                    if self.scalers.get(modality) is not None
+                    else list(self.feature_names.get(modality, []))
+                )
                 for modality in modalities_for_features
             }
         else:

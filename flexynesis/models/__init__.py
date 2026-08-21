@@ -1,4 +1,5 @@
 from .crossmodal_pred import CrossModalPred
+from .deep_tsp import DeepTSP
 from .direct_pred import DirectPred
 from .gnn_early import GNN
 from .supervised_vae import supervised_vae
@@ -10,4 +11,5 @@ __all__ = [
     "MultiTripletNetwork",
     "CrossModalPred",
     "GNN",
+    "DeepTSP",
 ]

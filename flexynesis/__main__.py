@@ -525,6 +525,7 @@ def main():
             "MultiTripletNetwork",
             "CrossModalPred",
             "GNN",
+            "DeepTSP",
             "RandomForest",
             "SVM",
             "XGBoost",
@@ -651,6 +652,14 @@ def main():
         default=None,
         help="If model_class is set to CrossModalPred, choose which data types to "
         "use as output/decoded layers. Comma-separated if multiple",
+    )
+    parser.add_argument(
+        "--gene_sets_path",
+        type=str,
+        default=None,
+        help="Path to a standard-GMT-format gene-set file (tab-separated: name, "
+        "description, then one gene per remaining field). Required when "
+        "--model_class is set to DeepTSP.",
     )
     parser.add_argument(
         "--outdir",
@@ -976,10 +985,11 @@ def main():
         from .data import (STRING, DataImporter,  
                            MultiOmicDatasetNW)
         from .main import HyperparameterTuning  
-        from .models.crossmodal_pred import CrossModalPred  
+        from .models.crossmodal_pred import CrossModalPred
         # models
-        from .models.direct_pred import DirectPred  
-        from .models.gnn_early import GNN  
+        from .models.deep_tsp import DeepTSP
+        from .models.direct_pred import DirectPred
+        from .models.gnn_early import GNN
         from .models.supervised_vae import supervised_vae  
         from .models.triplet_encoder import MultiTripletNetwork  
         from .utils import evaluate_baseline_performance  
@@ -1010,6 +1020,12 @@ def main():
                     "The 'CrossModalPred' model cannot be used with early fusion "
                     "type. Use --fusion_type intermediate instead."
                 )
+
+        # 3b. DeepTSP requires a gene-set file
+        if args.model_class == "DeepTSP" and not args.gene_sets_path:
+            parser.error(
+                "--gene_sets_path is required when --model_class DeepTSP is selected."
+            )
 
         # 4. Handle device selection with MPS support
         # Support legacy --use_gpu flag for backward compatibility
@@ -1062,6 +1078,11 @@ def main():
         input_layers = args.input_layers
         output_layers = args.output_layers
         datatypes = args.data_types.strip().split(",")
+        if args.model_class == "DeepTSP" and len(datatypes) > 1:
+            parser.error(
+                f"--model_class DeepTSP only supports a single data modality; "
+                f"--data_types resolved to {len(datatypes)} modalities: {datatypes}."
+            )
         if args.model_class == "CrossModalPred":
             if args.input_layers:
                 input_layers = input_layers.strip().split(",")
@@ -1095,6 +1116,7 @@ def main():
             ),
             "CrossModalPred": (CrossModalPred, "CrossModalPred"),
             "GNN": (GNN, "GNN"),
+            "DeepTSP": (DeepTSP, "DeepTSP"),
             "RandomForest": ("RandomForest", None),
             "XGBoost": ("XGBoost", None),
             "SVM": ("SVM", None),
@@ -1152,6 +1174,7 @@ def main():
             top_percentile=args.features_top_percentile,
             processed_dir="_".join(["processed", args.prefix]),
             downsample=args.subsample,
+            skip_normalization=(args.model_class == "DeepTSP"),
         )
 
         # import data
@@ -1305,6 +1328,14 @@ def main():
             num_workers=args.num_workers,
         )
 
+        # DeepTSP needs a fixed (non-tuned) gene-set file path threaded through
+        # to its `config` dict; append it to the search space the same way
+        # HyperparameterTuning itself appends the batch_size dimension.
+        if args.model_class == "DeepTSP":
+            from skopt.space import Categorical as _Categorical
+
+            tuner.space.append(_Categorical([args.gene_sets_path], name="gene_sets_path"))
+
         # do a hyperparameter search training multiple models and get the best configuration
         model, best_params = tuner.perform_tuning(hpo_patience=args.hpo_patience)
 
@@ -1368,8 +1399,13 @@ def main():
         if (
             not args.disable_marker_finding and train_dataset is not None
         ):  # unless marker discovery is disabled
-            # compute feature importance values
-            if args.feature_importance_method == "Both":
+            # compute feature importance values. DeepTSP doesn't use Captum at
+            # all (see DeepTSP.compute_feature_importance) -- --feature_importance_method
+            # is a Captum-specific option and doesn't apply, so it's ignored and a
+            # single, accurately-named explainer pass is run instead.
+            if args.model_class == "DeepTSP":
+                explainers = ["attentionweight"]
+            elif args.feature_importance_method == "Both":
                 explainers = ["IntegratedGradients", "GradientShap"]
             else:
                 explainers = [args.feature_importance_method]
