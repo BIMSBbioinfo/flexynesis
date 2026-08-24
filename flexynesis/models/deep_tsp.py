@@ -139,6 +139,12 @@ class GlobalPairPruner:
     exact total pair count (`target_k`). Runs between optimizer steps (see
     `DeepTSP.on_train_epoch_end`), not inside forward -- it's a discrete op on
     the persistent `pruned_mask` buffer, not meant to be differentiable.
+
+    Ranking is each pair's within-set sparsemax weight scaled by its gene
+    set's fusion attention (mean across classes), so pairs from sets the
+    model relies on for the final prediction are favored over pairs that
+    merely won local within-set competition in a set the fusion layer
+    barely attends to.
     """
 
     def __init__(self, model, target_k: int, prune_every: int = 5, prune_fraction: float = 0.2):
@@ -174,12 +180,20 @@ class GlobalPairPruner:
         n_to_prune = min(int(n_active * self.prune_fraction), n_active - self.target_k)
         if n_to_prune <= 0:
             return n_active
+
+        # Cross-set comparison needs a common scale: a pair's own sparsemax weight only
+        # reflects local competition within its set, not whether that set matters to the
+        # final prediction, so scale by the set's fusion attention (mean across classes)
+        # before pooling and sorting globally.
+        set_attention = torch.softmax(self.model.fusion.attention_logits.detach(), dim=0).mean(dim=1)
+        set_weight = dict(zip(self.model.set_names, set_attention.tolist()))
+
         scored = []
         for set_name, gate in self.model.gates.items():
             weights = gate.gate_weights().detach()
             for pair_idx in torch.nonzero(gate.pruned_mask, as_tuple=True)[0].tolist():
-                scored.append((weights[pair_idx].item(), set_name, pair_idx))
-        scored.sort(key=lambda x: x[0])
+                scored.append((weights[pair_idx].item() * set_weight[set_name], set_name, pair_idx))
+        scored.sort(key=lambda x: x[0])  # lowest attention-weighted score first
         for _, set_name, pair_idx in scored[:n_to_prune]:
             self.model.gates[set_name].pruned_mask[pair_idx] = False
         return self.n_active_pairs()
