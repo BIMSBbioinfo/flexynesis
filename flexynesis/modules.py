@@ -319,6 +319,17 @@ class flexGCN(nn.Module):
 
         Kept separate from the readout so auxiliary heads that work per node
         (e.g. GraphMAEHead) can reuse the same encoder pass.
+
+        Args:
+            x (torch.Tensor): Node features of shape (batch, node_count, node_feature_count).
+            edge_index (torch.Tensor): Graph connectivity in COO format.
+            edge_weight (torch.Tensor, optional): Edge weights; only used by
+                convolution types that support them (a warning is issued and the
+                weights are ignored otherwise).
+
+        Returns:
+            torch.Tensor: Per-node embeddings of shape
+                (batch, node_count, node_embedding_dim).
         """
         if edge_weight is not None and not self.supports_edge_weight:
             warnings.warn(
@@ -338,7 +349,19 @@ class flexGCN(nn.Module):
         return x
 
     def pool(self, x):
-        """Reduce the per-node embeddings to one vector per graph/sample."""
+        """Reduce the per-node embeddings to one vector per graph/sample.
+
+        The reduction follows ``self.readout`` (mean/sum/max/attention/
+        dim_attention/flatten/meanmax) and the pooled vector is projected
+        through ``self.fc`` into the latent space of size ``output_dim``.
+
+        Args:
+            x (torch.Tensor): Per-node embeddings of shape
+                (batch, node_count, node_embedding_dim).
+
+        Returns:
+            torch.Tensor: Pooled embedding of shape (batch, output_dim).
+        """
         if self.readout == "mean":
             x = x.mean(dim=1)
         elif self.readout == "sum":
@@ -431,6 +454,18 @@ class GraphMAEHead(nn.Module):
 
         The subset is drawn per sample, so a node is hidden in some samples and
         visible in others and no node is permanently unsupervised.
+
+        Args:
+            x (torch.Tensor): Node features of shape
+                (batch, node_count, node_feature_count).
+            generator (torch.Generator, optional): Random source for
+                reproducible masking.
+
+        Returns:
+            tuple: ``(masked_x, mask)`` where ``masked_x`` has the same shape as
+                ``x`` with ``k = max(1, round(mask_ratio * node_count))`` nodes per
+                sample replaced by ``self.mask_token``, and ``mask`` is a boolean
+                tensor of shape (batch, node_count) marking the hidden nodes.
         """
         batch, node_count, _ = x.shape
         k = max(1, int(round(self.mask_ratio * node_count)))
