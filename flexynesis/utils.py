@@ -74,6 +74,18 @@ def get_color_mapping(labels):
     """
     Map categorical labels to colors using ALPHABETICAL order (deterministic).
     Uses high-contrast palettes: tab10, tab20, Dark2, Accent.
+
+    Parameters
+    ----------
+    labels : array-like
+        Categorical labels (flattened to 1-D internally). Missing values are
+        grouped under the label ``"NA"``.
+
+    Returns
+    -------
+    dict
+        Mapping from each unique label (sorted alphabetically) to a hex color
+        string; colors are stable across calls for the same label set.
     """
     lbls = pd.Series(_labels_to_1d(labels), dtype="object").astype(str)
     lbls = lbls.fillna("NA")
@@ -117,6 +129,23 @@ def plot_dim_reduced(
 ):
     """
     Plot first two dims (PCA/UMAP). Uses alphabetical label ordering + shared palette.
+
+    Parameters
+    ----------
+    matrix : array-like
+        Sample-by-feature matrix to embed.
+    labels : array-like
+        Per-sample labels used for coloring.
+    method : str, optional
+        Dimensionality-reduction method: ``"pca"`` (default) or ``"umap"``.
+    color_type : str, optional
+        ``"categorical"`` (default) or ``"numerical"``.
+    title : str, optional
+        Plot title.
+
+    Returns
+    -------
+    The generated plot object.
     """
     method = method.lower()
 
@@ -1293,6 +1322,29 @@ def recursive_binary_split_minN(
     increasing risk (mean ``score`` among rows with follow-up time at or below the
     pooled median follow-up time; if a group has no such rows, the group's overall
     mean ``score`` is used).
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Sample table containing the score, time, and event columns.
+    score : str, optional
+        Column with the risk score to split on (default ``"pred_risk"``).
+    time : str, optional
+        Column with follow-up times (default ``"OS.time"``).
+    event : str, optional
+        Column with event indicators (default ``"OS"``).
+    alpha : float, optional
+        Split significance threshold; a split is kept only when the cutoff
+        p-value is below this value (default 0.05).
+    min_samples_per_group : int, optional
+        Minimum number of samples each resulting child group must contain
+        (default 25).
+
+    Returns
+    -------
+    pandas.DataFrame
+        Copy of ``df`` with an added ``auto_group`` column holding the
+        ``G1``, ``G2``, ... labels.
     """
     df = df.copy()
     groups = {}
@@ -1361,6 +1413,16 @@ def plot_hazard_ratios(cox_model):
     """
     Plots the sorted log hazard ratios using plotnine from a fitted Cox Proportional Hazards model,
     with 95% CI and statistical significance annotations. Displays the C-index in the top-right.
+
+    Parameters
+    ----------
+    cox_model : fitted Cox PH model or tuple
+        The fitted Cox proportional hazards model, or a ``(model, metrics)``
+        tuple as returned by ``build_cox_model`` (the model component is used).
+
+    Returns
+    -------
+    The generated plot object.
     """
     # Handle case where cox_model is a tuple (model, metrics) from build_cox_model
     if isinstance(cox_model, tuple):
@@ -2192,6 +2254,19 @@ def to_device_safe(tensor, device):
     """
     Safely move tensor to device with MPS compatibility.
     Converts float64 to float32 for MPS devices since MPS doesn't support float64.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Tensor to move.
+    device : torch.device or str
+        Target device (device object or string name, e.g. ``"cuda"``).
+
+    Returns
+    -------
+    torch.Tensor
+        The tensor on the target device (unchanged if already there), with
+        float64/double cast to float32 when the target is MPS.
     """
     # Handle both torch.device objects and string device names
     if isinstance(device, str):
