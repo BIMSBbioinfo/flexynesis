@@ -324,6 +324,22 @@ class DataImporter:
         """
         If the user has provided list of features to restrict the analysis to,
         subset train/test data to only include those features
+
+        Parameters
+        ----------
+        dat : dict
+            Dictionary mapping layer names to DataFrames, as returned by
+            ``read_data``. The special key ``"clin"`` holds the clinical table.
+        features : list or pandas.Index
+            Feature identifiers to restrict the analysis to. Features not
+            present in a layer's index are silently dropped.
+
+        Returns
+        -------
+        dict
+            A copy of ``dat`` in which every non-``clin`` entry is restricted
+            to the intersection of its index with ``features``; ``clin`` is
+            passed through unchanged.
         """
         dat_filtered = {
             key: (df if key == "clin" else df.loc[df.index.intersection(features)])
