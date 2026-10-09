@@ -50,3 +50,32 @@ def test_perfect_reconstruction_gives_unit_correlation():
         assert vals[(f"reconstruction_{layer}", "mse")] == pytest.approx(0, abs=1e-10)
         assert vals[(f"reconstruction_{layer}", "sample_corr_mean")] == pytest.approx(1)
         assert vals[(f"reconstruction_{layer}", "feature_corr_mean")] == pytest.approx(1)
+
+
+def test_supervised_vae_does_not_keep_dataset(tmp_path):
+    ds = make_dataset()
+    model = supervised_vae(CONFIG, ds, target_variables=[])
+    assert not hasattr(model, "dataset")
+    assert model.features["gex"] == ds.features["gex"]
+    path = tmp_path / "m.pth"
+    torch.save(model, path)
+    # no dataset object (and hence no data matrices) in the saved model
+    assert b"MultiOmicDataset" not in path.read_bytes()
+    loaded = torch.load(path, weights_only=False)
+    np.testing.assert_allclose(
+        decode_dataset(model, ds)["gex"].values,
+        decode_dataset(loaded, ds)["gex"].values,
+        atol=1e-6,
+    )
+
+
+def test_missing_values_are_ignored():
+    ds = make_dataset()
+    ds.dat["gex"][3, 5] = float("nan")
+    ds.dat["cnv"][7, :] = float("nan")
+    model = supervised_vae(CONFIG, ds, target_variables=[])
+    model.decode_batch = lambda dat: {
+        k: torch.nan_to_num(v).clone() for k, v in dat.items()
+    }
+    stats = evaluate_reconstruction(model, ds, "supervised_vae")
+    assert np.isfinite(stats["value"]).all()

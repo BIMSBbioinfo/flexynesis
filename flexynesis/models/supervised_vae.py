@@ -30,7 +30,7 @@ class supervised_vae(pl.LightningModule):
 
     Attributes:
         config (dict): Configuration settings for the model, including learning rates and dimensions.
-        dataset: The MultiOmicDataset object containing the data and metadata.
+        dataset: The MultiOmicDataset used to build the model. Only variable types, class counts and feature names are kept on the model, not the data.
         target_variables (list): A list of target variable names that the model aims to predict.
         batch_variables (list, optional): A list of variables used for batch correction. Defaults to None.
         surv_event_var (str, optional): The name of the survival event variable. Defaults to None.
@@ -52,7 +52,6 @@ class supervised_vae(pl.LightningModule):
     ):
         super(supervised_vae, self).__init__()
         self.config = config
-        self.dataset = dataset
         self.target_variables = target_variables
         self.surv_event_var = surv_event_var
         self.surv_time_var = surv_time_var
@@ -80,6 +79,10 @@ class supervised_vae(pl.LightningModule):
             self.log_vars = nn.ParameterDict()
             for loss_type in itertools.chain(self.variables, ["mmd_loss"]):
                 self.log_vars[loss_type] = nn.Parameter(torch.zeros(1))
+
+        # keep only light-weight metadata from the dataset (not the data itself),
+        # so that the saved model does not carry the training data around
+        self._store_dataset_metadata(dataset)
 
         layers = list(dataset.dat.keys())
         input_dims = [len(dataset.features[layers[i]]) for i in range(len(layers))]
@@ -119,15 +122,36 @@ class supervised_vae(pl.LightningModule):
         # using ModuleDict to store multiple MLPs
         self.MLPs = nn.ModuleDict()
         for var in self.variables:
-            if self.dataset.variable_types[var] == "numerical":
-                num_class = 1
-            else:
-                num_class = len(np.unique(self.dataset.ann[var]))
+            num_class = self.num_classes[var]
             self.MLPs[var] = MLP(
                 input_dim=config["latent_dim"],
                 hidden_dim=config["supervisor_hidden_dim"],
                 output_dim=num_class,
             )
+
+    def _store_dataset_metadata(self, dataset):
+        """
+        Keep the variable types, number of classes per variable and feature
+        names of the dataset; the data matrices and annotations are not kept.
+        """
+        self.variable_types = {v: dataset.variable_types[v] for v in self.variables}
+        self.num_classes = {
+            v: (
+                1
+                if self.variable_types[v] == "numerical"
+                else len(np.unique(dataset.ann[v]))
+            )
+            for v in self.variables
+        }
+        self.features = {k: list(f) for k, f in dataset.features.items()}
+
+    def __setstate__(self, state):
+        # models pickled before the dataset was dropped carry `dataset`;
+        # derive the light-weight metadata from it and release the data
+        super().__setstate__(state)
+        legacy = self.__dict__.pop("dataset", None)
+        if legacy is not None and "variable_types" not in self.__dict__:
+            self._store_dataset_metadata(legacy)
 
     def multi_encoder(self, x_list):
         """
@@ -228,7 +252,7 @@ class supervised_vae(pl.LightningModule):
         cross-entropy loss. The method ensures to ignore any instances where the labels are missing (NaN for
         numerical or -1 for categorical as assumed missing value encoding) when calculating the loss.
         """
-        if self.dataset.variable_types[var] == "numerical":
+        if self.variable_types[var] == "numerical":
             # Ignore instances with missing labels for numerical variables
             valid_indices = ~torch.isnan(y)
             if (
@@ -645,10 +669,7 @@ class supervised_vae(pl.LightningModule):
             )
 
         # Get the number of classes for the target variable
-        if self.dataset.variable_types[target_var] == "numerical":
-            num_class = 1
-        else:
-            num_class = len(np.unique(self.dataset.ann[target_var]))
+        num_class = self.num_classes[target_var]
 
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
@@ -734,7 +755,7 @@ class supervised_vae(pl.LightningModule):
         df_list = []
         for i in range(num_class):
             for j in range(len(layers)):
-                features = self.dataset.features[layers[j]]
+                features = self.features[layers[j]]
                 importances = imp[i][j][0].detach().numpy()
                 target_class_label = (
                     dataset.label_mappings[target_var].get(i)

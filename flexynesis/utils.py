@@ -813,21 +813,26 @@ def evaluate_reconstruction(model, dataset, method, batch_size=64):
         for layer in x_hat:
             a = x[layer].astype(np.float64)
             b = x_hat[layer].astype(np.float64)
+            # ignore missing values (e.g. NaNs left in inference data)
+            m = np.isfinite(a) & np.isfinite(b)
+            a = np.where(m, a, 0.0)
+            b = np.where(m, b, 0.0)
             # sample-wise correlation (row-wise)
-            ac = a - a.mean(axis=1, keepdims=True)
-            bc = b - b.mean(axis=1, keepdims=True)
-            denom = np.sqrt((ac**2).sum(axis=1) * (bc**2).sum(axis=1))
             with np.errstate(invalid="ignore", divide="ignore"):
+                n_i = m.sum(axis=1, keepdims=True)
+                ac = np.where(m, a - a.sum(axis=1, keepdims=True) / n_i, 0.0)
+                bc = np.where(m, b - b.sum(axis=1, keepdims=True) / n_i, 0.0)
+                denom = np.sqrt((ac**2).sum(axis=1) * (bc**2).sum(axis=1))
                 sample_corrs.setdefault(layer, []).append(
                     (ac * bc).sum(axis=1) / denom
                 )
             sq_err[layer] = sq_err.get(layer, 0.0) + ((a - b) ** 2).sum()
-            n_vals[layer] = n_vals.get(layer, 0) + a.size
+            n_vals[layer] = n_vals.get(layer, 0) + m.sum()
             # feature-wise (column-wise) sufficient statistics
             s = sums.setdefault(layer, np.zeros((6, a.shape[1])))
             s += np.stack(
                 [
-                    np.full(a.shape[1], a.shape[0]),
+                    m.sum(0),
                     a.sum(0),
                     b.sum(0),
                     (a * a).sum(0),
