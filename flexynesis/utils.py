@@ -464,6 +464,35 @@ def bootstrap_metric(y_true, y_pred, indices_list, metric_fn, ci=95, **kwargs):
     return scores, (np.mean(scores), lower, upper)
 
 
+def _weighted_ovr_auc(y_true, y_probs):
+    """
+    Support-weighted one-vs-rest AUROC and AUPR for multiclass probabilities.
+
+    Same quantity as sklearn's `average="weighted"`, but classes that have no
+    positive (or no negative) samples in `y_true` are skipped instead of
+    raising an error, so the scores are still reported when the evaluated
+    labels do not cover all of the model's classes.
+
+    Returns:
+        tuple: (auroc, aupr); (None, None) if no class can be evaluated.
+    """
+    aurocs, auprs, weights = [], [], []
+    for c in range(y_probs.shape[1]):
+        positives = y_true == c
+        n_pos = int(positives.sum())
+        if n_pos == 0 or n_pos == len(positives):
+            continue
+        aurocs.append(roc_auc_score(positives, y_probs[:, c]))
+        auprs.append(average_precision_score(positives, y_probs[:, c]))
+        weights.append(n_pos)
+    if not weights:
+        return None, None
+    return (
+        float(np.average(aurocs, weights=weights)),
+        float(np.average(auprs, weights=weights)),
+    )
+
+
 def evaluate_classifier(y_true, y_probs, print_report=False):
     """
     Evaluate the performance of a classifier using multiple metrics and optionally
@@ -487,6 +516,8 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
               - 'average_auroc': The weighted average AUROC score across all classes.
               - 'average_aupr': The weighted average AUC-PR score across all classes.
     """
+    y_true = np.asarray(y_true)
+    y_probs = np.asarray(y_probs)
     # Convert probabilities to predicted labels
     y_pred = np.argmax(y_probs, axis=1)
 
@@ -500,23 +531,21 @@ def evaluate_classifier(y_true, y_probs, print_report=False):
     kappa = cohen_kappa_score(y_true, y_pred)
 
     # Compute AUROC/AUPR
+    average_auroc, average_aupr = None, None
     try:
         if y_probs.shape[1] == 2:  # Binary classification
             y_probs_binary = y_probs[:, 1]  # Use positive class probabilities
             average_auroc = roc_auc_score(y_true, y_probs_binary)
-            average_aupr = average_precision_score(
-                y_true, y_probs_binary
-            )  # AUC-PR for binary case
+            average_aupr = average_precision_score(y_true, y_probs_binary)
         else:  # Multiclass classification
-            average_auroc = roc_auc_score(
-                y_true, y_probs, multi_class="ovr", average="weighted"
-            )
-            average_aupr = average_precision_score(
-                y_true, y_probs, average="weighted"
-            )  # Weighted AUC-PR for multiclass
-    except ValueError:
-        average_auroc = None  # Handle cases where AUROC cannot be computed
-        average_aupr = None  # Handle cases where AUC-PR cannot be computed
+            average_auroc, average_aupr = _weighted_ovr_auc(y_true, y_probs)
+    except ValueError as e:
+        print(f"[WARNING] AUROC/AUPR could not be computed: {e}")
+    if average_auroc is None:
+        print(
+            "[WARNING] AUROC/AUPR are undefined for the evaluated labels "
+            "(fewer than two classes present); reporting them as empty."
+        )
 
     # Full classification report
     if print_report:
@@ -722,7 +751,9 @@ def evaluate_wrapper(
                     dataset.ann[var][ind], y_pred_dict[var][ind].flatten()
                 )
         else:
-            ind = ~torch.isnan(dataset.ann[var])
+            # exclude missing labels (NaN) and labels encoded as -1
+            # (missing, or not seen when the label encoder was fitted)
+            ind = ~torch.isnan(dataset.ann[var]) & (dataset.ann[var] >= 0)
             metrics = evaluate_classifier(dataset.ann[var][ind], y_pred_dict[var][ind])
 
         for metric, value in metrics.items():
@@ -910,18 +941,19 @@ def get_predicted_labels(y_pred_dict, dataset, split, method_name):
                 class_labels = [f"class_{i}" for i in range(probabilities.shape[1])]
 
             # Get true labels (y_true)
-            y_true = [
-                (
-                    dataset.label_mappings[var][int(x.item())]
-                    if var in dataset.label_mappings.keys() and not np.isnan(x.item()) and not int(x.item()) == -1
+            def _true_label(x):
+                x = x.item()
+                if np.isnan(x):  # missing label
+                    return np.nan
+                if int(x) == -1:
                     # catches samples ann defaulted to -1, i.e. a label in
                     # test but not in train. See issue #156
-                    else "Label_not_in_train"
-                    if int(x.item()) == -1
-                    else np.nan
-                )
-                for x in dataset.ann[var]
-            ]
+                    return "Label_not_in_train"
+                if var in dataset.label_mappings.keys():
+                    return dataset.label_mappings[var][int(x)]
+                return np.nan
+
+            y_true = [_true_label(x) for x in dataset.ann[var]]
             if "Label_not_in_train" in y_true:  # See issue #156
                 print(
                     f"[WARNING] Encoder Defaults. Some {var} values are "
