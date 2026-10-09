@@ -86,7 +86,7 @@ class CrossModalPred(pl.LightningModule):
                 Encoder(
                     input_dims[i],
                     # define hidden_dim size as a factor of input_dim
-                    [int(input_dims[i] * config["hidden_dim_factor"])],
+                    [max(int(input_dims[i] * config["hidden_dim_factor"]), 2)],
                     config["latent_dim"],
                 )
                 for i in range(len(self.input_layers))
@@ -110,7 +110,7 @@ class CrossModalPred(pl.LightningModule):
             [
                 Decoder(
                     config["latent_dim"],
-                    [int(output_dims[i] * config["hidden_dim_factor"])],
+                    [max(int(output_dims[i] * config["hidden_dim_factor"]), 2)],
                     output_dims[i],
                 )
                 for i in range(len(self.output_layers))
@@ -464,21 +464,31 @@ class CrossModalPred(pl.LightningModule):
 
         return predictions
 
+    def decode_batch(self, dat):
+        """
+        Deterministically decode a batch (uses the latent mean rather than a sampled z).
+
+        Args:
+            dat (dict): maps each omics layer to a (batch, features) tensor.
+
+        Returns:
+            dict: maps each output layer to its decoded (batch, features) tensor.
+        """
+        mean, _ = self.multi_encoder([dat[x] for x in self.input_layers])
+        return {
+            layer: self.decoders[i](mean) for i, layer in enumerate(self.output_layers)
+        }
+
     def decode(self, dataset):
         """
-        Extract the decoded values of the target/output layers
+        Decode a dataset into the target/output layers.
+
+        Returns:
+            dict: maps each output layer to a DataFrame (features x samples).
         """
-        self.eval()
-        x_list_input = [dataset.dat[x] for x in self.input_layers]
-        x_hat_list, z, mean, log_var, outputs = self.forward(x_list_input)
-        X = {}
-        for i in range(len(self.output_layers)):
-            x = pd.DataFrame(x_hat_list[i].detach().numpy()).transpose()
-            layer = self.output_layers[i]
-            x.columns = dataset.samples
-            x.index = dataset.features[layer]
-            X[layer] = x
-        return X
+        from ..utils import decode_dataset
+
+        return decode_dataset(self, dataset)
 
     def compute_kernel(self, x, y):
         """

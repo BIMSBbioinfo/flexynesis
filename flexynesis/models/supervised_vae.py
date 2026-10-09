@@ -491,6 +491,31 @@ class supervised_vae(pl.LightningModule):
 
         return predictions
 
+    def decode_batch(self, dat):
+        """
+        Deterministically decode a batch (uses the latent mean rather than a sampled z).
+
+        Args:
+            dat (dict): maps each omics layer to a (batch, features) tensor.
+
+        Returns:
+            dict: maps each omics layer to its decoded (batch, features) tensor.
+        """
+        layers = list(dat.keys())
+        mean, _ = self.multi_encoder([dat[x] for x in layers])
+        return {layer: self.decoders[i](mean) for i, layer in enumerate(layers)}
+
+    def decode(self, dataset):
+        """
+        Decode a dataset into the reconstructed omics layers.
+
+        Returns:
+            dict: maps each layer to a DataFrame (features x samples).
+        """
+        from ..utils import decode_dataset
+
+        return decode_dataset(self, dataset)
+
     def compute_kernel(self, x, y):
         """
         Compute the Gaussian kernel matrix between two sets of vectors.

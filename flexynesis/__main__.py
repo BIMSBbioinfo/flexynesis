@@ -96,7 +96,8 @@ def print_full_help():
         "[--early_stop_patience EARLY_STOP_PATIENCE] [--hpo_patience "
         "HPO_PATIENCE] [--val_size VAL_SIZE] [--use_cv] "
         "[--use_loss_weighting {True,False}] "
-        "[--evaluate_baseline_performance] [--threads THREADS] "
+        "[--evaluate_baseline_performance] [--print_decoded] "
+        "[--threads THREADS] "
         "[--num_workers NUM_WORKERS] [--device {auto,cuda,mps,cpu}] [--use_gpu] "
         "[--feature_importance_method {IntegratedGradients,GradientShap,Both}] "
         "[--disable_marker_finding] [--string_organism STRING_ORGANISM] "
@@ -279,6 +280,11 @@ def print_full_help():
         "                        whether to run Random Forest + SVMs to see the "
         "performance of off-the-shelf tools on the same dataset"
     )
+    print("  --print_decoded")
+    print(
+        "                        supervised_vae/CrossModalPred: write the decoded "
+        "(reconstructed) data matrices to csv files (can be large)"
+    )
     print(
         "  --threads THREADS     (Optional) How many threads to use when using "
         "CPU (default is 4)"
@@ -435,6 +441,12 @@ def main():
 
       --evaluate_baseline_performance (bool):
         Also train baselines (RandomForest, SVM) for comparison.
+
+      --print_decoded (bool):
+        For `supervised_vae` and `CrossModalPred`: write decoded data matrices
+        to `<prefix>.{train,test}_decoded.<layer>.csv` (can be large).
+        Reconstruction metrics (sample-/feature-wise correlation, MSE) are always
+        written to `<prefix>.stats.csv`.
 
       --threads (int):
         CPU thread count. Default: `4`.
@@ -759,6 +771,13 @@ def main():
         action="store_true",
         help="whether to run Random Forest + SVMs to see the performance of "
         "off-the-shelf tools on the same dataset",
+    )
+    parser.add_argument(
+        "--print_decoded",
+        action="store_true",
+        help="supervised_vae/CrossModalPred: write the decoded (reconstructed) "
+        "data matrices to csv files (can be large). Reconstruction metrics are "
+        "always written to stats.csv",
     )
     parser.add_argument(
         "--threads",
@@ -1461,6 +1480,8 @@ def main():
         header=True,
     )
 
+    metrics_df = None
+
     # evaluate predictions;  (if any supervised learning happened)
     if any([args.target_variables, args.surv_event_var]):
         if (
@@ -1579,14 +1600,28 @@ def main():
             surv_event_var=model.surv_event_var,
             surv_time_var=model.surv_time_var,
         )
+
+    # for architectures with decoders; evaluate reconstruction performance
+    if args.model_class in ("supervised_vae", "CrossModalPred"):
+        from .utils import evaluate_reconstruction
+
+        print("[INFO] Computing reconstruction metrics")
+        recon_df = evaluate_reconstruction(model, test_dataset, args.model_class)
+        metrics_df = (
+            recon_df
+            if metrics_df is None
+            else pd.concat([metrics_df, recon_df], ignore_index=True)
+        )
+
+    if metrics_df is not None:
         metrics_df.to_csv(
             os.path.join(args.outdir, ".".join([args.prefix, "stats.csv"])),
             header=True,
             index=False,
         )
 
-    # for architectures with decoders; print decoded output layers
-    if args.model_class == "CrossModalPred":
+    # for architectures with decoders; optionally print decoded output layers
+    if args.print_decoded and args.model_class in ("supervised_vae", "CrossModalPred"):
         print("[INFO] Printing decoded output layers")
         # In inference mode, only decode test dataset
         if train_dataset is not None:

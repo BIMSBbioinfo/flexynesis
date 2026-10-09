@@ -739,6 +739,134 @@ def evaluate_wrapper(
     return pd.DataFrame(metrics_list)
 
 
+def iter_decoded_batches(model, dataset, batch_size=64):
+    """
+    Decode a dataset batch by batch with a model that has decoders
+    (supervised_vae, CrossModalPred), without holding the full decoded
+    matrices in memory.
+
+    Args:
+        model: model exposing `decode_batch(dat)` and `output_layers`.
+        dataset: MultiOmicDataset to decode.
+        batch_size (int): number of samples per batch.
+
+    Yields:
+        tuple: (samples, x_hat, x), where `samples` is a list of sample names,
+            `x_hat` and `x` are dicts mapping each output layer to numpy arrays
+            of shape (batch, features) with the decoded and the actual values.
+    """
+    from torch.utils.data import DataLoader
+
+    model.eval()
+    device = next(model.parameters()).device
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    with torch.no_grad():
+        for dat, _, samples in dataloader:
+            dat = {k: v.to(device) for k, v in dat.items()}
+            x_hat = model.decode_batch(dat)
+            yield (
+                list(samples),
+                {k: v.detach().cpu().numpy() for k, v in x_hat.items()},
+                {k: dat[k].detach().cpu().numpy() for k in x_hat},
+            )
+
+
+def decode_dataset(model, dataset, batch_size=64):
+    """
+    Decode a dataset into one (features x samples) DataFrame per output layer.
+    """
+    samples, chunks = [], {}
+    for batch_samples, x_hat, _ in iter_decoded_batches(model, dataset, batch_size):
+        samples.extend(batch_samples)
+        for layer, values in x_hat.items():
+            chunks.setdefault(layer, []).append(values)
+    decoded = {}
+    for layer, values in chunks.items():
+        df = pd.DataFrame(np.concatenate(values, axis=0).T)
+        df.columns = samples
+        df.index = dataset.features[layer]
+        decoded[layer] = df
+    return decoded
+
+
+def evaluate_reconstruction(model, dataset, method, batch_size=64):
+    """
+    Evaluate how well a model with decoders reconstructs the (preprocessed)
+    input data. Computed in a streaming fashion; the decoded matrices are not stored.
+
+    For every output layer the following metrics are reported:
+        - mse: mean squared error over all values
+        - sample_corr_mean / sample_corr_median: Pearson correlation between
+          the decoded and the actual feature vector of each sample
+        - feature_corr_mean / feature_corr_median: Pearson correlation between
+          the decoded and the actual values of each feature across samples
+    Features/samples with zero variance (undefined correlation) are ignored.
+
+    Returns:
+        pd.DataFrame: same columns as `evaluate_wrapper` (method, var,
+            variable_type, metric, value), with var "reconstruction_<layer>"
+            and variable_type "reconstruction".
+    """
+    sample_corrs, sq_err, n_vals = {}, {}, {}
+    sums = {}  # per-feature running sums: n, x, y, xx, yy, xy
+    for _, x_hat, x in iter_decoded_batches(model, dataset, batch_size):
+        for layer in x_hat:
+            a = x[layer].astype(np.float64)
+            b = x_hat[layer].astype(np.float64)
+            # sample-wise correlation (row-wise)
+            ac = a - a.mean(axis=1, keepdims=True)
+            bc = b - b.mean(axis=1, keepdims=True)
+            denom = np.sqrt((ac**2).sum(axis=1) * (bc**2).sum(axis=1))
+            with np.errstate(invalid="ignore", divide="ignore"):
+                sample_corrs.setdefault(layer, []).append(
+                    (ac * bc).sum(axis=1) / denom
+                )
+            sq_err[layer] = sq_err.get(layer, 0.0) + ((a - b) ** 2).sum()
+            n_vals[layer] = n_vals.get(layer, 0) + a.size
+            # feature-wise (column-wise) sufficient statistics
+            s = sums.setdefault(layer, np.zeros((6, a.shape[1])))
+            s += np.stack(
+                [
+                    np.full(a.shape[1], a.shape[0]),
+                    a.sum(0),
+                    b.sum(0),
+                    (a * a).sum(0),
+                    (b * b).sum(0),
+                    (a * b).sum(0),
+                ]
+            )
+
+    rows = []
+    for layer in sums:
+        n, sa, sb, saa, sbb, sab = sums[layer]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            cov = sab - sa * sb / n
+            var_a = saa - sa**2 / n
+            var_b = sbb - sb**2 / n
+            feature_corr = cov / np.sqrt(var_a * var_b)
+        feature_corr[~np.isfinite(feature_corr)] = np.nan
+        sample_corr = np.concatenate(sample_corrs[layer])
+        sample_corr[~np.isfinite(sample_corr)] = np.nan
+        metrics = {
+            "mse": sq_err[layer] / n_vals[layer],
+            "sample_corr_mean": np.nanmean(sample_corr),
+            "sample_corr_median": np.nanmedian(sample_corr),
+            "feature_corr_mean": np.nanmean(feature_corr),
+            "feature_corr_median": np.nanmedian(feature_corr),
+        }
+        for metric, value in metrics.items():
+            rows.append(
+                {
+                    "method": method,
+                    "var": f"reconstruction_{layer}",
+                    "variable_type": "reconstruction",
+                    "metric": metric,
+                    "value": value,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def get_predicted_labels(y_pred_dict, dataset, split, method_name):
     """
     Generate a DataFrame with class probabilities and associated metadata.

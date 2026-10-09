@@ -127,6 +127,7 @@ Flags worth knowing about, grouped by purpose:
 - `--disable_marker_finding` — skip Captum feature-importance step (saves time on quick runs)
 - `--feature_importance_method {IntegratedGradients,GradientShap,Both}`
 - `--evaluate_baseline_performance` — also fit RF/SVM/XGBoost/RSF for comparison
+- `--print_decoded` — `supervised_vae`/`CrossModalPred`: write decoded (reconstructed) matrices to `<prefix>.{train,test}_decoded.<layer>.csv` (can be large; off by default)
 
 **Inference only (skip training)**
 ```bash
@@ -149,7 +150,7 @@ All outputs are written to `--outdir`, prefixed with `--prefix` (default `job`):
 - `<prefix>.artifacts.joblib` / `.json` — fitted scalers, feature lists, label encoders (needed for inference on new data)
 - `<prefix>.embeddings_train.csv`, `<prefix>.embeddings_test.csv` — latent sample embeddings
 - `<prefix>.predicted_labels.csv` — predictions per sample per target
-- `<prefix>.stats.csv` — performance metrics
+- `<prefix>.stats.csv` — performance metrics; for `supervised_vae`/`CrossModalPred` also per-layer reconstruction metrics on the test set (`var=reconstruction_<layer>`, `variable_type=reconstruction`; metrics `mse`, sample-/feature-wise Pearson correlation mean/median)
 - `<prefix>.feature_importance.<method>.csv`, `<prefix>.feature_logs.<modality>.csv` — per-feature importance (unless `--disable_marker_finding`)
 
 When reporting results back to the user, read `stats.csv` for headline metrics and
