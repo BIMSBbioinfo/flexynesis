@@ -37,6 +37,8 @@ def test_decode_and_stats(cls):
     assert set(stats["metric"]) == {
         "mse", "sample_corr_mean", "sample_corr_median",
         "feature_corr_mean", "feature_corr_median",
+        "sample_spearman_corr_mean", "sample_spearman_corr_median",
+        "feature_spearman_corr_mean", "feature_spearman_corr_median",
     }
 
 
@@ -50,6 +52,8 @@ def test_perfect_reconstruction_gives_unit_correlation():
         assert vals[(f"reconstruction_{layer}", "mse")] == pytest.approx(0, abs=1e-10)
         assert vals[(f"reconstruction_{layer}", "sample_corr_mean")] == pytest.approx(1)
         assert vals[(f"reconstruction_{layer}", "feature_corr_mean")] == pytest.approx(1)
+        assert vals[(f"reconstruction_{layer}", "sample_spearman_corr_mean")] == pytest.approx(1)
+        assert vals[(f"reconstruction_{layer}", "feature_spearman_corr_mean")] == pytest.approx(1)
 
 
 def test_supervised_vae_does_not_keep_dataset(tmp_path):
@@ -79,3 +83,28 @@ def test_missing_values_are_ignored():
     }
     stats = evaluate_reconstruction(model, ds, "supervised_vae")
     assert np.isfinite(stats["value"]).all()
+
+
+def test_spearman_matches_scipy_and_is_rank_based():
+    from scipy.stats import spearmanr
+
+    ds = make_dataset(n=30)
+    rng = np.random.default_rng(5)
+    noise = {k: torch.tensor(rng.normal(size=v.shape), dtype=torch.float32)
+             for k, v in ds.dat.items()}
+    model = supervised_vae(CONFIG, ds, target_variables=[])
+    # monotone transform of the data keeps Spearman at 1, but not Pearson
+    model.decode_batch = lambda dat: {k: torch.exp(v) for k, v in dat.items()}
+    vals = evaluate_reconstruction(model, ds, "m").set_index(["var", "metric"])["value"]
+    assert vals[("reconstruction_gex", "feature_spearman_corr_mean")] == pytest.approx(1)
+    assert vals[("reconstruction_gex", "feature_corr_mean")] < 0.999
+    # noisy reconstruction: compare against scipy
+    model.decode_batch = lambda dat: {k: v + noise[k][:len(v)] for k, v in dat.items()}
+    # (single batch so that noise rows line up with the samples)
+    vals = evaluate_reconstruction(model, ds, "m", batch_size=30).set_index(["var", "metric"])["value"]
+    x = ds.dat["gex"].numpy()
+    y = x + noise["gex"].numpy()
+    exp_feat = np.mean([spearmanr(x[:, j], y[:, j])[0] for j in range(x.shape[1])])
+    exp_samp = np.mean([spearmanr(x[i], y[i])[0] for i in range(x.shape[0])])
+    assert vals[("reconstruction_gex", "feature_spearman_corr_mean")] == pytest.approx(exp_feat, abs=1e-5)
+    assert vals[("reconstruction_gex", "sample_spearman_corr_mean")] == pytest.approx(exp_samp, abs=1e-5)

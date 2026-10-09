@@ -820,10 +820,39 @@ def decode_dataset(model, dataset, batch_size=64):
     return decoded
 
 
+def _masked_corr(a, b, axis):
+    """
+    Pearson correlation along `axis`, using only positions where both `a` and
+    `b` are finite. Returns NaN where the correlation is undefined.
+    """
+    m = np.isfinite(a) & np.isfinite(b)
+    a = np.where(m, a, 0.0)
+    b = np.where(m, b, 0.0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        n = m.sum(axis=axis, keepdims=True)
+        ac = np.where(m, a - a.sum(axis=axis, keepdims=True) / n, 0.0)
+        bc = np.where(m, b - b.sum(axis=axis, keepdims=True) / n, 0.0)
+        corr = (ac * bc).sum(axis=axis) / np.sqrt(
+            (ac**2).sum(axis=axis) * (bc**2).sum(axis=axis)
+        )
+    corr[~np.isfinite(corr)] = np.nan
+    return corr
+
+
+def _spearman(a, b, axis):
+    """Spearman correlation along `axis` (Pearson on average ranks; NaN-aware)."""
+    m = np.isfinite(a) & np.isfinite(b)
+    a = pd.DataFrame(np.where(m, a, np.nan)).rank(axis=axis).values
+    b = pd.DataFrame(np.where(m, b, np.nan)).rank(axis=axis).values
+    return _masked_corr(a, b, axis)
+
+
 def evaluate_reconstruction(model, dataset, method, batch_size=64):
     """
     Evaluate how well a model with decoders reconstructs the (preprocessed)
-    input data. Computed in a streaming fashion; the decoded matrices are not stored.
+    input data. Pearson statistics and MSE are computed in a streaming fashion;
+    the Spearman feature-wise correlation needs all samples at once, so the
+    decoded test matrix is held in memory (never written to disk).
 
     For every output layer the following metrics are reported:
         - mse: mean squared error over all values
@@ -831,6 +860,8 @@ def evaluate_reconstruction(model, dataset, method, batch_size=64):
           the decoded and the actual feature vector of each sample
         - feature_corr_mean / feature_corr_median: Pearson correlation between
           the decoded and the actual values of each feature across samples
+        - sample_spearman_corr_mean / _median and feature_spearman_corr_mean /
+          _median: the same, with Spearman (rank) correlation
     Features/samples with zero variance (undefined correlation) are ignored.
 
     Returns:
@@ -840,6 +871,7 @@ def evaluate_reconstruction(model, dataset, method, batch_size=64):
     """
     sample_corrs, sq_err, n_vals = {}, {}, {}
     sums = {}  # per-feature running sums: n, x, y, xx, yy, xy
+    sample_spearman, kept_a, kept_b = {}, {}, {}
     for _, x_hat, x in iter_decoded_batches(model, dataset, batch_size):
         for layer in x_hat:
             a = x[layer].astype(np.float64)
@@ -848,6 +880,12 @@ def evaluate_reconstruction(model, dataset, method, batch_size=64):
             m = np.isfinite(a) & np.isfinite(b)
             a = np.where(m, a, 0.0)
             b = np.where(m, b, 0.0)
+            # Spearman: sample-wise per batch; feature-wise needs all samples
+            a_nan = np.where(m, a, np.nan).astype(np.float32)
+            b_nan = np.where(m, b, np.nan).astype(np.float32)
+            sample_spearman.setdefault(layer, []).append(_spearman(a_nan, b_nan, 1))
+            kept_a.setdefault(layer, []).append(a_nan)
+            kept_b.setdefault(layer, []).append(b_nan)
             # sample-wise correlation (row-wise)
             with np.errstate(invalid="ignore", divide="ignore"):
                 n_i = m.sum(axis=1, keepdims=True)
@@ -883,12 +921,20 @@ def evaluate_reconstruction(model, dataset, method, batch_size=64):
         feature_corr[~np.isfinite(feature_corr)] = np.nan
         sample_corr = np.concatenate(sample_corrs[layer])
         sample_corr[~np.isfinite(sample_corr)] = np.nan
+        sample_sp = np.concatenate(sample_spearman[layer])
+        feature_sp = _spearman(
+            np.concatenate(kept_a.pop(layer)), np.concatenate(kept_b.pop(layer)), 0
+        )
         metrics = {
             "mse": sq_err[layer] / n_vals[layer],
             "sample_corr_mean": np.nanmean(sample_corr),
             "sample_corr_median": np.nanmedian(sample_corr),
             "feature_corr_mean": np.nanmean(feature_corr),
             "feature_corr_median": np.nanmedian(feature_corr),
+            "sample_spearman_corr_mean": np.nanmean(sample_sp),
+            "sample_spearman_corr_median": np.nanmedian(sample_sp),
+            "feature_spearman_corr_mean": np.nanmean(feature_sp),
+            "feature_spearman_corr_median": np.nanmedian(feature_sp),
         }
         for metric, value in metrics.items():
             rows.append(
