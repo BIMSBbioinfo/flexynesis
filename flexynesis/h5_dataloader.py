@@ -57,6 +57,18 @@ class H5DataImporter(DataImporter):
         expects. Each modality in self.data_types is loaded from an .h5 file
         if present, otherwise from the corresponding .csv. clin.csv is always
         loaded from CSV.
+
+        Parameters
+        ----------
+        folder_path : str or Path
+            Directory holding the modality files (``<name>.h5`` or
+            ``<name>.csv``) and ``clin.csv``.
+
+        Returns
+        -------
+        dict
+            Mapping from file stem (e.g. ``"rna"``, ``"clin"``) to the loaded
+            DataFrame, indexed by feature identifiers with samples as columns.
         """
         print("\n[INFO] ----------------- Reading Data (HDF5) ----------------- ")
         data = {}
@@ -119,6 +131,19 @@ class H5DataImporter(DataImporter):
         """
         Override to accept either a .csv or an .h5 file for each modality in
         self.data_types. clin.csv must still be present as CSV.
+
+        Parameters
+        ----------
+        training_path : str or Path
+            Directory of the training split.
+        testing_path : str or Path
+            Directory of the testing split.
+
+        Raises
+        ------
+        ValueError
+            If a folder does not exist, or if ``clin.csv`` or any modality
+            (in either ``.h5`` or ``.csv`` form) is missing from it.
         """
         for split_name, path in [("training", training_path),
                                  ("testing", testing_path)]:

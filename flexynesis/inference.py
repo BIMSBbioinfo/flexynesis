@@ -143,6 +143,23 @@ def load_and_sniff_artifacts(artifacts_path):
     """
     Checks if an artifacts file is JSON or Joblib,
     loads it appropriately, and returns (file_type, content).
+
+    Parameters
+    ----------
+    artifacts_path : str or Path
+        Path to the artifacts file (``.artifacts.joblib`` or
+        ``.artifacts.json``).
+
+    Returns
+    -------
+    tuple
+        ``(file_type, content)`` where ``file_type`` is ``"json"`` or
+        ``"joblib"`` and ``content`` is the loaded object.
+
+    Raises
+    ------
+    ValueError
+        If the file is neither valid JSON nor a recognized Joblib format.
     """
     import json
 
